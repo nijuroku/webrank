@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaMafia BEYBLADEX</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- HEADER STICKY -->
+    <header class="header-sticky">
+        <div class="header-left">
+            <div class="header-logo">
+                <img src="lamafia.jpeg" alt="BeybladeX Logo">
+            </div>
+            <div class="header-title">
+                <h1>🏆 <span id="tournamentNameHeader">LaMafia BEYBLADEX</span></h1>
+                <div class="subhead">Fase 1: grupos · Fase 2: eliminatorias</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="header-stats">
+                <span>👥 <strong id="headerParticipants">0</strong></span>
+                <span>⚔️ <strong id="headerMatches">0</strong></span>
+                <span>📅 <strong id="headerRounds">0</strong></span>
+                <span>🏅 <strong id="headerQualified">0</strong></span>
+            </div>
+            <span class="storage-status" id="storageStatus">💾 Guardado</span>
+        </div>
+    </header>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <div class="app-container">
+
+        <!-- GESTIÓN DE PARTICIPANTES -->
+        <div class="card">
+            <div class="input-group">
+                <label for="newParticipantInput">👤 Participante</label>
+                <input type="text" id="newParticipantInput" placeholder="Ej: Ana, Carlos, Marta..." />
+                <button class="btn btn-primary" id="addParticipantBtn">➕ Agregar</button>
+                <button class="btn btn-outline" id="addMultipleBtn">➕➕ Agregar varios</button>
+            </div>
+            <div id="participantListContainer" class="participant-list"></div>
+
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <strong id="totalParticipantsDisplay">0</strong>
+                    Participantes
+                </div>
+                <div class="stat-item">
+                    <strong id="totalMatchesDisplay">0</strong>
+                    Enfrentamientos
+                </div>
+                <div class="stat-item">
+                    <strong id="totalRoundsDisplay">0</strong>
+                    Rondas
+                </div>
+                <div class="stat-item">
+                    <strong id="qualifiedCountDisplay">0</strong>
+                    Clasificados
+                </div>
+            </div>
+
+            <div class="info-note">
+                ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma +diferencia · Derrota resta -diferencia
+            </div>
+        </div>
+
+        <!-- GRID: ENFRENTAMIENTOS + GESTIÓN -->
+        <div class="grid-2col">
+
+            <!-- ENFRENTAMIENTOS -->
+            <div class="card">
+                <div class="phase-indicator">
+                    <h2>⚔️ Enfrentamientos</h2>
+                    <span id="phaseDisplay" class="phase-badge">Fase 1 · Grupos</span>
+                    <span id="roundDisplay" class="round-info">Ronda 0</span>
+                </div>
+                <div style="font-size:0.8rem; color:#4A4A6A; margin-bottom: 0.6rem;">Puntos acumulados · 1 partido por participante por ronda</div>
+
+                <div id="roundSelectorContainer" class="round-selector-container">
+                    <span class="label">📅 Rondas:</span>
+                    <button class="btn-round-selector active" data-round="all">Todas <span class="matches-count">(0)</span></button>
+                </div>
+
+                <div id="versusListContainer" class="versus-grid scrollable-list">
+                    <div class="empty-message">Sin enfrentamientos. Genera una ronda de grupos.</div>
+                </div>
+                <div id="winnerMessage" style="margin-top: 1rem;"></div>
+                <div id="thirdPlaceMessage" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
+            </div>
+
+            <!-- GESTIÓN DE RONDAS + CLASIFICACIÓN -->
+            <div class="card">
+                <div class="round-management">
+                    <h3>🔄 Gestión de Rondas</h3>
+                    
+                    <div class="btn-row">
+                        <button class="btn btn-outline btn-full" id="generateGroupStageBtn">📋 Nueva ronda de grupos</button>
+                        <button class="btn btn-warning btn-full" id="startKnockoutBtn">🏁 Iniciar eliminatorias</button>
+                    </div>
+                    
+                    <div class="btn-row">
+                        <div class="qualified-selector">
+                            <label for="qualifiedCountInput">🏆 Clasificados:</label>
+                            <input type="number" id="qualifiedCountInput" min="2" max="32" value="8" />
+                            <button class="btn btn-success" id="applyQualifiedBtn">Aplicar</button>
+                        </div>
+                    </div>
+                    
+                    <div class="btn-row">
+                        <button class="btn btn-danger btn-full" id="clearVersusBtn">🗑️ Archivar ronda actual</button>
+                        <button class="btn btn-outline btn-full" id="resetAllBtn">🔄 Reiniciar torneo</button>
+                    </div>
+                    
+                    <div class="info-note-small">
+                        ⚡ Reiniciar torneo mantiene los participantes pero borra todo el progreso
+                    </div>
+                </div>
+
+                <hr />
+
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                    <h2 style="margin:0;">📊 Clasificación</h2>
+                    <button class="btn btn-outline btn-sm" id="editTournamentNameBtn">✏️ Editar nombre</button>
+                </div>
+                <div style="font-size:0.8rem; color:#4A4A6A; margin-bottom: 1rem;">Puntos acumulados (todas las rondas)</div>
+                <div id="scoreSummaryContainer" class="scrollable-list" style="max-height: 250px;">
+                    <div class="empty-message">No hay datos de puntos aún.</div>
+                </div>
+
+                <hr />
+
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    <button class="btn btn-outline" id="exportDataBtn">📤 Exportar datos</button>
+                    <button class="btn btn-outline" id="importDataBtn">📥 Importar datos</button>
+                </div>
+                <input type="file" id="fileInput" accept=".json" style="display:none;">
+            </div>
+        </div>
+
+        <!-- TABLA DE PUNTUACIÓN TOTAL -->
+        <div class="card" style="margin-top: 1.5rem;">
+            <h2>📈 Tabla de Puntuación Total</h2>
+            <div style="font-size:0.8rem; color:#4A4A6A; margin-bottom: 0.8rem;">Puntos totales acumulados por participante en todas las rondas</div>
+            <div id="totalScoreTableContainer" style="overflow-x: auto;"></div>
+        </div>
+
+        <div style="font-size:0.75rem; color:#4A4A6A; margin-top: 1.5rem; text-align: right; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1rem;">
+            <a href="https://www.instagram.com/la_mafia_beyblade/" target="_blank" style="color:#4A4A6A; text-decoration:none;">Instagram</a>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
