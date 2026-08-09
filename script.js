@@ -437,7 +437,7 @@
     function renderPodium() {
         return `
             <div class="podium-container">
-                <div class="podium-title">🏆 ${tournamentName} 🏆</div>
+                <div class="podium-title" class="podium-title">🏆 ${tournamentName} 🏆</div>
                 <div class="podium-grid">
                     <div class="podium-place place-2">
                         <div class="medal">🥈</div>
@@ -465,7 +465,7 @@
                     </div>
                 </div>
                 <div class="podium-footer">
-                    <span class="tourney-name">🏆 ${tournamentName}</span>
+                    <span class="tourney-name" >🏆 ${tournamentName}</span>
                     ${podium.third ? `<span style="color:#00FF88;"> · 🥉 3er Lugar: ${podium.third}</span>` : ''}
                     ${podium.fourth ? `<span style="color:#4A4A6A;"> · 4️⃣ 4to Lugar: ${podium.fourth}</span>` : ''}
                 </div>
@@ -810,6 +810,8 @@
         participants = participants.filter(p => p !== name);
         delete accumulatedPoints[name];
         if (tournamentWinner === name) tournamentWinner = null;
+
+        // Renderizar todo para actualizar la lista
         renderAll();
         saveToLocalStorage();
     }
@@ -834,14 +836,22 @@
             return;
         }
 
+        // Borrar participantes
         participants = [];
         accumulatedPoints = {};
         tournamentWinner = null;
         thirdPlaceWinner = null;
         podium = { first: null, second: null, third: null, fourth: null };
 
-        renderAll();
+        // Limpiar el contenedor de participantes
+        participantListEl.innerHTML = '<span class="empty-message">Aún no hay participantes</span>';
+
+        // Actualizar stats
+        updateStats();
+
+        // Guardar en localStorage
         saveToLocalStorage();
+
         alert('✅ Todos los participantes han sido eliminados.');
     }
 
@@ -1386,7 +1396,6 @@
         alert(`✅ Clasificados establecidos en ${customQualifiedCount}.`);
     }
 
-    // --- render all ---
     function renderAll() {
         // Mostrar/ocultar sección del torneo
         const hasData = versus.length > 0 || matchHistory.length > 0 || tournamentFinished;
@@ -1398,7 +1407,7 @@
         }
 
         renderTournamentName();
-        renderParticipants();
+        renderParticipants();  // <-- ESTA LÍNEA ACTUALIZA LA LISTA
         renderRoundSelector();
         renderVersus();
         renderScores();
@@ -1407,6 +1416,7 @@
     }
 
     // --- eventos ---
+    // --- Eventos de participantes ---
     addBtn.addEventListener('click', function () {
         const name = newParticipantInput.value.trim();
         if (!name) {
@@ -1423,11 +1433,20 @@
         renderAll();
         saveToLocalStorage();
     });
-    // --- Evento: Iniciar torneo ---
-    document.getElementById('startTournamentBtn')?.addEventListener('click', startTournament);
+
+    addMultipleBtn.addEventListener('click', addMultipleParticipants);
+
+    newParticipantInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') addBtn.click();
+    });
 
     // --- Evento: Borrar todos los participantes ---
-    document.getElementById('clearAllParticipantsBtn')?.addEventListener('click', clearAllParticipants);
+    document.getElementById('clearAllParticipantsBtn')?.addEventListener('click', function (e) {
+        e.preventDefault();
+        clearAllParticipants();
+    });
+    // --- Evento: Iniciar torneo ---
+    document.getElementById('startTournamentBtn')?.addEventListener('click', startTournament);
 
     // --- Evento: Editar nombre del torneo ---
     document.getElementById('editTournamentNameBtn')?.addEventListener('click', editTournamentName);
