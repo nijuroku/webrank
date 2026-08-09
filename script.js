@@ -2,6 +2,7 @@
     "use strict";
 
     // --- Estado ---
+    let tournamentVisible = false;
     let tournamentName = 'LaMafia BEYBLADEX';
     let participants = [];
     let versus = [];
@@ -89,7 +90,8 @@
                 finalMatch,
                 finalPlayed,
                 podium,
-                tournamentName  // <-- AÑADIR ESTA LÍNEA
+                tournamentName,  // <-- AÑADIR ESTA LÍNEA
+                tournamentVisible  // <-- AÑADIR
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
             storageStatusEl.textContent = '💾 Datos guardados';
@@ -132,6 +134,7 @@
             finalPlayed = data.finalPlayed || false;
             podium = data.podium || { first: null, second: null, third: null, fourth: null };
             tournamentName = data.tournamentName || 'LaMafia BEYBLADEX';  // <-- AÑADIR ESTA LÍNEA
+            tournamentVisible = data.tournamentVisible || false;
 
             participants.forEach(p => {
                 if (!(p in accumulatedPoints)) accumulatedPoints[p] = 0;
@@ -157,6 +160,36 @@
             return false;
         }
     }
+    // --- Ocultar torneo ---
+    function hideTournament() {
+        const hasData = versus.length > 0 || matchHistory.length > 0 || tournamentFinished;
+        if (!hasData) {
+            tournamentVisible = false;
+            document.getElementById('tournamentSection').style.display = 'none';
+        }
+    }
+
+    // --- Iniciar torneo ---
+    function startTournament() {
+        if (participants.length < 2) {
+            alert('❌ Necesitas al menos 2 participantes para iniciar el torneo.');
+            return;
+        }
+
+        tournamentVisible = true;
+        document.getElementById('tournamentSection').style.display = 'block';
+
+        // Scroll suave hacia la sección del torneo
+        setTimeout(() => {
+            const section = document.getElementById('tournamentSection');
+            if (section) {
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
+
+        renderAll();
+        saveToLocalStorage();
+    }
 
     // --- Render: nombre del torneo ---
     function renderTournamentName() {
@@ -167,7 +200,7 @@
         // Actualizar título de la página
         document.title = `${tournamentName} · BeybladeX`;
     }
-        // --- Editar nombre del torneo ---
+    // --- Editar nombre del torneo ---
     function editTournamentName() {
         const newName = prompt('Ingresa el nuevo nombre del torneo:', tournamentName);
         if (newName && newName.trim() !== '') {
@@ -440,7 +473,7 @@
         `;
     }
 
-    // --- Render: versus ---
+
     // --- Render: versus ---
     function renderVersus() {
         const roundTitle = getRoundTitle();
@@ -464,7 +497,6 @@
             return;
         }
 
-        // Construir lista de enfrentamientos a mostrar
         let matchesToShow = [...versus];
 
         if (preFinalMatch && !preFinalPlayed) {
@@ -486,11 +518,6 @@
                 const roundLabel = v.round ? `R${v.round}` : 'KO';
 
                 let extraClass = '';
-                if (isPreFinal) {
-                    extraClass = 'prefinal-match';
-                } else if (isFinal) {
-                    extraClass = 'final-match';
-                }
                 let badgeText = 'VS';
                 let badgeColor = '#FFB800';
                 let controlButtons = '';
@@ -536,7 +563,7 @@
                 </div>
                 <span class="vs-badge" style="color:${badgeColor};">
                     ${badgeText}
-                    ${!isPlayed ? `<span class="unplayed-badge">⚪ Sin jugar</span>` : ''}
+                    
                 </span>
                 <div class="score-control">
                     <button class="dec-score" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>
@@ -549,14 +576,12 @@
             </div>
             ${controlButtons}
         </div>
-        <button class="delete-vs" data-vsid="${v.id}">🗑️</button>
     </div>
 `;
             });
 
             versusListEl.innerHTML = html;
 
-            // Eventos para botones de puntuación
             document.querySelectorAll('.inc-score, .dec-score').forEach(btn => {
                 btn.addEventListener('click', function (e) {
                     const vsId = this.dataset.vsid;
@@ -574,7 +599,6 @@
                 });
             });
 
-            // Eventos para botones de acción
             document.querySelectorAll('[data-action="play-pre-final"]').forEach(btn => {
                 btn.addEventListener('click', function () {
                     markPreFinalPlayed();
@@ -593,33 +617,6 @@
             document.querySelectorAll('[data-action="auto-final"]').forEach(btn => {
                 btn.addEventListener('click', function () {
                     if (preFinalPlayed) autoFinishFinal();
-                });
-            });
-
-            document.querySelectorAll('.delete-vs').forEach(btn => {
-                btn.addEventListener('click', function (e) {
-                    const vsId = this.dataset.vsid;
-                    const vsIdNum = parseInt(vsId, 10);
-
-                    if (preFinalMatch && preFinalMatch.id === vsIdNum) {
-                        if (confirm('¿Eliminar la PRE-FINAL (3er y 4to lugar)?')) {
-                            preFinalMatch = null;
-                            preFinalPlayed = false;
-                            renderAll();
-                            saveToLocalStorage();
-                        }
-                        return;
-                    }
-                    if (finalMatch && finalMatch.id === vsIdNum) {
-                        if (confirm('¿Eliminar la FINAL?')) {
-                            finalMatch = null;
-                            finalPlayed = false;
-                            renderAll();
-                            saveToLocalStorage();
-                        }
-                        return;
-                    }
-                    removeVersusById(vsIdNum);
                 });
             });
 
@@ -651,13 +648,12 @@
             versusListEl.innerHTML = `<div class="empty-message">Sin enfrentamientos activos. Genera una ronda de grupos o inicia eliminatorias.</div>`;
         }
 
-        // Limpiar mensajes externos (ya no los usamos)
         thirdPlaceMessageEl.innerHTML = '';
 
         if (currentPhase === 1) {
             phaseDisplayEl.textContent = 'Fase 1 · Grupos';
             phaseDisplayEl.style.background = 'rgba(234, 241, 250, 0.9)';
-            phaseDisplayEl.style.color = '#00FF88';
+            phaseDisplayEl.style.color = '#000704';
             roundDisplayEl.textContent = `Ronda ${groupRound}`;
         } else if (currentPhase === 2 && !tournamentFinished) {
             if (preFinalMatch && !preFinalPlayed) {
@@ -687,7 +683,6 @@
 
         updateStats();
     }
-
     // --- Render: resumen de puntos (SOLO GRUPOS) ---
     function renderScores() {
         if (participants.length === 0) {
@@ -817,6 +812,37 @@
         if (tournamentWinner === name) tournamentWinner = null;
         renderAll();
         saveToLocalStorage();
+    }
+
+    // --- Borrar todos los participantes ---
+    function clearAllParticipants() {
+        // Verificar si hay partidos registrados
+        const hasMatches = matchHistory.some(v => v.playerA || v.playerB);
+        const hasVersus = versus.some(v => v.playerA || v.playerB);
+
+        if (hasMatches || hasVersus) {
+            alert('❌ No se pueden borrar los participantes porque tienen partidos registrados.\n\nPrimero debes reiniciar el torneo o archivar las rondas.');
+            return;
+        }
+
+        if (participants.length === 0) {
+            alert('No hay participantes para borrar.');
+            return;
+        }
+
+        if (!confirm(`⚠️ ¿Estás seguro de borrar TODOS los ${participants.length} participantes?\n\nEsta acción no se puede deshacer.`)) {
+            return;
+        }
+
+        participants = [];
+        accumulatedPoints = {};
+        tournamentWinner = null;
+        thirdPlaceWinner = null;
+        podium = { first: null, second: null, third: null, fourth: null };
+
+        renderAll();
+        saveToLocalStorage();
+        alert('✅ Todos los participantes han sido eliminados.');
     }
 
     function updateScore(vsId, player, direction) {
@@ -1362,7 +1388,16 @@
 
     // --- render all ---
     function renderAll() {
-        renderTournamentName();  // <-- AÑADIR ESTA LÍNEA
+        // Mostrar/ocultar sección del torneo
+        const hasData = versus.length > 0 || matchHistory.length > 0 || tournamentFinished;
+        if (hasData || tournamentVisible) {
+            tournamentVisible = true;
+            document.getElementById('tournamentSection').style.display = 'block';
+        } else {
+            document.getElementById('tournamentSection').style.display = 'none';
+        }
+
+        renderTournamentName();
         renderParticipants();
         renderRoundSelector();
         renderVersus();
@@ -1388,8 +1423,13 @@
         renderAll();
         saveToLocalStorage();
     });
+    // --- Evento: Iniciar torneo ---
+    document.getElementById('startTournamentBtn')?.addEventListener('click', startTournament);
 
-        // --- Evento: Editar nombre del torneo ---
+    // --- Evento: Borrar todos los participantes ---
+    document.getElementById('clearAllParticipantsBtn')?.addEventListener('click', clearAllParticipants);
+
+    // --- Evento: Editar nombre del torneo ---
     document.getElementById('editTournamentNameBtn')?.addEventListener('click', editTournamentName);
 
     addMultipleBtn.addEventListener('click', addMultipleParticipants);
@@ -1434,6 +1474,7 @@
         semifinalLosers = [];
         semifinalWinners = [];
         podium = { first: null, second: null, third: null, fourth: null };
+        tournamentVisible = false;  // <-- AÑADIR
 
         participants.forEach(p => accumulatedPoints[p] = 0);
 
