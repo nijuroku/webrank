@@ -549,7 +549,7 @@
             </div>
             ${controlButtons}
         </div>
-        <button class="delete-vs" data-vsid="${v.id}">🗑️</button>
+        
     </div>
 `;
             });
