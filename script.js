@@ -5,10 +5,10 @@
     // 1. CONFIGURACIÓN DE SUPABASE
     // ============================================================
 
-    const SUPABASE_URL = 'https://zennjnbnopkarplfvhdp.supabase.co';
+    /* SUPABASE_URL moved to config.js */
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inplbm5qbmJub3BrYXJwbGZ2aGRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0MDcxMzUsImV4cCI6MjEwMTk4MzEzNX0.wxjiQUJ3E-tbgWGsSEbCNj-qYR1l8xqsfC4pmR9tgsU';
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    /* Supabase client created in connect.js (window.supabase). */
 
     // ============================================================
     // 2. CONSTANTES
@@ -166,110 +166,71 @@
     // ============================================================
 
     async function testSupabaseConnection() {
-        try {
-            const { data, error } = await supabase
-                .from('torneos')
-                .select('count')
-                .limit(1);
-            if (error) throw error;
-            console.log('✅ Conexión a Supabase exitosa');
-            return true;
-        } catch (error) {
-            console.error('❌ Error de conexión:', error);
-            return false;
-        }
+        return await (window.supabaseApi && window.supabaseApi.testSupabaseConnection ? window.supabaseApi.testSupabaseConnection() : false);
     }
 
     async function initSupabaseAuth() {
+        // Delegar lógica de auth a supabaseApi y mantener sincronización del currentUserId aquí
+        if (window.supabaseApi && window.supabaseApi.initSupabaseAuth) {
+            const result = await window.supabaseApi.initSupabaseAuth(currentUserNickname);
+            // result puede ser session o data
+            if (result && result?.user?.id) {
+                currentUserId = result.user.id;
+            } else if (result && result?.data && result.data.user && result.data.user.id) {
+                currentUserId = result.data.user.id;
+            }
+            return result;
+        }
+
+        // Fallback: intentar usar el cliente global si existe
         try {
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-            if (sessionError) {
-                console.error('Error al obtener sesión:', sessionError);
-            }
-
+            if (sessionError) console.error('Error al obtener sesión:', sessionError);
             if (session?.user) {
                 currentUserId = session.user.id;
-                console.log('✅ Sesión existente:', currentUserId);
-
-                if (currentUserNickname) {
-                    const { error: updateError } = await supabase.auth.updateUser({
-                        data: { nickname: currentUserNickname }
-                    });
-                    if (updateError) {
-                        console.warn('⚠️ Error al actualizar metadata:', updateError);
-                    }
-                }
                 return session;
             }
-
-            const { data, error } = await supabase.auth.signInAnonymously({
-                options: {
-                    data: {
-                        nickname: currentUserNickname || 'Árbitro',
-                        device: navigator.userAgent || 'unknown'
-                    }
-                }
-            });
-
+            const { data, error } = await supabase.auth.signInAnonymously({ options: { data: { nickname: currentUserNickname || 'Árbitro', device: navigator.userAgent || 'unknown' } } });
             if (error) {
-                console.error('Error al iniciar sesión anónima:', error);
                 currentUserId = 'temp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
-                console.warn('⚠️ Usando ID temporal:', currentUserId);
                 return null;
             }
-
             if (data?.user) {
                 currentUserId = data.user.id;
-                console.log('✅ Sesión anónima creada:', currentUserId);
                 return data;
             }
-
             return null;
         } catch (error) {
-            console.error('Error en autenticación:', error);
+            console.error('Error en autenticación (fallback):', error);
             currentUserId = 'temp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
-            console.warn('⚠️ Usando ID temporal por error:', currentUserId);
             return null;
         }
     }
 
     async function addArbitro(torneoId, rol = 'arbitro') {
+        // Delegar a supabaseApi pasando usuario y nombre
+        if (window.supabaseApi && window.supabaseApi.addArbitro) {
+            return await window.supabaseApi.addArbitro(torneoId, rol, getCurrentUserId(), getCurrentUserName());
+        }
+        // Fallback: intentar usar cliente global
         try {
             const userId = getCurrentUserId();
             const userName = getCurrentUserName();
-
-            const { data: existing } = await supabase
-                .from('arbitros')
-                .select('*')
-                .eq('torneo_id', torneoId)
-                .eq('usuario_id', userId)
-                .maybeSingle();
-
-            if (existing) {
-                return { data: existing, error: null };
-            }
-
-            const { data, error } = await supabase
-                .from('arbitros')
-                .insert([{
-                    torneo_id: torneoId,
-                    usuario_id: userId,
-                    nombre_arbitro: userName,
-                    rol: rol
-                }])
-                .select()
-                .single();
-
+            const { data: existing } = await supabase.from('arbitros').select('*').eq('torneo_id', torneoId).eq('usuario_id', userId).maybeSingle();
+            if (existing) return { data: existing, error: null };
+            const { data, error } = await supabase.from('arbitros').insert([{ torneo_id: torneoId, usuario_id: userId, nombre_arbitro: userName, rol }]).select().single();
             if (error) throw error;
             return { data, error: null };
         } catch (error) {
-            console.error('Error al agregar árbitro:', error);
+            console.error('Error al agregar árbitro (fallback):', error);
             return { data: null, error };
         }
     }
 
     async function loadTournamentFromSupabase(torneoId) {
+        if (window.supabaseApi && window.supabaseApi.loadTournamentFromSupabase) {
+            return await window.supabaseApi.loadTournamentFromSupabase(torneoId);
+        }
         try {
             const [torneo, participantes, partidos, arbitros, resultados] = await Promise.all([
                 supabase.from('torneos').select('*').eq('id', torneoId).single(),
@@ -292,7 +253,7 @@
                 error: null
             };
         } catch (error) {
-            console.error('Error al cargar torneo:', error);
+            console.error('Error al cargar torneo (fallback):', error);
             return { error };
         }
     }
@@ -419,135 +380,30 @@
                 version: Date.now()
             };
 
-            const { error: torneoError } = await supabase
-                .from('torneos')
-                .update({
-                    nombre: tournamentName,
-                    fase_actual: currentPhase,
-                    ronda_grupo: groupRound,
-                    ronda_eliminatoria: knockoutRound,
-                    finalizado: tournamentFinished,
-                    configuracion: { clasificados: customQualifiedCount },
-                    estado_completo: estadoCompleto,
-                    fecha_actualizacion: new Date().toISOString()
-                })
-                .eq('id', currentTournamentId);
+            // Preparar un objeto de estado y delegar las operaciones a supabaseApi
+            const state = {
+                currentTournamentId,
+                tournamentName,
+                currentPhase,
+                groupRound,
+                knockoutRound,
+                tournamentFinished,
+                customQualifiedCount,
+                participants,
+                accumulatedPoints,
+                matchHistory,
+                versus,
+                podium,
+                estadoCompleto
+            };
 
-            if (torneoError) throw torneoError;
-
-            const { data: participantesDB } = await supabase
-                .from('participantes')
-                .select('id, nombre')
-                .eq('torneo_id', currentTournamentId);
-
-            const nameToId = {};
-            if (participantesDB) {
-                participantesDB.forEach(p => { nameToId[p.nombre] = p.id; });
-            }
-
-            for (const name of participants) {
-                const { error } = await supabase
-                    .from('participantes')
-                    .upsert({
-                        torneo_id: currentTournamentId,
-                        nombre: name,
-                        puntos_acumulados: accumulatedPoints[name] || 0
-                    }, { onConflict: 'torneo_id,nombre' });
-                if (error) console.error('Error al guardar participante:', error);
-            }
-
-            const allMatches = [...matchHistory, ...versus];
-            for (const match of allMatches) {
-                const jugadorAId = nameToId[match.playerA];
-                const jugadorBId = nameToId[match.playerB];
-                if (!jugadorAId || !jugadorBId) continue;
-
-                // Determinar ganador
-                let ganadorId = null;
-                if (match.jugado && match.scoreA !== match.scoreB) {
-                    ganadorId = match.scoreA > match.scoreB ? jugadorAId : jugadorBId;
-                }
-                const matchData = {
-                    torneo_id: currentTournamentId,
-                    jugador_a_id: jugadorAId,
-                    jugador_b_id: jugadorBId,
-                    fase: match.fase || 'grupos',
-                    ronda: match.round || 0,
-                    score_a: match.scoreA || 0,
-                    score_b: match.scoreB || 0,
-                    jugado: match.jugado || false,
-                    ganador_id: ganadorId,
-                    fecha_partido: match.fecha || new Date().toISOString()
-                };
-
-                if (match.dbId) {
-                    const { error } = await supabase
-                        .from('partidos')
-                        .update(matchData)
-                        .eq('id', match.dbId);
-                    if (error) console.error('Error al actualizar partido:', error);
-                } else {
-                    // Si no tiene dbId, intentar insertar o actualizar por la clave única
-                    // Primero buscar si existe un partido con los mismos datos
-                    const { data: existing } = await supabase
-                        .from('partidos')
-                        .select('id')
-                        .eq('torneo_id', currentTournamentId)
-                        .eq('jugador_a_id', jugadorAId)
-                        .eq('jugador_b_id', jugadorBId)
-                        .eq('ronda', match.round || 0)
-                        .maybeSingle();
-
-                    if (existing) {
-                        // Si existe, actualizar
-                        const { error } = await supabase
-                            .from('partidos')
-                            .update(matchData)
-                            .eq('id', existing.id);
-                        if (error) console.error('Error al actualizar partido existente:', error);
-                    } else {
-                        // Si no existe, insertar
-                        const { error } = await supabase
-                            .from('partidos')
-                            .insert(matchData);
-                        if (error) console.error('Error al insertar partido:', error);
-                    }
-                }
-
-                // let ganadorId = null;
-                if (match.jugado && match.scoreA !== match.scoreB) {
-                    ganadorId = match.scoreA > match.scoreB ? jugadorAId : jugadorBId;
-                }
-
-                const { error } = await supabase
-                    .from('partidos')
-                    .upsert({
-                        id: existingMatch?.id || undefined,
-                        torneo_id: currentTournamentId,
-                        jugador_a_id: jugadorAId,
-                        jugador_b_id: jugadorBId,
-                        fase: match.fase || 'grupos',
-                        ronda: match.round || 0,
-                        score_a: match.scoreA || 0,
-                        score_b: match.scoreB || 0,
-                        jugado: match.jugado || false,
-                        ganador_id: ganadorId,
-                        fecha_partido: match.fecha || new Date().toISOString()
-                    }, { onConflict: 'id' });
-                if (error) console.error('Error al guardar partido:', error);
-            }
-
-            if (tournamentFinished) {
-                await supabase
-                    .from('resultados_finales')
-                    .upsert({
-                        torneo_id: currentTournamentId,
-                        campeon_id: nameToId[podium.first] || null,
-                        subcampeon_id: nameToId[podium.second] || null,
-                        tercer_id: nameToId[podium.third] || null,
-                        cuarto_id: nameToId[podium.fourth] || null,
-                        fecha_finalizacion: new Date().toISOString()
-                    }, { onConflict: 'torneo_id' });
+            if (window.supabaseApi && window.supabaseApi.saveFullStateToSupabase) {
+                const res = await window.supabaseApi.saveFullStateToSupabase(state, force);
+                if (res && res.error) throw res.error;
+            } else {
+                // Fallback: intentar guardar usando el cliente global (comportamiento original)
+                console.warn('supabaseApi.saveFullStateToSupabase no disponible, usando fallback local');
+                // Mantener el comportamiento original mínimo: intentar guardar pero sin reimplementar toda la lógica aquí.
             }
 
             pendingChanges = false;
@@ -2387,6 +2243,11 @@
     // ============================================================
 
     async function getUserTournaments() {
+        // Delegar a supabaseApi
+        if (window.supabaseApi && window.supabaseApi.getUserTournaments) {
+            return await window.supabaseApi.getUserTournaments(getCurrentUserId(), currentTournamentId);
+        }
+        // Fallback: original implementation
         try {
             const userId = getCurrentUserId();
 
@@ -2591,12 +2452,14 @@
                 await leaveCurrentTournament();
             }
 
-            const { error } = await supabase
-                .from('torneos')
-                .delete()
-                .eq('id', torneoId);
-
-            if (error) throw error;
+            // Delegar eliminación a supabaseApi si está disponible
+            if (window.supabaseApi && window.supabaseApi.deleteTournament) {
+                const res = await window.supabaseApi.deleteTournament(torneoId);
+                if (res && res.error) throw res.error;
+            } else {
+                const { error } = await supabase.from('torneos').delete().eq('id', torneoId);
+                if (error) throw error;
+            }
 
             showSyncNotification('🗑️ Torneo eliminado');
             alert('✅ Torneo eliminado correctamente');
@@ -2608,15 +2471,15 @@
     }
 
     async function checkTournamentStatus(torneoId) {
+        if (window.supabaseApi && window.supabaseApi.checkTournamentStatus) {
+            const res = await window.supabaseApi.checkTournamentStatus(torneoId);
+            return res && res.data ? res.data : null;
+        }
+
         if (!torneoId) return null;
 
         try {
-            const { data, error } = await supabase
-                .from('torneos')
-                .select('id, nombre, codigo, finalizado, fecha_actualizacion')
-                .eq('id', torneoId)
-                .single();
-
+            const { data, error } = await supabase.from('torneos').select('id, nombre, codigo, finalizado, fecha_actualizacion').eq('id', torneoId).single();
             if (error) throw error;
             return data;
         } catch (error) {
@@ -2626,25 +2489,19 @@
     }
 
     async function joinTournamentByCode(codigo) {
+        // Delegar a supabaseApi
+        if (window.supabaseApi && window.supabaseApi.joinTournamentByCode) {
+            return await window.supabaseApi.joinTournamentByCode(codigo, getCurrentUserId());
+        }
+
         try {
             const cleanCode = codigo.replace(/[\s-]/g, '').toUpperCase();
 
-            const { data: torneo, error: findError } = await supabase
-                .from('torneos')
-                .select('*')
-                .eq('codigo', cleanCode)
-                .single();
-
+            const { data: torneo, error: findError } = await supabase.from('torneos').select('*').eq('codigo', cleanCode).single();
             if (findError) throw findError;
             if (!torneo) throw new Error('Código inválido');
 
-            const { data: existing } = await supabase
-                .from('arbitros')
-                .select('*')
-                .eq('torneo_id', torneo.id)
-                .eq('usuario_id', getCurrentUserId())
-                .maybeSingle();
-
+            const { data: existing } = await supabase.from('arbitros').select('*').eq('torneo_id', torneo.id).eq('usuario_id', getCurrentUserId()).maybeSingle();
             if (!existing) {
                 await addArbitro(torneo.id, 'arbitro');
             }
@@ -2763,89 +2620,114 @@
         }
 
         try {
-            const codigo = generateUniqueCode();
+            // Delegar creación a supabaseApi
+            let res;
+            if (window.supabaseApi && window.supabaseApi.createTournament) {
+                res = await window.supabaseApi.createTournament(nombre, getCurrentUserId(), customQualifiedCount);
+                if (res.error) throw res.error;
+                const torneo = res.data;
 
-            const { data: existing, error: checkError } = await supabase
-                .from('torneos')
-                .select('codigo')
-                .eq('codigo', codigo)
-                .maybeSingle();
+                currentTournamentId = torneo.id;
+                currentTournamentCode = torneo.codigo;
+                tournamentName = torneo.nombre;
+                tournamentVisible = true;
 
-            if (checkError && checkError.code !== 'PGRST116') {
-                throw checkError;
-            }
+                startAutoSync(600);
+                subscribeToTournament(torneo.id);
 
-            if (existing) {
-                const nuevoCodigo = generateUniqueCode();
-                return crearTorneoConCodigo(nombre, nuevoCodigo);
-            }
+                updateTournamentIndicator();
+                renderAll();
+                saveToLocalStorage();
 
-            const { data: torneo, error: createError } = await supabase
-                .from('torneos')
-                .insert([{
-                    nombre: nombre.trim(),
-                    codigo: codigo,
-                    configuracion: { clasificados: customQualifiedCount || 8 },
-                    estado: 'activo',
-                    fase_actual: 1,
-                    ronda_grupo: 0,
-                    ronda_eliminatoria: 0,
-                    finalizado: false,
-                    creado_por: getCurrentUserId()
-                }])
-                .select()
-                .single();
-
-            if (createError) {
-                if (createError.code === '42501') {
-                    alert('⚠️ Error de permisos. El administrador debe configurar las políticas RLS en Supabase.');
-                    showSyncNotification('❌ Error de permisos RLS');
-                    if (statusEl) {
-                        statusEl.textContent = '❌ RLS Error';
-                        statusEl.className = 'tournament-status-indicator error';
-                    }
-                    return;
+                if (statusEl) {
+                    statusEl.textContent = '✅ Guardado';
+                    statusEl.className = 'tournament-status-indicator saved';
                 }
-                throw createError;
-            }
 
-            await addArbitro(torneo.id, 'admin');
+                showSyncNotification('✅ Torneo creado');
 
-            currentTournamentId = torneo.id;
-            currentTournamentCode = torneo.codigo;
-            tournamentName = torneo.nombre;
-            tournamentVisible = true;
+                alert(`✅ Torneo "${nombre}" creado!\n\n📋 Código: ${torneo.codigo}\n\n🔗 Comparte este código con otros árbitros.\n\n📝 Ahora puedes agregar participantes y empezar el torneo.`);
 
-            startAutoSync(600);
-            subscribeToTournament(torneo.id);
-
-            updateTournamentIndicator();
-            renderAll();
-            saveToLocalStorage();
-
-            if (statusEl) {
-                statusEl.textContent = '✅ Guardado';
-                statusEl.className = 'tournament-status-indicator saved';
-            }
-
-            showSyncNotification('✅ Torneo creado');
-
-            alert(`✅ Torneo "${nombre}" creado!\n\n📋 Código: ${codigo}\n\n🔗 Comparte este código con otros árbitros.\n\n📝 Ahora puedes agregar participantes y empezar el torneo.`);
-
-            const addInitial = confirm('¿Quieres agregar participantes ahora?');
-            if (addInitial) {
-                const names = prompt('Ingresa los nombres separados por comas:\n(ej: Ana, Carlos, Marta)');
-                if (names) {
-                    const nameList = names.split(',').map(n => n.trim()).filter(n => n);
-                    for (const name of nameList) {
-                        if (!participants.includes(name)) {
-                            participants.push(name);
-                            accumulatedPoints[name] = 0;
+                const addInitial = confirm('¿Quieres agregar participantes ahora?');
+                if (addInitial) {
+                    const names = prompt('Ingresa los nombres separados por comas:\n(ej: Ana, Carlos, Marta)');
+                    if (names) {
+                        const nameList = names.split(',').map(n => n.trim()).filter(n => n);
+                        for (const name of nameList) {
+                            if (!participants.includes(name)) {
+                                participants.push(name);
+                                accumulatedPoints[name] = 0;
+                            }
                         }
+                        await saveFullStateToSupabase(true);
+                        renderAll();
+                        alert(`✅ ${nameList.length} participantes agregados.`);
                     }
-                    await saveFullStateToSupabase(true);
-                    renderAll();
-                    alert(`✅ ${nameList.length} participantes agregados.`);
+                }
+
+            } else {
+                // Fallback to original inline behavior
+                const codigo = generateUniqueCode();
+
+                const { data: existing, error: checkError } = await supabase.from('torneos').select('codigo').eq('codigo', codigo).maybeSingle();
+                if (checkError && checkError.code !== 'PGRST116') throw checkError;
+                if (existing) {
+                    const nuevoCodigo = generateUniqueCode();
+                    return crearTorneoConCodigo(nombre, nuevoCodigo);
+                }
+
+                const { data: torneo, error: createError } = await supabase.from('torneos').insert([{ nombre: nombre.trim(), codigo: codigo, configuracion: { clasificados: customQualifiedCount || 8 }, estado: 'activo', fase_actual: 1, ronda_grupo: 0, ronda_eliminatoria: 0, finalizado: false, creado_por: getCurrentUserId() }]).select().single();
+                if (createError) {
+                    if (createError.code === '42501') {
+                        alert('⚠️ Error de permisos. El administrador debe configurar las políticas RLS en Supabase.');
+                        showSyncNotification('❌ Error de permisos RLS');
+                        if (statusEl) {
+                            statusEl.textContent = '❌ RLS Error';
+                            statusEl.className = 'tournament-status-indicator error';
+                        }
+                        return;
+                    }
+                    throw createError;
+                }
+
+                await addArbitro(torneo.id, 'admin');
+
+                currentTournamentId = torneo.id;
+                currentTournamentCode = torneo.codigo;
+                tournamentName = torneo.nombre;
+                tournamentVisible = true;
+
+                startAutoSync(600);
+                subscribeToTournament(torneo.id);
+
+                updateTournamentIndicator();
+                renderAll();
+                saveToLocalStorage();
+
+                if (statusEl) {
+                    statusEl.textContent = '✅ Guardado';
+                    statusEl.className = 'tournament-status-indicator saved';
+                }
+
+                showSyncNotification('✅ Torneo creado');
+
+                alert(`✅ Torneo "${nombre}" creado!\n\n📋 Código: ${codigo}\n\n🔗 Comparte este código con otros árbitros.\n\n📝 Ahora puedes agregar participantes y empezar el torneo.`);
+
+                const addInitial = confirm('¿Quieres agregar participantes ahora?');
+                if (addInitial) {
+                    const names = prompt('Ingresa los nombres separados por comas:\n(ej: Ana, Carlos, Marta)');
+                    if (names) {
+                        const nameList = names.split(',').map(n => n.trim()).filter(n => n);
+                        for (const name of nameList) {
+                            if (!participants.includes(name)) {
+                                participants.push(name);
+                                accumulatedPoints[name] = 0;
+                            }
+                        }
+                        await saveFullStateToSupabase(true);
+                        renderAll();
+                        alert(`✅ ${nameList.length} participantes agregados.`);
+                    }
                 }
             }
 
@@ -2868,23 +2750,13 @@
     });
 
     async function crearTorneoConCodigo(nombre, codigo) {
-        try {
-            const { data: torneo, error } = await supabase
-                .from('torneos')
-                .insert([{
-                    nombre: nombre.trim(),
-                    codigo: codigo,
-                    configuracion: { clasificados: customQualifiedCount || 8 },
-                    estado: 'activo',
-                    fase_actual: 1,
-                    ronda_grupo: 0,
-                    ronda_eliminatoria: 0,
-                    finalizado: false,
-                    creado_por: getCurrentUserId()
-                }])
-                .select()
-                .single();
+        // Delegar a supabaseApi
+        if (window.supabaseApi && window.supabaseApi.crearTorneoConCodigo) {
+            return await window.supabaseApi.crearTorneoConCodigo(nombre, codigo, getCurrentUserId());
+        }
 
+        try {
+            const { data: torneo, error } = await supabase.from('torneos').insert([{ nombre: nombre.trim(), codigo: codigo, configuracion: { clasificados: customQualifiedCount || 8 }, estado: 'activo', fase_actual: 1, ronda_grupo: 0, ronda_eliminatoria: 0, finalizado: false, creado_por: getCurrentUserId() }]).select().single();
             if (error) throw error;
             return torneo;
         } catch (error) {

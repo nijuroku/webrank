@@ -26,7 +26,7 @@
                 </a>
             </div>
             <div class="header-title">
-                <h1><span id="tournamentNameHeader" class="titulo-futurista">LaMafia BEYBLADEX</span></h1>
+                <h1> <span id="currentTournamentName" class="titulo-futurista">LaMafia BEYBLADEX</span></h1>
                 <div class="subhead">Fase 1: grupos · Fase 2: eliminatorias</div>
             </div>
         </div>
@@ -133,7 +133,7 @@
                 <!-- ENFRENTAMIENTOS -->
                 <div class="card">
                     <div>
-                        <h2 class="titulo-moderno">⚔️ Enfrentamientos</h2>
+                        <h2 class="titulo-futurista">⚔️ Enfrentamientos</h2>
                         <span id="phaseDisplay" class="phase-badge">Fase 1 · Grupos</span>
                         <span id="roundDisplay" class="round-info">Ronda 0</span>
                     </div>
@@ -251,7 +251,7 @@
 
                     <div
                         style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
-                        <h2 style="margin:0;" class="titulo-moderno">📊 Clasificación</h2>
+                        <h2 style="margin:0;" class="titulo-futurista">📊 Clasificación</h2>
                         <button class="btn btn-outline btn-sm" id="editTournamentNameBtn">✏️ Editar nombre</button>
                     </div>
                     <div style="font-size:0.8rem; color:#4A4A6A; margin-bottom: 1rem;">Puntos acumulados (todas las
@@ -280,7 +280,12 @@
 
             <!-- TABLA DE PUNTUACIÓN TOTAL -->
             <div class="card" style="margin-top: 1.5rem;">
-                <h2 class="titulo-moderno">📈 Tabla de Puntuación Total</h2>
+                <h1>
+                    <span class="titulo-futurista" id="currentTournamentName">
+                        LaMafia BEYBLADEX
+                    </span>
+                </h1>
+                
                 <div style="font-size:0.8rem; color:#4A4A6A; margin-bottom: 0.8rem;">Puntos totales acumulados por
                     participante en todas las rondas</div>
                 <div id="totalScoreTableContainer" style="overflow-x: auto;"></div>
@@ -345,6 +350,7 @@
     </div>
     <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="connect.js"></script>
     <script src="script.js"></script>
 </body>
 
