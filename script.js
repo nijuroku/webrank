@@ -2541,6 +2541,7 @@
                     </div>
                     <div style="display:flex; gap:0.3rem;">
                         ${!esActual ? `<button class="btn-cargar" data-torneo-id="${t.id}">📂 Cargar</button>` : ''}
+                        ${t.finalizado ? `<button class="btn-ver-puntos" data-torneo-id="${t.id}">📈 Ver Puntos</button>` : ''}
                         <button class="btn-eliminar" data-torneo-id="${t.id}">🗑️</button>
                     </div>
                 </div>
@@ -2569,6 +2570,16 @@
 
                 await deleteTournament(torneoId);
                 showTournamentList();
+            });
+        });
+
+        // Botones: Ver Puntos (para torneos finalizados)
+        container.querySelectorAll('.btn-ver-puntos').forEach(btn => {
+            btn.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                const torneoId = this.dataset.torneoId;
+                await loadTournamentScores(torneoId);
+                // Mantener modal abierto para permitir cargar o cerrar
             });
         });
 
@@ -2626,6 +2637,103 @@
             console.error('Error al cargar torneo:', error);
             alert('❌ Error al cargar el torneo: ' + error.message);
         }
+    }
+
+    // Cargar solo la tabla de puntuaciones de un torneo finalizado (sin cambiar el torneo actual)
+    async function loadTournamentScores(torneoId) {
+        try {
+            // Obtener nombre del torneo
+            const { data: torneo, error: tErr } = await supabase.from('torneos').select('id, nombre').eq('id', torneoId).maybeSingle();
+            if (tErr) throw tErr;
+            if (!torneo) throw new Error('Torneo no encontrado');
+
+            // Intentar obtener puntos desde participantes.puntos_acumulados
+            const { data: participantes, error: pErr } = await supabase
+                .from('participantes')
+                .select('nombre, puntos_acumulados')
+                .eq('torneo_id', torneoId)
+                .order('puntos_acumulados', { ascending: false });
+
+            if (pErr) throw pErr;
+
+            // Si no hay puntos en la tabla participantes, intentar recuperar desde estado_completo
+            let rows = participantes || [];
+            if ((!rows || rows.length === 0) && (window.supabaseApi && window.supabaseApi.getTournamentJSON)) {
+                const jsonRes = await window.supabaseApi.getTournamentJSON(torneoId);
+                if (jsonRes && jsonRes.data) {
+                    const estado = jsonRes.data;
+                    if (estado && estado.participants) {
+                        rows = estado.participants.map(name => ({ nombre: name, puntos_acumulados: (estado.accumulatedPoints || {})[name] || 0 }));
+                    }
+                }
+            }
+
+            renderScoresTable(torneo.nombre, rows);
+            showSyncNotification('📈 Puntuaciones cargadas');
+        } catch (error) {
+            console.error('Error al cargar puntuaciones del torneo:', error);
+            alert('❌ Error al cargar puntuaciones: ' + error.message);
+        }
+    }
+
+    function renderScoresTable(tournamentNameToShow, rows) {
+        const container = document.getElementById('totalScoreTableContainer');
+        if (!container) return;
+
+        if (!rows || rows.length === 0) {
+            container.innerHTML = `<div class="empty-message">No hay participantes o puntos para este torneo.</div>`;
+            return;
+        }
+
+        // Ordenar por puntos desc
+        rows.sort((a, b) => (b.puntos_acumulados || 0) - (a.puntos_acumulados || 0));
+
+        let html = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2 style="margin:0;">📊 Puntuaciones — ${escapeHtml(tournamentNameToShow || 'Torneo')}</h2>
+                <button class="btn btn-outline" id="clearScoresViewBtn">🔙 Volver</button>
+            </div>
+            <table class="score-table" style="width:100%; margin-top:0.6rem; border-collapse: collapse;">
+                <thead>
+                    <tr style="text-align:left; border-bottom:1px solid rgba(255,255,255,0.06);">
+                        <th style="padding:0.6rem; width:40px;">#</th>
+                        <th style="padding:0.6rem;">Participante</th>
+                        <th style="padding:0.6rem; width:140px;">Puntos</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        rows.forEach((r, idx) => {
+            html += `
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                    <td style="padding:0.6rem;">${idx + 1}</td>
+                    <td style="padding:0.6rem;">${escapeHtml(r.nombre || '')}</td>
+                    <td style="padding:0.6rem;">${r.puntos_acumulados || 0}</td>
+                </tr>
+            `;
+        });
+
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+
+        const backBtn = document.getElementById('clearScoresViewBtn');
+        if (backBtn) {
+            backBtn.addEventListener('click', function () {
+                renderTotalScoreTable();
+            });
+        }
+    }
+
+    // helper para escapar HTML simple
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     async function deleteTournament(torneoId) {
