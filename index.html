@@ -4,6 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <title>LaMafia BEYBLADEX</title>
     <link
         href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&family=Teko:wght@300;400;600;700&display=swap"
@@ -18,10 +21,12 @@
         <div class="header-left">
             <div class="header-logo">
                 <!-- <img src="https://iili.io/C4uBmtS.png" alt="R420"> -->
-                <img src="https://iili.io/C4uBqCX.jpg" alt="LaMafia BEYBLADEX">
+                <a href="https://www.instagram.com/la_mafia_beyblade/" target="_blank">
+                    <img src="https://iili.io/C4uBqCX.jpg" alt="LaMafia BEYBLADEX">
+                </a>
             </div>
             <div class="header-title">
-                <h1><span id="tournamentNameHeader" class="titulo-futurista">LaMafia BEYBLADEX</span></h1>
+                <h1> <span id="currentTournamentName" class="titulo-futurista">LaMafia BEYBLADEX</span></h1>
                 <div class="subhead">Fase 1: grupos · Fase 2: eliminatorias</div>
             </div>
         </div>
@@ -34,13 +39,53 @@
             </div>
             <span class="storage-status" id="storageStatus">💾 Guardado</span>
         </div>
-    </header>
+        <!-- BARRA DE BÚSQUEDA DESPLEGABLE jRVYDWpk9Y52dA3Qc7E! -->
 
+        <!-- <div class="search-dropdown" id="searchDropdown">
+            <div class="search-dropdown-inner">
+                <input type="text" id="searchInput" placeholder="🔍 Buscar participante..." autocomplete="off" />
+                <div class="search-results" id="searchResults"></div>
+            </div>
+        </div> -->
+    </header>
     <!-- CONTENIDO PRINCIPAL -->
     <div class="app-container">
 
         <!-- GESTIÓN DE PARTICIPANTES -->
         <div class="card">
+            <!-- ENCABEZADO CON ACCIONES DE TORNEO -->
+            <div class="participant-header">
+                <div class="participant-header-left">
+                    <h2 class="titulo-moderno" style="margin:0;">👤 Participantes</h2>
+                    <span class="participant-count" id="participantCountBadge">0</span>
+                </div>
+                <div class="participant-header-right">
+                    <!-- TORNEO ACTIVO -->
+                    <div class="tournament-indicator" id="tournamentIndicator" style="display: none;">
+                        <span class="tournament-name">🏟️ <span id="currentTournamentName">Torneo</span></span>
+                        <span class="tournament-code">📋 Código: <strong
+                                id="currentTournamentCode">-----</strong></span>
+                        <span class="tournament-arbitros">👥 <span id="arbitrosCount">0</span></span>
+                    </div>
+
+                    <!-- BOTONES DE TORNEO -->
+                    <div class="tournament-actions">
+                        <button class="btn btn-sm btn-outline" id="createTournamentBtn" title="Crear nuevo torneo">
+                            🏗️ Crear torneo
+                        </button>
+                        <button class="btn btn-sm btn-outline" id="joinTournamentBtn"
+                            title="Unirse a un torneo existente">
+                            🔗 Unirse
+                        </button>
+                        <button class="btn btn-sm btn-outline" id="listTournamentsBtn"
+                            style="border-color: rgba(0, 212, 255, 0.15); color: #00D4FF;">
+                            📋 Mis Torneos
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- INPUT GROUP -->
             <div class="input-group">
                 <label for="newParticipantInput" class="titulo-moderno">👤 Participante</label>
                 <input type="text" id="newParticipantInput" placeholder="Ej: Ana, Carlos, Marta..." />
@@ -79,7 +124,6 @@
                 ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma +diferencia · Derrota resta -diferencia
             </div>
         </div>
-
         <!-- SECCIÓN DEL TORNEO (OCULTA INICIALMENTE) -->
         <div id="tournamentSection" style="display: none;">
 
@@ -89,7 +133,7 @@
                 <!-- ENFRENTAMIENTOS -->
                 <div class="card">
                     <div>
-                        <h2 class="titulo-moderno">⚔️ Enfrentamientos</h2>
+                        <h2 class="titulo-futurista">⚔️ Enfrentamientos</h2>
                         <span id="phaseDisplay" class="phase-badge">Fase 1 · Grupos</span>
                         <span id="roundDisplay" class="round-info">Ronda 0</span>
                     </div>
@@ -109,34 +153,97 @@
                     <div id="thirdPlaceMessage" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
                 </div>
 
-                <!-- GESTIÓN DE RONDAS + CLASIFICACIÓN -->
+                <!-- GESTIÓN DE RONDAS - NUEVO DISEÑO -->
                 <div class="card">
                     <div class="round-management">
-                        <h3 class="titulo-moderno">🔄 Gestión de Rondas</h3>
-
-                        <div class="btn-row">
-                            <button class="btn btn-outline btn-full" id="generateGroupStageBtn">📋 Nueva ronda de
-                                grupos</button>
-                            <button class="btn btn-warning btn-full" id="startKnockoutBtn">🏁 Iniciar
-                                eliminatorias</button>
-                        </div>
-
-                        <div class="btn-row">
-                            <div class="qualified-selector">
-                                <label for="qualifiedCountInput" >🏆 Clasificados:</label>
-                                <input type="number" id="qualifiedCountInput" min="2" max="32" value="8" />
-                                <button class="btn btn-success" id="applyQualifiedBtn">Aplicar</button>
+                        <div class="round-management-header">
+                            <h3 class="titulo-moderno">🔄 Gestión de Rondas</h3>
+                            <div class="phase-switch-container">
+                                <span class="phase-label fase-grupos">📋 Grupos</span>
+                                <label class="phase-switch">
+                                    <input type="checkbox" id="phaseSwitch">
+                                    <span class="slider round"></span>
+                                </label>
+                                <span class="phase-label fase-eliminatorias">⚔️ Eliminatorias</span>
                             </div>
                         </div>
 
-                        <div class="btn-row">
+                        <!-- PANEL FASE DE GRUPOS -->
+                        <div id="groupPhasePanel" class="phase-panel phase-panel-active">
+                            <div class="phase-panel-header">
+                                <span class="phase-badge grupo-badge">Fase de Grupos</span>
+                                <span class="round-info" id="groupRoundInfo">Ronda 0</span>
+                            </div>
+
+                            <div class="btn-grid">
+                                <button class="btn btn-success btn-full" id="generateGroupStageBtn">📋 Nueva
+                                    ronda</button>
+                                <button class="btn btn-outline btn-full" id="nextGroupRoundBtn">➡️ Siguiente
+                                    ronda</button>
+                                <button class="btn btn-outline btn-full" id="reshuffleGroupsBtn">🔀 Reordenar</button>
+                                <div class="qualified-selector-wrapper">
+                                    <label for="qualifiedCountInput">🏆 Clasificados:</label>
+                                    <input type="number" id="qualifiedCountInput" min="2" max="32" value="8" />
+                                    <button class="btn btn-sm btn-success" id="applyQualifiedBtn">Aplicar</button>
+                                </div>
+                            </div>
+
+                            <div class="info-note-small">
+                                ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma +diferencia · Derrota
+                                resta -diferencia
+                            </div>
+                        </div>
+
+                        <!-- PANEL FASE ELIMINATORIA -->
+                        <div id="knockoutPhasePanel" class="phase-panel phase-panel-inactive">
+                            <div class="phase-panel-header">
+                                <span class="phase-badge eliminatoria-badge">Fase Eliminatoria</span>
+                                <span class="round-info" id="knockoutRoundInfo">⚔️ Esperando inicio</span>
+                            </div>
+
+                            <div class="btn-grid">
+                                <button class="btn btn-warning btn-full" id="startKnockoutBtn">🏁 Iniciar
+                                    eliminatorias</button>
+                                <button class="btn btn-outline btn-full" id="nextKnockoutRoundBtn">➡️ Siguiente
+                                    ronda</button>
+                            </div>
+
+                            <!-- GESTIÓN DE PRE-FINAL Y FINAL -->
+                            <div id="knockoutSpecialMatches" style="margin-top: 0.8rem; display: none;">
+                                <hr style="margin: 0.5rem 0;" />
+                                <div style="font-size: 0.85rem; color: #00FF88; margin-bottom: 0.5rem;">🏆 Partidos
+                                    Especiales</div>
+                                <div class="btn-grid">
+                                    <button class="btn btn-sm btn-full" id="playPreFinalBtn"
+                                        style="border-color: rgba(124, 58, 237, 0.3); color: #7C3AED; background: rgba(124, 58, 237, 0.06);">
+                                        🥉 Jugar PRE-FINAL
+                                    </button>
+                                    <button class="btn btn-sm btn-full" id="autoPreFinalBtn"
+                                        style="border-color: rgba(124, 58, 237, 0.3); color: #7C3AED; background: rgba(124, 58, 237, 0.06);">
+                                        ⚡ Auto PRE-FINAL
+                                    </button>
+                                    <button class="btn btn-sm btn-full" id="playFinalBtn"
+                                        style="border-color: rgba(255, 215, 0, 0.3); color: #FFD700; background: rgba(255, 215, 0, 0.06);">
+                                        🏆 Jugar FINAL
+                                    </button>
+                                    <button class="btn btn-sm btn-full" id="autoFinalBtn"
+                                        style="border-color: rgba(255, 215, 0, 0.3); color: #FFD700; background: rgba(255, 215, 0, 0.06);">
+                                        ⚡ Auto FINAL
+                                    </button>
+                                </div>
+                                <div id="specialMatchesStatus"
+                                    style="font-size: 0.75rem; color: #4A4A6A; margin-top: 0.3rem; text-align: center;">
+                                    ⏳ Esperando semifinales...
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- BOTONES DE CONTROL GLOBAL -->
+                        <div class="btn-row"
+                            style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.8rem;">
                             <button class="btn btn-danger btn-full" id="clearVersusBtn">🗑️ Archivar ronda
                                 actual</button>
                             <button class="btn btn-outline btn-full" id="resetAllBtn">🔄 Reiniciar torneo</button>
-                        </div>
-
-                        <div class="info-note-small">
-                            ⚡ Reiniciar torneo mantiene los participantes pero borra todo el progreso
                         </div>
                     </div>
 
@@ -144,7 +251,7 @@
 
                     <div
                         style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
-                        <h2 style="margin:0;" class="titulo-moderno">📊 Clasificación</h2>
+                        <h2 style="margin:0;" class="titulo-futurista">📊 Clasificación</h2>
                         <button class="btn btn-outline btn-sm" id="editTournamentNameBtn">✏️ Editar nombre</button>
                     </div>
                     <div style="font-size:0.8rem; color:#4A4A6A; margin-bottom: 1rem;">Puntos acumulados (todas las
@@ -155,7 +262,15 @@
 
                     <hr />
 
-                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                        <button class="btn btn-outline" id="forceSyncBtn"
+                            style="border-color: rgba(0, 212, 255, 0.2); color: #00D4FF;">
+                            🔄 Sincronizar ahora
+                        </button>
+                        <button class="btn btn-outline" id="refreshDataBtn"
+                            style="border-color: rgba(0, 255, 136, 0.2); color: #00FF88;">
+                            🔄 Forzar recarga
+                        </button>
                         <button class="btn btn-outline" id="exportDataBtn">📤 Exportar datos</button>
                         <button class="btn btn-outline" id="importDataBtn">📥 Importar datos</button>
                     </div>
@@ -165,7 +280,12 @@
 
             <!-- TABLA DE PUNTUACIÓN TOTAL -->
             <div class="card" style="margin-top: 1.5rem;">
-                <h2 class="titulo-moderno">📈 Tabla de Puntuación Total</h2>
+                <h1>
+                    <span class="titulo-futurista" id="currentTournamentName">
+                        LaMafia BEYBLADEX
+                    </span>
+                </h1>
+                
                 <div style="font-size:0.8rem; color:#4A4A6A; margin-bottom: 0.8rem;">Puntos totales acumulados por
                     participante en todas las rondas</div>
                 <div id="totalScoreTableContainer" style="overflow-x: auto;"></div>
@@ -178,7 +298,59 @@
                 style="color:#4A4A6A; text-decoration:none;">Instagram</a>
         </div>
     </div>
-
+    <!-- MODAL DE LISTA DE TORNEOS -->
+    <div class="modal-overlay" id="tournamentListModal">
+        <div class="modal modal-large">
+            <div class="modal-header">
+                <h3 style="color: #00D4FF;">📋 Mis Torneos</h3>
+                <button class="modal-close" id="closeTournamentListModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <input type="text" id="tournamentSearchInput" placeholder="🔍 Buscar torneo..."
+                        style="flex:1; min-width:150px;" />
+                    <button class="btn btn-outline btn-sm" id="refreshTournamentListBtn">🔄 Actualizar</button>
+                </div>
+                <div id="tournamentListContainer" style="max-height: 400px; overflow-y: auto;">
+                    <div class="empty-message" style="text-align:center; padding:2rem;">
+                        <span style="font-size:2rem; display:block; margin-bottom:0.5rem;">🏟️</span>
+                        No hay torneos guardados. Crea uno nuevo o únete a uno existente.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- MODAL DE NICKNAME -->
+    <div class="modal-overlay" id="nicknameModal" style="display: none; z-index: 9999;">
+        <div class="modal modal-nickname">
+            <div class="modal-header" style="justify-content: center; border-bottom: none;">
+                <h3 style="color: #00FF88; font-size: 1.5rem;">🏟️ Bienvenido</h3>
+            </div>
+            <div class="modal-body" style="text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 0.5rem;">👤</div>
+                <p style="color: #4A4A6A; margin-bottom: 1.5rem;">
+                    Ingresa tu nombre de usuario para comenzar
+                </p>
+                <input type="text" id="nicknameInput" placeholder="Ej: Árbitro_123" style="width: 100%; padding: 0.8rem 1rem; border-radius: 12px; 
+                          border: 2px solid rgba(0, 255, 136, 0.15); background: rgba(13,13,26,0.8); 
+                          color: #E8E8F0; font-size: 1.1rem; text-align: center; margin-bottom: 0.5rem;" maxlength="30"
+                    autofocus />
+                <div style="font-size: 0.7rem; color: #4A4A6A; margin-bottom: 1rem;">
+                    💡 Este nombre se usará para identificarte como árbitro
+                </div>
+                <button class="btn btn-primary" id="confirmNicknameBtn"
+                    style="width: 100%; padding: 0.8rem; font-size: 1rem;">
+                    🚀 Entrar al torneo
+                </button>
+                <div style="margin-top: 1rem; font-size: 0.7rem; color: #4A4A6A;">
+                    ⚡ El nombre se guardará en este dispositivo
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="connect.js"></script>
     <script src="script.js"></script>
 </body>
 
