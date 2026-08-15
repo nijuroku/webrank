@@ -315,8 +315,93 @@
             }
         },
 
+        // Descargar torneo como JSON
+        async downloadTournamentAsJSON(torneoId) {
+            try {
+                const { data, error } = await window.supabase
+                    .from('torneos')
+                    .select('*')
+                    .eq('id', torneoId)
+                    .single();
 
-        async deleteTournament(torneoId) {
+                if (error) throw error;
+                if (!data) throw new Error('Torneo no encontrado');
+
+                // Retornar el estado completo junto con metadatos
+                return {
+                    data: {
+                        torneoId: data.id,
+                        nombre: data.nombre,
+                        codigo: data.codigo,
+                        estado: data.estado_completo || {},
+                        metadatos: {
+                            creado: data.fecha_creacion,
+                            actualizado: data.fecha_actualizacion,
+                            fase: data.fase_actual,
+                            finalizado: data.finalizado
+                        }
+                    },
+                    error: null
+                };
+            } catch (error) {
+                console.error('Error al descargar torneo (supabaseApi):', error);
+                return { data: null, error };
+            }
+        },
+
+        // Cargar/importar torneo desde JSON
+        async importTournamentFromJSON(torneoId, jsonData) {
+            try {
+                if (!torneoId || !jsonData) {
+                    throw new Error('Tournament ID y JSON data requeridos');
+                }
+
+                // Validar que el JSON tenga la estructura esperada
+                if (!jsonData.participants || !Array.isArray(jsonData.participants)) {
+                    throw new Error('JSON inválido: falta participants');
+                }
+
+                // Actualizar el torneo con el estado completo
+                const { error } = await window.supabase
+                    .from('torneos')
+                    .update({
+                        estado_completo: jsonData,
+                        fecha_actualizacion: new Date().toISOString()
+                    })
+                    .eq('id', torneoId);
+
+                if (error) throw error;
+
+                return { error: null, message: 'Torneo importado correctamente' };
+            } catch (error) {
+                console.error('Error al importar torneo (supabaseApi):', error);
+                return { error };
+            }
+        },
+
+        // Obtener el JSON del torneo guardado
+        async getTournamentJSON(torneoId) {
+            try {
+                const { data, error } = await window.supabase
+                    .from('torneos')
+                    .select('estado_completo')
+                    .eq('id', torneoId)
+                    .single();
+
+                if (error) throw error;
+                if (!data || !data.estado_completo) {
+                    throw new Error('No hay datos JSON guardados para este torneo');
+                }
+
+                return {
+                    data: data.estado_completo,
+                    error: null
+                };
+            } catch (error) {
+                console.error('Error al obtener JSON (supabaseApi):', error);
+                return { data: null, error };
+            }
+        }
             try {
                 const { error } = await window.supabase
                     .from('torneos')

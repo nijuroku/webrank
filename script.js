@@ -365,7 +365,27 @@
         isSyncing = true;
 
         try {
+            // Crear un JSON completo con todo el estado del torneo
             const estadoCompleto = {
+                // Metadatos del torneo
+                tournamentName,
+                currentPhase,
+                groupRound,
+                knockoutRound,
+                tournamentFinished,
+                customQualifiedCount,
+                version: Date.now(),
+                savedAt: new Date().toISOString(),
+                
+                // Participantes y puntuación
+                participants,
+                accumulatedPoints,
+                
+                // Partidos
+                matchHistory,
+                versus,
+                
+                // Eliminatorias
                 tournamentWinner,
                 nextVersusId,
                 preFinalMatch,
@@ -376,8 +396,7 @@
                 semifinalWinners,
                 podium,
                 tournamentVisible,
-                selectedRound,
-                version: Date.now()
+                selectedRound
             };
 
             // Preparar un objeto de estado y delegar las operaciones a supabaseApi
@@ -700,9 +719,148 @@
         }
     }
 
-    // ============================================================
-    // 8. FUNCIONES DE PUNTUACIÓN Y PARTIDOS
-    // ============================================================
+    // Descargar torneo actual como JSON
+    async function downloadTournamentJSON() {
+        try {
+            if (!currentTournamentId) {
+                alert('No hay torneo actual cargado');
+                return;
+            }
+
+            // Si está guardado en Supabase, descargarlo desde ahí
+            if (window.supabaseApi && window.supabaseApi.downloadTournamentAsJSON) {
+                const result = await window.supabaseApi.downloadTournamentAsJSON(currentTournamentId);
+                if (result.error) throw result.error;
+                
+                const jsonData = result.data;
+                const jsonString = JSON.stringify(jsonData, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `torneo_${tournamentName}_${new Date().getTime()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                showSyncNotification('✅ Torneo descargado como JSON');
+            } else {
+                // Fallback: descargar estado local
+                const estadoCompleto = {
+                    tournamentName,
+                    currentPhase,
+                    groupRound,
+                    knockoutRound,
+                    tournamentFinished,
+                    customQualifiedCount,
+                    participants,
+                    accumulatedPoints,
+                    matchHistory,
+                    versus,
+                    tournamentWinner,
+                    nextVersusId,
+                    preFinalMatch,
+                    preFinalPlayed,
+                    finalMatch,
+                    finalPlayed,
+                    semifinalLosers,
+                    semifinalWinners,
+                    podium,
+                    tournamentVisible,
+                    selectedRound,
+                    version: Date.now(),
+                    savedAt: new Date().toISOString()
+                };
+                
+                const jsonString = JSON.stringify(estadoCompleto, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `torneo_${tournamentName}_${new Date().getTime()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                showSyncNotification('✅ Torneo descargado (local)');
+            }
+        } catch (error) {
+            console.error('Error al descargar torneo:', error);
+            showSyncNotification('❌ Error al descargar torneo');
+        }
+    }
+
+    // Restaurar torneo desde JSON
+    async function importTournamentJSON(jsonData) {
+        try {
+            if (!jsonData || typeof jsonData !== 'object') {
+                throw new Error('Formato JSON inválido');
+            }
+
+            if (!jsonData.participants || !Array.isArray(jsonData.participants)) {
+                throw new Error('JSON debe contener array de participants');
+            }
+
+            // Cargar datos del JSON
+            participants = jsonData.participants || [];
+            accumulatedPoints = jsonData.accumulatedPoints || {};
+            matchHistory = jsonData.matchHistory || [];
+            versus = jsonData.versus || [];
+            tournamentName = jsonData.tournamentName || 'Torneo Importado';
+            currentPhase = jsonData.currentPhase || 1;
+            groupRound = jsonData.groupRound || 1;
+            knockoutRound = jsonData.knockoutRound || 1;
+            tournamentFinished = jsonData.tournamentFinished || false;
+            customQualifiedCount = jsonData.customQualifiedCount || 0;
+            tournamentWinner = jsonData.tournamentWinner || null;
+            nextVersusId = jsonData.nextVersusId || 1;
+            preFinalMatch = jsonData.preFinalMatch || null;
+            preFinalPlayed = jsonData.preFinalPlayed || false;
+            finalMatch = jsonData.finalMatch || null;
+            finalPlayed = jsonData.finalPlayed || false;
+            semifinalLosers = jsonData.semifinalLosers || [];
+            semifinalWinners = jsonData.semifinalWinners || [];
+            podium = jsonData.podium || { first: null, second: null, third: null, fourth: null };
+            tournamentVisible = jsonData.tournamentVisible !== false;
+            selectedRound = jsonData.selectedRound || 0;
+
+            // Si hay un torneo actual en Supabase, importar allá también
+            if (currentTournamentId && window.supabaseApi && window.supabaseApi.importTournamentFromJSON) {
+                const estadoCompleto = {
+                    tournamentName,
+                    currentPhase,
+                    groupRound,
+                    knockoutRound,
+                    tournamentFinished,
+                    customQualifiedCount,
+                    participants,
+                    accumulatedPoints,
+                    matchHistory,
+                    versus,
+                    tournamentWinner,
+                    nextVersusId,
+                    preFinalMatch,
+                    preFinalPlayed,
+                    finalMatch,
+                    finalPlayed,
+                    semifinalLosers,
+                    semifinalWinners,
+                    podium,
+                    tournamentVisible,
+                    selectedRound,
+                    version: Date.now(),
+                    savedAt: new Date().toISOString()
+                };
+                
+                await window.supabaseApi.importTournamentFromJSON(currentTournamentId, estadoCompleto);
+            }
+
+            renderAll();
+            saveToLocalStorage();
+            showSyncNotification('✅ Torneo importado correctamente');
+        } catch (error) {
+            console.error('Error al importar torneo:', error);
+            showSyncNotification('❌ Error al importar: ' + error.message);
+        }
+    }
 
     function getAccumulatedScore(playerName) {
         return accumulatedPoints[playerName] || 0;
@@ -3182,7 +3340,35 @@
 
     document.getElementById('refreshTournamentListBtn').addEventListener('click', showTournamentList);
 
-    // --- Unirse a torneo ---
+    // --- Descargar torneo como JSON ---
+    const downloadTournamentBtn = document.getElementById('downloadTournamentBtn');
+    if (downloadTournamentBtn) {
+        downloadTournamentBtn.addEventListener('click', downloadTournamentJSON);
+    }
+
+    // --- Importar torneo desde JSON ---
+    const importTournamentBtn = document.getElementById('importTournamentBtn');
+    if (importTournamentBtn) {
+        importTournamentBtn.addEventListener('click', function () {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.json';
+            fileInput.onchange = async function (e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                try {
+                    const text = await file.text();
+                    const jsonData = JSON.parse(text);
+                    await importTournamentJSON(jsonData);
+                } catch (error) {
+                    console.error('Error al importar:', error);
+                    showSyncNotification('❌ Archivo JSON inválido');
+                }
+            };
+            fileInput.click();
+        });
+    }
     joinTournamentBtn.addEventListener('click', async function () {
         if (currentTournamentId) {
             if (!confirm('⚠️ Ya estás en un torneo. ¿Quieres salir y unirte a otro?')) {
