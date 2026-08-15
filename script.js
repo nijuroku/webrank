@@ -711,12 +711,17 @@
     function recalculateAccumulatedPoints() {
         participants.forEach(p => accumulatedPoints[p] = 0);
 
+        // Lógica: 3 puntos por victoria
+        const POINTS_PER_WIN = 3;
+
         for (let v of matchHistory) {
             if (v.round && v.round > 0) {
-                const diffA = v.scoreA - v.scoreB;
-                const diffB = v.scoreB - v.scoreA;
-                accumulatedPoints[v.playerA] = (accumulatedPoints[v.playerA] || 0) + diffA;
-                accumulatedPoints[v.playerB] = (accumulatedPoints[v.playerB] || 0) + diffB;
+                // Solo contar victorias que ya se han jugado (scoreA !== scoreB)
+                if (v.scoreA > v.scoreB) {
+                    accumulatedPoints[v.playerA] = (accumulatedPoints[v.playerA] || 0) + POINTS_PER_WIN;
+                } else if (v.scoreB > v.scoreA) {
+                    accumulatedPoints[v.playerB] = (accumulatedPoints[v.playerB] || 0) + POINTS_PER_WIN;
+                }
             }
         }
 
@@ -728,10 +733,12 @@
                     h.playerB === v.playerB
                 );
                 if (!existsInHistory) {
-                    const diffA = v.scoreA - v.scoreB;
-                    const diffB = v.scoreB - v.scoreA;
-                    accumulatedPoints[v.playerA] = (accumulatedPoints[v.playerA] || 0) + diffA;
-                    accumulatedPoints[v.playerB] = (accumulatedPoints[v.playerB] || 0) + diffB;
+                    // Solo contar si el partido ya se ha jugado
+                    if (v.scoreA > v.scoreB) {
+                        accumulatedPoints[v.playerA] = (accumulatedPoints[v.playerA] || 0) + POINTS_PER_WIN;
+                    } else if (v.scoreB > v.scoreA) {
+                        accumulatedPoints[v.playerB] = (accumulatedPoints[v.playerB] || 0) + POINTS_PER_WIN;
+                    }
                 }
             }
         }
@@ -746,10 +753,28 @@
                 (v.playerA === p && v.scoreA > v.scoreB) ||
                 (v.playerB === p && v.scoreB > v.scoreA)
             ).length;
-            return { name: p, points, wins };
+            
+            // Calcular diferencia de puntos (anotados - recibidos)
+            let pointsFor = 0, pointsAgainst = 0;
+            playerMatches.forEach(v => {
+                if (v.playerA === p) {
+                    pointsFor += v.scoreA;
+                    pointsAgainst += v.scoreB;
+                } else {
+                    pointsFor += v.scoreB;
+                    pointsAgainst += v.scoreA;
+                }
+            });
+            const pointDifference = pointsFor - pointsAgainst;
+            
+            return { name: p, points, wins, pointDifference };
         });
         ranking.sort((a, b) => {
+            // Ordenar por puntos acumulados (descendente)
             if (b.points !== a.points) return b.points - a.points;
+            // Si empate, ordenar por diferencia de puntos (descendente)
+            if (b.pointDifference !== a.pointDifference) return b.pointDifference - a.pointDifference;
+            // Si sigue empatado, ordenar por victorias (descendente)
             return (b.wins || 0) - (a.wins || 0);
         });
         return ranking;
@@ -1260,6 +1285,7 @@
                         <th>Pos.</th>
                         <th>Participante</th>
                         <th>Puntos</th>
+                        <th>Dif. Pts</th>
                         <th>Partidos</th>
                         <th>Victorias</th>
                         <th>Derrotas</th>
@@ -1296,6 +1322,7 @@
                     <td><span class="medal-icon">${medal}</span></td>
                     <td class="name-cell">${item.name}</td>
                     <td class="points-cell ${ptsClass}">${pts}</td>
+                    <td class="matches-cell" style="color:#0099FF;">${item.pointDifference > 0 ? '+' : ''}${item.pointDifference}</td>
                     <td class="matches-cell">${playerMatches.length}</td>
                     <td class="matches-cell" style="color:#00FF88;">${wins}</td>
                     <td class="matches-cell" style="color:#FF1744;">${losses}</td>
