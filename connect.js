@@ -155,13 +155,20 @@
                     .eq('id', currentTournamentId);
                 if (torneoError) console.error('Error actualizando torneo (supabaseApi):', torneoError);
 
-                // Participantes: upsert
+                // Participantes: upsert en lote (más eficiente)
                 const participantes = state.participants || [];
-                for (const name of participantes) {
-                    const { error } = await window.supabase
+                if (participantes.length > 0) {
+                    const participantRecords = participantes.map(name => ({
+                        torneo_id: currentTournamentId,
+                        nombre: name,
+                        puntos_acumulados: (state.accumulatedPoints || {})[name] || 0
+                    }));
+
+                    const { error: participantsError } = await window.supabase
                         .from('participantes')
-                        .upsert({ torneo_id: currentTournamentId, nombre: name, puntos_acumulados: (state.accumulatedPoints || {})[name] || 0 }, { onConflict: 'torneo_id,nombre' });
-                    if (error) console.error('Error al guardar participante (supabaseApi):', error);
+                        .upsert(participantRecords, { onConflict: 'torneo_id,nombre' });
+
+                    if (participantsError) console.error('Error al upsert participantes (supabaseApi):', participantsError);
                 }
 
                 // Obtener IDs actuales
@@ -402,6 +409,8 @@
                 return { data: null, error };
             }
         }
+        ,
+        async deleteTournament(torneoId) {
             try {
                 const { error } = await window.supabase
                     .from('torneos')
