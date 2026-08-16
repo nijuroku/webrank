@@ -129,6 +129,7 @@
     // Import/Export
     const exportDataBtn = document.getElementById('exportDataBtn');
     const importDataBtn = document.getElementById('importDataBtn');
+    const uploadTournamentBtn = document.getElementById('uploadTournamentBtn');
     const fileInput = document.getElementById('fileInput');
 
     // ============================================================
@@ -2317,6 +2318,13 @@
             console.log('🔄 Iniciando sincronización automática...');
             startAutoSync(600);
 
+            // Poblar dropdown de torneos para la tabla de puntuaciones
+            try {
+                await populateScoreTournamentDropdown();
+            } catch (pe) {
+                console.warn('No se pudo poblar dropdown de puntuaciones:', pe);
+            }
+
             console.log('🚀 App inicializada correctamente');
 
         } catch (error) {
@@ -2426,6 +2434,170 @@
     // ============================================================
     // 14. FUNCIONES DE LISTA DE TORNEOS
     // ============================================================
+
+    // === Subir torneo desde archivo JSON ===
+    if (uploadTournamentBtn && fileInput) {
+        uploadTournamentBtn.addEventListener('click', function () {
+            // usar el input de archivo existente
+            fileInput.accept = '.json';
+            fileInput.onchange = async function (ev) {
+                const f = ev.target.files && ev.target.files[0];
+                if (!f) return;
+                try {
+                    const text = await f.text();
+                    const estado = JSON.parse(text);
+                    await uploadTournamentJSONToDB(estado);
+                } catch (e) {
+                    console.error('Error leyendo JSON:', e);
+                    alert('❌ Error leyendo archivo JSON: ' + e.message);
+                } finally {
+                    // limpiar valor para permitir seleccionar el mismo archivo de nuevo
+                    fileInput.value = '';
+                }
+            };
+            fileInput.click();
+        });
+    }
+
+    async function uploadTournamentJSONToDB(estado) {
+        try {
+            // Nombre del torneo
+            const nombre = estado.tournamentName || estado.nombre || ('Torneo importado ' + new Date().toLocaleString());
+            // Asegurar autenticación antes de crear el torneo (puede crear sesión anónima)
+            try {
+                await initSupabaseAuth();
+            } catch (e) {
+                console.warn('initSupabaseAuth falló (no crítico):', e);
+            }
+
+            // Obtener user id real desde supabase auth cuando sea posible (necesario para políticas RLS)
+            let createdBy = getCurrentUserId() || 'importer';
+            try {
+                const authUser = (await supabase.auth.getUser())?.data?.user;
+                if (authUser && authUser.id) createdBy = authUser.id;
+            } catch (e) {
+                console.warn('No se pudo obtener auth user desde supabase.auth.getUser():', e);
+            }
+            const customQualified = estado.customQualifiedCount || estado.config?.clasificados || 8;
+
+            // Crear torneo (delegar a supabaseApi si existe)
+            let crearRes = null;
+            if (window.supabaseApi && window.supabaseApi.createTournament) {
+                crearRes = await window.supabaseApi.createTournament(nombre, createdBy, customQualified);
+            } else {
+                // Fallback: crear directamente
+                const { data, error } = await supabase.from('torneos').insert([{
+                    nombre: nombre.trim(),
+                    codigo: (estado.codigo) ? estado.codigo : (Math.random().toString(36).substring(2, 8)).toUpperCase(),
+                    configuracion: { clasificados: customQualified },
+                    estado: 'finalizado',
+                    fase_actual: estado.currentPhase || 1,
+                    ronda_grupo: estado.groupRound || 0,
+                    ronda_eliminatoria: estado.knockoutRound || 0,
+                    finalizado: !!estado.tournamentFinished,
+                    creado_por: createdBy,
+                    estado_completo: estado,
+                    fecha_creacion: estado.savedAt ? new Date(estado.savedAt).toISOString() : new Date().toISOString(),
+                    fecha_actualizacion: new Date().toISOString()
+                }]).select().single();
+                if (error) throw error;
+                crearRes = { data };
+            }
+
+            console.log('crearRes (createTournament) =>', crearRes);
+            if (!crearRes || !crearRes.data) {
+                console.error('Create tournament response invalid:', crearRes);
+                throw new Error('No se pudo crear torneo');
+            }
+            const torneo = crearRes.data;
+            const torneoId = torneo.id;
+            console.log('Torneo creado en la BD con id:', torneoId);
+
+            // Preparar state para delegar a saveFullStateToSupabase (connect.js)
+            const state = {
+                currentTournamentId: torneoId,
+                tournamentName: nombre,
+                currentPhase: estado.currentPhase || 1,
+                groupRound: estado.groupRound || 0,
+                knockoutRound: estado.knockoutRound || 0,
+                tournamentFinished: !!estado.tournamentFinished,
+                customQualifiedCount: customQualified,
+                participants: estado.participants || [],
+                accumulatedPoints: estado.accumulatedPoints || {},
+                matchHistory: estado.matchHistory || [],
+                versus: estado.versus || [],
+                podium: estado.podium || {},
+                estadoCompleto: estado
+            };
+
+            // Delegar guardado de participantes/partidos/resultados si la API existe
+            if (window.supabaseApi && window.supabaseApi.saveFullStateToSupabase) {
+                console.log('Delegando guardado a supabaseApi.saveFullStateToSupabase, state:', state);
+                const res = await window.supabaseApi.saveFullStateToSupabase(state);
+                console.log('saveFullStateToSupabase result =>', res);
+                if (res && res.error) {
+                    console.error('Error desde saveFullStateToSupabase:', res.error);
+                    throw res.error;
+                }
+            } else {
+                console.warn('supabaseApi.saveFullStateToSupabase no disponible; usando fallback de inserción directa');
+                // Fallback simple: upsert participantes y partidos manualmente
+                // (implementación mínima porque lo ideal es usar la API central)
+                const participants = state.participants || [];
+                if (participants.length > 0) {
+                    const pRecords = participants.map(n => ({ torneo_id: torneoId, nombre: n, puntos_acumulados: (state.accumulatedPoints || {})[n] || 0 }));
+                    const { error: pErr } = await supabase.from('participantes').upsert(pRecords, { onConflict: 'torneo_id,nombre' });
+                    if (pErr) console.error('Error upsert participantes (fallback):', pErr);
+                    else console.log('Participantes upsert (fallback) OK');
+                }
+
+                // Insert de partidos (no deduplicado avanzado en fallback)
+                const allMatches = [ ...(state.matchHistory || []), ...(state.versus || []) ];
+                if (allMatches.length > 0) {
+                    // obtener mapping nombre -> id
+                    const { data: participantsDb } = await supabase.from('participantes').select('id,nombre').eq('torneo_id', torneoId);
+                    const nameToId = {};
+                    (participantsDb || []).forEach(p => nameToId[p.nombre] = p.id);
+
+                    const inserts = [];
+                    for (const m of allMatches) {
+                        const aId = nameToId[m.playerA] || null;
+                        const bId = nameToId[m.playerB] || null;
+                        if (!aId || !bId) continue;
+                        const jugado = !!m.jugado || ((m.scoreA||0) !== (m.scoreB||0));
+                        const ganador = (jugado && m.scoreA !== m.scoreB) ? (m.scoreA > m.scoreB ? aId : bId) : null;
+                        inserts.push({ torneo_id: torneoId, jugador_a_id: aId, jugador_b_id: bId, fase: m.fase || 'grupos', ronda: m.round || m.ronda || 0, score_a: m.scoreA || 0, score_b: m.scoreB || 0, jugado, ganador_id: ganador, fecha_partido: m.fecha || new Date().toISOString() });
+                    }
+                    if (inserts.length > 0) {
+                        const { data: insertedMatches, error: insErr } = await supabase.from('partidos').insert(inserts).select();
+                        if (insErr) console.error('Error insert partidos (fallback):', insErr);
+                        else console.log('Partidos insertados (fallback):', (insertedMatches || []).length);
+                    }
+                }
+
+                // resultados_finales fallback
+                if (state.tournamentFinished || (state.podium && Object.keys(state.podium).length > 0)) {
+                    const podium = state.podium || {};
+                    const { data: parts } = await supabase.from('participantes').select('id,nombre').eq('torneo_id', torneoId);
+                    const map = {};
+                    (parts || []).forEach(p => map[p.nombre] = p.id);
+                    const campeonId = map[podium.first] || null;
+                    const subId = map[podium.second] || null;
+                    const tercerId = map[podium.third] || null;
+                    const cuartoId = map[podium.fourth] || null;
+                    const { error: rfErr } = await supabase.from('resultados_finales').upsert([{ torneo_id: torneoId, campeon_id: campeonId, subcampeon_id: subId, tercer_id: tercerId, cuarto_id: cuartoId, fecha_finalizacion: new Date().toISOString() }], { onConflict: 'torneo_id' });
+                    if (rfErr) console.error('Error upsert resultados_finales (fallback):', rfErr);
+                    else console.log('Resultados finales upsert (fallback) OK');
+                }
+            }
+
+            showSyncNotification('⬆️ Torneo subido a la base de datos');
+            alert('✅ Torneo subido correctamente: ' + nombre + '\nID: ' + torneoId);
+        } catch (error) {
+            console.error('Error subiendo torneo:', error);
+            alert('❌ Error al subir torneo: ' + (error.message || JSON.stringify(error)));
+        }
+    }
 
     async function getUserTournaments() {
         // Delegar a supabaseApi
@@ -2734,6 +2906,61 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    // ============================================================
+    // Dropdown para cargar puntuaciones desde la tabla de puntuación
+    // ============================================================
+    async function populateScoreTournamentDropdown() {
+        const btn = document.getElementById('scoreTournamentDropdownBtn');
+        const menu = document.getElementById('scoreTournamentDropdownMenu');
+        if (!btn || !menu) return;
+
+        // Toggle visual
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const isOpen = menu.style.display === 'block';
+            menu.style.display = isOpen ? 'none' : 'block';
+            btn.setAttribute('aria-expanded', String(!isOpen));
+        });
+
+        // Cerrar al click fuera
+        document.addEventListener('click', function (e) {
+            if (!btn.contains(e.target) && !menu.contains(e.target)) {
+                menu.style.display = 'none';
+                btn.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        // Cargar torneos (propios) y mostrarlos
+        const res = await getUserTournaments();
+        const torneos = res && res.data ? res.data : [];
+
+        if (!torneos || torneos.length === 0) {
+            menu.innerHTML = `<div style="color:#4A4A6A; padding:0.6rem;">No hay torneos guardados.</div>`;
+            return;
+        }
+
+        menu.innerHTML = torneos.map(t => {
+            const label = `${escapeHtml(t.nombre)}${t.finalizado ? ' (Finalizado)' : ''}`;
+            return `<div class="score-dropdown-item" data-id="${t.id}" style="padding:0.45rem 0.5rem; cursor:pointer; border-radius:6px;">${label}</div>`;
+        }).join('');
+
+        menu.querySelectorAll('.score-dropdown-item').forEach(item => {
+            item.addEventListener('click', async function (ev) {
+                ev.stopPropagation();
+                const torneoId = this.dataset.id;
+                const label = this.textContent || '';
+                // Cargar solo los puntajes
+                await loadTournamentScores(torneoId);
+                // Actualizar título en la caja de puntuaciones
+                const scoreTitle = document.getElementById('scoreTournamentName');
+                if (scoreTitle) scoreTitle.textContent = label;
+                // Cerrar menú
+                menu.style.display = 'none';
+                btn.setAttribute('aria-expanded', 'false');
+            });
+        });
     }
 
     async function deleteTournament(torneoId) {
