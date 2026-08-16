@@ -26,7 +26,7 @@
                 </a>
             </div>
             <div class="header-title">
-                <h1> <span id="currentTournamentName" class="titulo-futurista">LaMafia BEYBLADEX</span></h1>
+                <h1> <span id="siteTitle" class="titulo-futurista">LaMafia BEYBLADEX</span></h1>
                 <div class="subhead">Fase 1: grupos · Fase 2: eliminatorias</div>
             </div>
         </div>
@@ -80,6 +80,17 @@
                         <button class="btn btn-sm btn-outline" id="listTournamentsBtn"
                             style="border-color: rgba(0, 212, 255, 0.15); color: #00D4FF;">
                             📋 Mis Torneos
+                        </button>
+                        <button class="btn btn-sm btn-outline" id="uploadTournamentBtn" title="Subir torneo desde JSON">
+                            ⬆️ Subir torneo
+                        </button>
+                        <button class="btn btn-sm btn-outline" id="downloadTournamentBtn"
+                            style="border-color: rgba(0, 255, 136, 0.15); color: #00FF88;" title="Descargar torneo como JSON">
+                            💾 Descargar JSON
+                        </button>
+                        <button class="btn btn-sm btn-outline" id="importTournamentBtn"
+                            style="border-color: rgba(255, 136, 0, 0.15); color: #FF8800;" title="Importar torneo desde JSON">
+                            📂 Importar JSON
                         </button>
                     </div>
                 </div>
@@ -281,13 +292,20 @@
             <!-- TABLA DE PUNTUACIÓN TOTAL -->
             <div class="card" style="margin-top: 1.5rem;">
                 <h1>
-                    <span class="titulo-futurista" id="currentTournamentName">
+                    <span class="titulo-futurista" id="scoreTournamentName">
                         LaMafia BEYBLADEX
                     </span>
                 </h1>
                 
-                <div style="font-size:0.8rem; color:#4A4A6A; margin-bottom: 0.8rem;">Puntos totales acumulados por
-                    participante en todas las rondas</div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.6rem;">
+                    <div style="font-size:0.8rem; color:#4A4A6A;">Puntos totales acumulados por participante en todas las rondas</div>
+                    <div id="scoreControls" style="display:flex; align-items:center; gap:0.5rem;">
+                        <div class="dropdown" style="position:relative;">
+                            <button class="btn btn-outline btn-sm" id="scoreTournamentDropdownBtn" aria-haspopup="true" aria-expanded="false">📂 Cargar puntuaciones</button>
+                            <div id="scoreTournamentDropdownMenu" style="display:none; position:absolute; right:0; top:calc(100% + 6px); background: #0d0d1a; border:1px solid rgba(255,255,255,0.04); min-width:220px; box-shadow: 0 6px 18px rgba(0,0,0,0.6); z-index:50; padding:0.4rem; max-height:240px; overflow:auto; border-radius:8px;"></div>
+                        </div>
+                    </div>
+                </div>
                 <div id="totalScoreTableContainer" style="overflow-x: auto;"></div>
             </div>
         </div>
