@@ -132,6 +132,27 @@
     const uploadTournamentBtn = document.getElementById('uploadTournamentBtn');
     const fileInput = document.getElementById('fileInput');
 
+    // Dropdown de puntuaciones: referencias tempranas
+    const scoreDropdownBtnEl = document.getElementById('scoreTournamentDropdownBtn');
+    const scoreDropdownMenuEl = document.getElementById('scoreTournamentDropdownMenu');
+
+    // Asegurar toggle básico inmediatamente (para que el botón responda aunque populate no se haya ejecutado)
+    if (scoreDropdownBtnEl && scoreDropdownMenuEl) {
+        scoreDropdownBtnEl.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const isOpen = scoreDropdownMenuEl.style.display === 'block';
+            scoreDropdownMenuEl.style.display = isOpen ? 'none' : 'block';
+            scoreDropdownBtnEl.setAttribute('aria-expanded', String(!isOpen));
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!scoreDropdownBtnEl.contains(e.target) && !scoreDropdownMenuEl.contains(e.target)) {
+                scoreDropdownMenuEl.style.display = 'none';
+                scoreDropdownBtnEl.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
     // ============================================================
     // 5. FUNCIONES DE USUARIO
     // ============================================================
