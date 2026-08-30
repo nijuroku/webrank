@@ -1,0 +1,575 @@
+{
+  "tournamentName": "CX League 1era fecha",
+  "currentPhase": 2,
+  "groupRound": 5,
+  "knockoutRound": 3,
+  "tournamentFinished": true,
+  "customQualifiedCount": 16,
+  "participants": [
+    "seba mafia",
+    "feitan",
+    "kenichi",
+    "seiji",
+    "zarria",
+    "gabo",
+    "kevin",
+    "yoz",
+    "subnico",
+    "minesota",
+    "adam",
+    "manolin",
+    "dafne",
+    "pepa",
+    "twenty6",
+    "trollsord"
+  ],
+  "accumulatedPoints": {
+    "seba mafia": 12,
+    "feitan": 9,
+    "kenichi": 12,
+    "seiji": 9,
+    "zarria": 6,
+    "gabo": 0,
+    "kevin": 3,
+    "yoz": 6,
+    "subnico": 9,
+    "minesota": 9,
+    "adam": 6,
+    "manolin": 9,
+    "dafne": 6,
+    "pepa": 9,
+    "twenty6": 6,
+    "trollsord": 9
+  },
+  "matchHistory": [
+    {
+      "playerA": "kevin",
+      "playerB": "adam",
+      "scoreA": 4,
+      "scoreB": 3,
+      "id": 1,
+      "round": 1,
+      "archivedAt": 1786674893866
+    },
+    {
+      "playerA": "feitan",
+      "playerB": "yoz",
+      "scoreA": 4,
+      "scoreB": 0,
+      "id": 2,
+      "round": 1,
+      "archivedAt": 1786674893866
+    },
+    {
+      "playerA": "seba mafia",
+      "playerB": "gabo",
+      "scoreA": 4,
+      "scoreB": 3,
+      "id": 3,
+      "round": 1,
+      "archivedAt": 1786674893866
+    },
+    {
+      "playerA": "seiji",
+      "playerB": "twenty6",
+      "scoreA": 5,
+      "scoreB": 2,
+      "id": 4,
+      "round": 1,
+      "archivedAt": 1786674893866
+    },
+    {
+      "playerA": "subnico",
+      "playerB": "manolin",
+      "scoreA": 4,
+      "scoreB": 1,
+      "id": 5,
+      "round": 1,
+      "archivedAt": 1786674893866
+    },
+    {
+      "playerA": "kenichi",
+      "playerB": "minesota",
+      "scoreA": 3,
+      "scoreB": 4,
+      "id": 6,
+      "round": 1,
+      "archivedAt": 1786674893866
+    },
+    {
+      "playerA": "dafne",
+      "playerB": "pepa",
+      "scoreA": 1,
+      "scoreB": 4,
+      "id": 7,
+      "round": 1,
+      "archivedAt": 1786674893866
+    },
+    {
+      "playerA": "trollsord",
+      "playerB": "zarria",
+      "scoreA": 4,
+      "scoreB": 0,
+      "id": 8,
+      "round": 1,
+      "archivedAt": 1786674893866
+    },
+    {
+      "playerA": "kevin",
+      "playerB": "zarria",
+      "scoreA": 0,
+      "scoreB": 4,
+      "id": 9,
+      "round": 2,
+      "archivedAt": 1786675533099
+    },
+    {
+      "playerA": "adam",
+      "playerB": "feitan",
+      "scoreA": 0,
+      "scoreB": 4,
+      "id": 10,
+      "round": 2,
+      "archivedAt": 1786675533099
+    },
+    {
+      "playerA": "yoz",
+      "playerB": "seba mafia",
+      "scoreA": 0,
+      "scoreB": 4,
+      "id": 11,
+      "round": 2,
+      "archivedAt": 1786675533099
+    },
+    {
+      "playerA": "gabo",
+      "playerB": "seiji",
+      "scoreA": 1,
+      "scoreB": 6,
+      "id": 12,
+      "round": 2,
+      "archivedAt": 1786675533099
+    },
+    {
+      "playerA": "twenty6",
+      "playerB": "subnico",
+      "scoreA": 4,
+      "scoreB": 2,
+      "id": 13,
+      "round": 2,
+      "archivedAt": 1786675533099
+    },
+    {
+      "playerA": "manolin",
+      "playerB": "kenichi",
+      "scoreA": 3,
+      "scoreB": 4,
+      "id": 14,
+      "round": 2,
+      "archivedAt": 1786675533099
+    },
+    {
+      "playerA": "minesota",
+      "playerB": "dafne",
+      "scoreA": 5,
+      "scoreB": 3,
+      "id": 15,
+      "round": 2,
+      "archivedAt": 1786675533099
+    },
+    {
+      "playerA": "trollsord",
+      "playerB": "pepa",
+      "scoreA": 1,
+      "scoreB": 4,
+      "id": 16,
+      "round": 2,
+      "archivedAt": 1786675533099
+    },
+    {
+      "playerA": "feitan",
+      "playerB": "zarria",
+      "scoreA": 2,
+      "scoreB": 5,
+      "id": 17,
+      "round": 3,
+      "archivedAt": 1786675539567
+    },
+    {
+      "playerA": "seba mafia",
+      "playerB": "adam",
+      "scoreA": 2,
+      "scoreB": 4,
+      "id": 18,
+      "round": 3,
+      "archivedAt": 1786675539567
+    },
+    {
+      "playerA": "seiji",
+      "playerB": "yoz",
+      "scoreA": 0,
+      "scoreB": 5,
+      "id": 19,
+      "round": 3,
+      "archivedAt": 1786675539567
+    },
+    {
+      "playerA": "subnico",
+      "playerB": "gabo",
+      "scoreA": 4,
+      "scoreB": 2,
+      "id": 20,
+      "round": 3,
+      "archivedAt": 1786675539567
+    },
+    {
+      "playerA": "kenichi",
+      "playerB": "twenty6",
+      "scoreA": 4,
+      "scoreB": 0,
+      "id": 21,
+      "round": 3,
+      "archivedAt": 1786675539567
+    },
+    {
+      "playerA": "dafne",
+      "playerB": "manolin",
+      "scoreA": 0,
+      "scoreB": 4,
+      "id": 22,
+      "round": 3,
+      "archivedAt": 1786675539567
+    },
+    {
+      "playerA": "pepa",
+      "playerB": "minesota",
+      "scoreA": 5,
+      "scoreB": 3,
+      "id": 23,
+      "round": 3,
+      "archivedAt": 1786675539567
+    },
+    {
+      "playerA": "kevin",
+      "playerB": "trollsord",
+      "scoreA": 3,
+      "scoreB": 4,
+      "id": 24,
+      "round": 3,
+      "archivedAt": 1786675539567
+    },
+    {
+      "playerA": "manolin",
+      "playerB": "pepa",
+      "scoreA": 5,
+      "scoreB": 0,
+      "id": 25,
+      "round": 4,
+      "archivedAt": 1786675541482
+    },
+    {
+      "playerA": "trollsord",
+      "playerB": "minesota",
+      "scoreA": 2,
+      "scoreB": 4,
+      "id": 26,
+      "round": 4,
+      "archivedAt": 1786675541482
+    },
+    {
+      "playerA": "zarria",
+      "playerB": "seba mafia",
+      "scoreA": 3,
+      "scoreB": 5,
+      "id": 27,
+      "round": 4,
+      "archivedAt": 1786675541482
+    },
+    {
+      "playerA": "kevin",
+      "playerB": "feitan",
+      "scoreA": 0,
+      "scoreB": 4,
+      "id": 28,
+      "round": 4,
+      "archivedAt": 1786675541482
+    },
+    {
+      "playerA": "adam",
+      "playerB": "seiji",
+      "scoreA": 5,
+      "scoreB": 3,
+      "id": 29,
+      "round": 4,
+      "archivedAt": 1786675541482
+    },
+    {
+      "playerA": "yoz",
+      "playerB": "subnico",
+      "scoreA": 4,
+      "scoreB": 2,
+      "id": 30,
+      "round": 4,
+      "archivedAt": 1786675541482
+    },
+    {
+      "playerA": "gabo",
+      "playerB": "kenichi",
+      "scoreA": 2,
+      "scoreB": 4,
+      "id": 31,
+      "round": 4,
+      "archivedAt": 1786675541482
+    },
+    {
+      "playerA": "twenty6",
+      "playerB": "dafne",
+      "scoreA": 3,
+      "scoreB": 4,
+      "id": 32,
+      "round": 4,
+      "archivedAt": 1786675541482
+    },
+    {
+      "playerA": "seiji",
+      "playerB": "zarria",
+      "scoreA": 4,
+      "scoreB": 2,
+      "id": 33,
+      "round": 5,
+      "archivedAt": 1786768675309
+    },
+    {
+      "playerA": "seba mafia",
+      "playerB": "kevin",
+      "scoreA": 4,
+      "scoreB": 0,
+      "id": 34,
+      "round": 5,
+      "archivedAt": 1786768675309
+    },
+    {
+      "playerA": "subnico",
+      "playerB": "adam",
+      "scoreA": 4,
+      "scoreB": 2,
+      "id": 35,
+      "round": 5,
+      "archivedAt": 1786768675309
+    },
+    {
+      "playerA": "kenichi",
+      "playerB": "yoz",
+      "scoreA": 4,
+      "scoreB": 2,
+      "id": 36,
+      "round": 5,
+      "archivedAt": 1786768675309
+    },
+    {
+      "playerA": "dafne",
+      "playerB": "gabo",
+      "scoreA": 6,
+      "scoreB": 2,
+      "id": 37,
+      "round": 5,
+      "archivedAt": 1786768675309
+    },
+    {
+      "playerA": "pepa",
+      "playerB": "twenty6",
+      "scoreA": 3,
+      "scoreB": 4,
+      "id": 38,
+      "round": 5,
+      "archivedAt": 1786768675309
+    },
+    {
+      "playerA": "minesota",
+      "playerB": "manolin",
+      "scoreA": 0,
+      "scoreB": 4,
+      "id": 39,
+      "round": 5,
+      "archivedAt": 1786768675309
+    },
+    {
+      "playerA": "feitan",
+      "playerB": "trollsord",
+      "scoreA": 2,
+      "scoreB": 4,
+      "id": 40,
+      "round": 5,
+      "archivedAt": 1786768675309
+    },
+    {
+      "playerA": "manolin",
+      "playerB": "kevin",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 41,
+      "round": 0,
+      "archivedAt": 1786768706826
+    },
+    {
+      "playerA": "zarria",
+      "playerB": "seba mafia",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 42,
+      "round": 0,
+      "archivedAt": 1786768706826
+    },
+    {
+      "playerA": "adam",
+      "playerB": "yoz",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 43,
+      "round": 0,
+      "archivedAt": 1786768706826
+    },
+    {
+      "playerA": "gabo",
+      "playerB": "feitan",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 44,
+      "round": 0,
+      "archivedAt": 1786768706826
+    },
+    {
+      "playerA": "pepa",
+      "playerB": "twenty6",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 45,
+      "round": 0,
+      "archivedAt": 1786768706826
+    },
+    {
+      "playerA": "minesota",
+      "playerB": "trollsord",
+      "scoreA": 0,
+      "scoreB": 1,
+      "id": 46,
+      "round": 0,
+      "archivedAt": 1786768706826
+    },
+    {
+      "playerA": "seiji",
+      "playerB": "subnico",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 47,
+      "round": 0,
+      "archivedAt": 1786768706826
+    },
+    {
+      "playerA": "kenichi",
+      "playerB": "dafne",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 48,
+      "round": 0,
+      "archivedAt": 1786768706826
+    },
+    {
+      "playerA": "adam",
+      "playerB": "manolin",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 49,
+      "round": 0,
+      "archivedAt": 1786768714284
+    },
+    {
+      "playerA": "seiji",
+      "playerB": "gabo",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 50,
+      "round": 0,
+      "archivedAt": 1786768714284
+    },
+    {
+      "playerA": "pepa",
+      "playerB": "zarria",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 51,
+      "round": 0,
+      "archivedAt": 1786768714284
+    },
+    {
+      "playerA": "trollsord",
+      "playerB": "kenichi",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 52,
+      "round": 0,
+      "archivedAt": 1786768714284
+    },
+    {
+      "playerA": "adam",
+      "playerB": "seiji",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 53,
+      "round": 0,
+      "archivedAt": 1786768717809
+    },
+    {
+      "playerA": "trollsord",
+      "playerB": "pepa",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 54,
+      "round": 0,
+      "archivedAt": 1786768717809
+    },
+    {
+      "playerA": "seiji",
+      "playerB": "pepa",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 55,
+      "round": 0,
+      "archivedAt": 1786768723943
+    },
+    {
+      "playerA": "adam",
+      "playerB": "trollsord",
+      "scoreA": 0,
+      "scoreB": 1,
+      "id": 56,
+      "round": 0,
+      "archivedAt": 1786768728858
+    }
+  ],
+  "versus": [],
+  "tournamentWinner": "trollsord",
+  "nextVersusId": 57,
+  "preFinalMatch": null,
+  "preFinalPlayed": true,
+  "finalMatch": null,
+  "finalPlayed": true,
+  "semifinalLosers": [
+    "seiji",
+    "pepa"
+  ],
+  "semifinalWinners": [
+    "adam",
+    "trollsord"
+  ],
+  "podium": {
+    "first": "trollsord",
+    "second": "adam",
+    "third": "seiji",
+    "fourth": "pepa"
+  },
+  "tournamentVisible": true,
+  "selectedRound": 0,
+  "version": 1786769713298,
+  "savedAt": "2026-08-15T04:55:13.298Z"
+}
