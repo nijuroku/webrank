@@ -37,7 +37,8 @@
                 <span>🏅 <strong id="headerQualified">0</strong></span>
             </div>
             <span class="storage-status" id="storageStatus">💾 Guardado</span>
-            <button class="btn btn-sm btn-outline" id="themeToggleBtn" type="button" aria-pressed="false" title="Cambiar a tema claro">☀️ Tema claro</button>
+            <button class="btn btn-sm btn-outline" id="themeToggleBtn" type="button" aria-pressed="false"
+                title="Cambiar a tema claro">☀️ Tema claro</button>
         </div>
     </header>
 
@@ -59,6 +60,10 @@
                         <button class="btn btn-sm btn-outline" id="listTournamentsBtn"
                             style="border-color: rgba(0, 212, 255, 0.15); color: #00D4FF;">
                             📋 Mis Torneos
+                        </button>
+                        <button class="btn btn-sm btn-outline" id="loadUrlBtn"
+                            style="border-color: rgba(255, 136, 0, 0.15); color: #FF8800;">
+                            📂 Cargar desde URL
                         </button>
                     </div>
                 </div>
@@ -100,7 +105,7 @@
 
             <div class="info-note">
                 ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma 3pts · Derrota
-                                no suma pts
+                no suma pts
             </div>
         </div>
 
@@ -160,7 +165,8 @@
                                     ronda</button>
                                 <button class="btn btn-outline btn-full" id="nextGroupRoundBtn">➡️ Siguiente
                                     ronda</button>
-                                <button class="btn btn-outline btn-full" id="reshuffleGroupsBtn">🔀 Cambiar cruces 0-0</button>
+                                <button class="btn btn-outline btn-full" id="reshuffleGroupsBtn">🔀 Cambiar cruces
+                                    0-0</button>
                                 <div class="qualified-selector-wrapper">
                                     <label for="qualifiedCountInput">🏆 Clasificados:</label>
                                     <input type="number" id="qualifiedCountInput" min="2" max="32" value="8" />
@@ -257,9 +263,11 @@
                         LaMafia BEYBLADEX
                     </span>
                 </h1>
-                
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.6rem;">
-                    <div style="font-size:0.8rem; color:#4A4A6A;">Puntos totales acumulados por participante en todas las rondas</div>
+
+                <div
+                    style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.6rem;">
+                    <div style="font-size:0.8rem; color:#4A4A6A;">Puntos totales acumulados por participante en todas
+                        las rondas</div>
                 </div>
                 <div id="totalScoreTableContainer" style="overflow-x: auto;"></div>
             </div>
@@ -284,11 +292,50 @@
                     <input type="text" id="tournamentSearchInput" placeholder="🔍 Buscar torneo..."
                         style="flex:1; min-width:150px;" />
                     <button class="btn btn-outline btn-sm" id="refreshTournamentListBtn">🔄 Actualizar</button>
+                    <!-- NUEVO BOTÓN -->
+                    <button class="btn btn-outline btn-sm" id="refreshGistsBtn"
+                        style="border-color: rgba(0, 212, 255, 0.2); color: #00D4FF;">
+                        ☁️ Cargar Gists
+                    </button>
                 </div>
                 <div id="tournamentListContainer" style="max-height: 400px; overflow-y: auto;">
                     <div class="empty-message" style="text-align:center; padding:2rem;">
                         <span style="font-size:2rem; display:block; margin-bottom:0.5rem;">🏟️</span>
                         No hay torneos guardados. Crea uno nuevo.
+                    </div>
+                </div>
+                <!-- Indicador de carga -->
+                <div id="gistLoadingIndicator" style="display:none; text-align:center; padding:1rem; color:#4A4A6A;">
+                    ⏳ Cargando Gists desde GitHub...
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- MODAL DE CARGAR DESDE URL -->
+    <div class="modal-overlay" id="loadUrlModal">
+        <div class="modal modal-large">
+            <div class="modal-header">
+                <h3 style="color: #00D4FF;">📂 Cargar torneo desde URL</h3>
+                <button class="modal-close" id="closeLoadUrlModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="card" style="margin-top: 0; background: rgba(13, 13, 26, 0.4);">
+                    <h3 style="color: #00FF88; margin-bottom: 0.8rem;">📂 Cargar torneo desde URL</h3>
+                    <div class="input-group">
+                        <input type="text" id="urlInput" placeholder="https://.../torneo.json" style="flex: 1;" />
+                        <button class="btn btn-primary" id="loadFromUrlBtn">📥 Cargar desde URL</button>
+                    </div>
+                    <div style="font-size: 0.7rem; color: #4A4A6A; margin-top: 0.3rem;">
+                        💡 Puedes usar enlaces de Google Drive (modo descarga), GitHub Gist, o cualquier URL pública
+                    </div>
+                    <div style="margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.05);">
+                        <div style="font-size: 0.7rem; color: #4A4A6A;">
+                            <strong>Ejemplos de URLs:</strong><br>
+                            • GitHub Gist: <code
+                                style="background: rgba(13,13,26,0.8); padding: 0.1rem 0.4rem; border-radius: 4px; color: #00D4FF;">https://gist.githubusercontent.com/usuario/gist-id/raw/torneo.json</code><br>
+                            • Google Drive: <code
+                                style="background: rgba(13,13,26,0.8); padding: 0.1rem 0.4rem; border-radius: 4px; color: #00D4FF;">https://drive.google.com/uc?export=download&id=FILE_ID</code>
+                        </div>
                     </div>
                 </div>
             </div>

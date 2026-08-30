@@ -2177,7 +2177,7 @@ body {
     background-size: 256px 256px;
 }
 
-.card > * {
+.card>* {
     position: relative;
     z-index: 1;
 }
@@ -2216,7 +2216,7 @@ body {
     background-size: 256px 256px;
 }
 
-.header-sticky > * {
+.header-sticky>* {
     position: relative;
     z-index: 1;
 }
@@ -2254,7 +2254,7 @@ body {
     background-size: 256px 256px;
 }
 
-.versus-item > * {
+.versus-item>* {
     position: relative;
     z-index: 1;
 }
@@ -2282,7 +2282,7 @@ body {
     background-size: 256px 256px;
 }
 
-.podium-container > * {
+.podium-container>* {
     position: relative;
     z-index: 1;
 }
@@ -2420,12 +2420,12 @@ body {
     border-radius: 50%;
 }
 
-.phase-switch input:checked + .slider {
+.phase-switch input:checked+.slider {
     background: rgba(0, 212, 255, 0.15);
     border-color: #00D4FF;
 }
 
-.phase-switch input:checked + .slider::before {
+.phase-switch input:checked+.slider::before {
     transform: translateX(24px);
     background: #00D4FF;
     box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
@@ -2607,10 +2607,11 @@ body {
         bottom: 3px;
     }
 
-    .phase-switch input:checked + .slider::before {
+    .phase-switch input:checked+.slider::before {
         transform: translateX(18px);
     }
 }
+
 /* ============================================================
    PARTICIPANT HEADER CON ACCIONES DE TORNEO
    ============================================================ */
@@ -2846,8 +2847,13 @@ body {
 
 /* ANIMACIONES */
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes modalSlideIn {
@@ -2855,6 +2861,7 @@ body {
         opacity: 0;
         transform: translateY(-20px) scale(0.95);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -2868,29 +2875,29 @@ body {
         align-items: stretch;
         gap: 0.6rem;
     }
-    
+
     .participant-header-left {
         justify-content: center;
     }
-    
+
     .participant-header-right {
         justify-content: center;
         flex-direction: column;
         align-items: stretch;
         gap: 0.5rem;
     }
-    
+
     .tournament-indicator {
         justify-content: center;
         flex-wrap: wrap;
         padding: 0.3rem 0.6rem;
         font-size: 0.65rem;
     }
-    
+
     .tournament-actions {
         justify-content: center;
     }
-    
+
     .modal {
         padding: 1.5rem;
     }
@@ -2903,21 +2910,22 @@ body {
         gap: 0.2rem;
         padding: 0.4rem 0.6rem;
     }
-    
+
     .tournament-actions {
         flex-direction: column;
         width: 100%;
     }
-    
+
     .tournament-actions .btn-sm {
         width: 100%;
         justify-content: center;
     }
-    
+
     .participant-header-left h2 {
         font-size: 0.95rem;
     }
 }
+
 /* MODAL GRANDE PARA LISTA DE TORNEOS */
 .modal-large {
     max-width: 700px !important;
@@ -3073,8 +3081,15 @@ body {
 }
 
 @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
 }
 
 /* Responsive */
@@ -3083,23 +3098,24 @@ body {
         max-width: 98% !important;
         padding: 1rem !important;
     }
-    
+
     .tournament-list-item {
         flex-wrap: wrap;
         gap: 0.5rem;
     }
-    
+
     .tournament-list-item .info .details {
         font-size: 0.6rem;
         gap: 0.5rem;
     }
-    
+
     .tournament-list-item .btn-cargar,
     .tournament-list-item .btn-eliminar {
         font-size: 0.6rem;
         padding: 0.15rem 0.5rem;
     }
 }
+
 /* MODAL DE NICKNAME */
 .modal-nickname {
     max-width: 380px !important;
@@ -3139,6 +3155,7 @@ body {
 #nicknameModal .modal {
     animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
+
 /* En tu style.css, asegura que el modal esté oculto inicialmente */
 #nicknameModal {
     display: none;
@@ -3400,7 +3417,7 @@ body.light-theme .versus-item.archived-match .vs-badge {
 }
 
 /* Tema claro - texto de "Ronda anterior" */
-body.light-theme .versus-item.archived-match > div:first-child {
+body.light-theme .versus-item.archived-match>div:first-child {
     color: #0066AA !important;
 }
 
@@ -3460,5 +3477,69 @@ body.light-theme .score-control button {
 
 body.light-theme .score-control button:hover {
     background: rgba(0, 100, 200, 0.08) !important;
+    color: #0066AA !important;
+}
+
+/* ============================================================
+   MODAL DE CARGA DESDE URL
+   ============================================================ */
+
+#loadUrlModal .modal {
+    max-width: 700px !important;
+    width: 95% !important;
+}
+
+#loadUrlModal .card {
+    background: rgba(13, 13, 26, 0.4) !important;
+    border: 1px solid rgba(0, 255, 136, 0.06) !important;
+}
+
+#loadUrlModal .card h3 {
+    color: #00FF88 !important;
+    margin-bottom: 0.8rem !important;
+}
+
+#loadUrlModal code {
+    background: rgba(13, 13, 26, 0.8);
+    padding: 0.1rem 0.5rem;
+    border-radius: 4px;
+    color: #00D4FF;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    word-break: break-all;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    #loadUrlModal .modal {
+        padding: 1rem !important;
+    }
+
+    #loadUrlModal .input-group {
+        flex-direction: column;
+    }
+
+    #loadUrlModal .input-group input {
+        width: 100%;
+    }
+
+    #loadUrlModal .input-group .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Tema claro */
+body.light-theme #loadUrlModal .card {
+    background: rgba(240, 244, 248, 0.8) !important;
+    border-color: rgba(0, 100, 200, 0.1) !important;
+}
+
+body.light-theme #loadUrlModal code {
+    background: rgba(200, 210, 220, 0.5);
+    color: #0055AA;
+}
+
+body.light-theme #loadUrlModal .card h3 {
     color: #0066AA !important;
 }

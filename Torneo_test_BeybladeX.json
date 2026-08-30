@@ -1,0 +1,437 @@
+{
+  "tournamentId": "t_mtf6c61z_206773",
+  "tournamentName": "Torneo BeybladeX",
+  "participants": [
+    {
+      "id": "p_mtf6dopd_854",
+      "name": "seba"
+    },
+    {
+      "id": "p_mtf6dopd_8074",
+      "name": "kenichi"
+    },
+    {
+      "id": "p_mtf6dope_4067",
+      "name": "pepa"
+    },
+    {
+      "id": "p_mtf6dope_933",
+      "name": "feitan"
+    },
+    {
+      "id": "p_mtf6dope_1902",
+      "name": "zubnico"
+    },
+    {
+      "id": "p_mtf6dope_6944",
+      "name": "seiji"
+    },
+    {
+      "id": "p_mtf6dope_8095",
+      "name": "yoz"
+    },
+    {
+      "id": "p_mtf6dope_2483",
+      "name": "gabo"
+    },
+    {
+      "id": "p_mtf6dope_5476",
+      "name": "kvn"
+    },
+    {
+      "id": "p_mtf6dope_8479",
+      "name": "marlon"
+    },
+    {
+      "id": "p_mtf6dope_6285",
+      "name": "vittokiller"
+    },
+    {
+      "id": "p_mtf6dope_4917",
+      "name": "darkin"
+    },
+    {
+      "id": "p_mtf6eww8_4885",
+      "name": "pep"
+    },
+    {
+      "id": "p_mtf6eww9_281",
+      "name": "trollsord"
+    },
+    {
+      "id": "p_mtf6eww9_7305",
+      "name": "zarria"
+    },
+    {
+      "id": "p_mtf6eww9_8429",
+      "name": "andy"
+    },
+    {
+      "id": "p_mtf6fl4n_8979",
+      "name": "minnesota"
+    },
+    {
+      "id": "p_mtf6fl4n_573",
+      "name": "sebaconsed"
+    }
+  ],
+  "versus": [
+    {
+      "playerA": "gabo",
+      "playerB": "marlon",
+      "playerAId": "p_mtf6dope_2483",
+      "playerBId": "p_mtf6dope_8479",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 19,
+      "round": 3,
+      "jugado": true
+    },
+    {
+      "playerA": "pep",
+      "playerB": "sebaconsed",
+      "playerAId": "p_mtf6eww8_4885",
+      "playerBId": "p_mtf6fl4n_573",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 20,
+      "round": 3,
+      "jugado": true
+    },
+    {
+      "playerA": "kvn",
+      "playerB": "seba",
+      "playerAId": "p_mtf6dope_5476",
+      "playerBId": "p_mtf6dopd_854",
+      "scoreA": 3,
+      "scoreB": 0,
+      "id": 21,
+      "round": 3,
+      "jugado": true
+    },
+    {
+      "playerA": "minnesota",
+      "playerB": "darkin",
+      "playerAId": "p_mtf6fl4n_8979",
+      "playerBId": "p_mtf6dope_4917",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 22,
+      "round": 3,
+      "jugado": true
+    },
+    {
+      "playerA": "andy",
+      "playerB": "yoz",
+      "playerAId": "p_mtf6eww9_8429",
+      "playerBId": "p_mtf6dope_8095",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 23,
+      "round": 3,
+      "jugado": true
+    },
+    {
+      "playerA": "trollsord",
+      "playerB": "kenichi",
+      "playerAId": "p_mtf6eww9_281",
+      "playerBId": "p_mtf6dopd_8074",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 24,
+      "round": 3,
+      "jugado": true
+    },
+    {
+      "playerA": "vittokiller",
+      "playerB": "feitan",
+      "playerAId": "p_mtf6dope_6285",
+      "playerBId": "p_mtf6dope_933",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 25,
+      "round": 3,
+      "jugado": true
+    },
+    {
+      "playerA": "zubnico",
+      "playerB": "zarria",
+      "playerAId": "p_mtf6dope_1902",
+      "playerBId": "p_mtf6eww9_7305",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 26,
+      "round": 3,
+      "jugado": true
+    },
+    {
+      "playerA": "seiji",
+      "playerB": "pepa",
+      "playerAId": "p_mtf6dope_6944",
+      "playerBId": "p_mtf6dope_4067",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 27,
+      "round": 3,
+      "jugado": true
+    }
+  ],
+  "matchHistory": [
+    {
+      "playerA": "andy",
+      "playerB": "pep",
+      "playerAId": "p_mtf6eww9_8429",
+      "playerBId": "p_mtf6eww8_4885",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 1,
+      "round": 1,
+      "jugado": true,
+      "archivedAt": 1788056146195
+    },
+    {
+      "playerA": "seiji",
+      "playerB": "feitan",
+      "playerAId": "p_mtf6dope_6944",
+      "playerBId": "p_mtf6dope_933",
+      "scoreA": 5,
+      "scoreB": 0,
+      "id": 2,
+      "round": 1,
+      "jugado": true,
+      "archivedAt": 1788056146195
+    },
+    {
+      "playerA": "sebaconsed",
+      "playerB": "kenichi",
+      "playerAId": "p_mtf6fl4n_573",
+      "playerBId": "p_mtf6dopd_8074",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 3,
+      "round": 1,
+      "jugado": true,
+      "archivedAt": 1788056146195
+    },
+    {
+      "playerA": "zarria",
+      "playerB": "marlon",
+      "playerAId": "p_mtf6eww9_7305",
+      "playerBId": "p_mtf6dope_8479",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 4,
+      "round": 1,
+      "jugado": true,
+      "archivedAt": 1788056146195
+    },
+    {
+      "playerA": "seba",
+      "playerB": "yoz",
+      "playerAId": "p_mtf6dopd_854",
+      "playerBId": "p_mtf6dope_8095",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 5,
+      "round": 1,
+      "jugado": true,
+      "archivedAt": 1788056146195
+    },
+    {
+      "playerA": "kvn",
+      "playerB": "zubnico",
+      "playerAId": "p_mtf6dope_5476",
+      "playerBId": "p_mtf6dope_1902",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 6,
+      "round": 1,
+      "jugado": true,
+      "archivedAt": 1788056146195
+    },
+    {
+      "playerA": "vittokiller",
+      "playerB": "minnesota",
+      "playerAId": "p_mtf6dope_6285",
+      "playerBId": "p_mtf6fl4n_8979",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 7,
+      "round": 1,
+      "jugado": true,
+      "archivedAt": 1788056146195
+    },
+    {
+      "playerA": "trollsord",
+      "playerB": "darkin",
+      "playerAId": "p_mtf6eww9_281",
+      "playerBId": "p_mtf6dope_4917",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 8,
+      "round": 1,
+      "jugado": true,
+      "archivedAt": 1788056146195
+    },
+    {
+      "playerA": "pepa",
+      "playerB": "gabo",
+      "playerAId": "p_mtf6dope_4067",
+      "playerBId": "p_mtf6dope_2483",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 9,
+      "round": 1,
+      "jugado": true,
+      "archivedAt": 1788056146195
+    },
+    {
+      "playerA": "zarria",
+      "playerB": "vittokiller",
+      "playerAId": "p_mtf6eww9_7305",
+      "playerBId": "p_mtf6dope_6285",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 10,
+      "round": 2,
+      "jugado": true,
+      "archivedAt": 1788056163636
+    },
+    {
+      "playerA": "yoz",
+      "playerB": "kenichi",
+      "playerAId": "p_mtf6dope_8095",
+      "playerBId": "p_mtf6dopd_8074",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 11,
+      "round": 2,
+      "jugado": true,
+      "archivedAt": 1788056163636
+    },
+    {
+      "playerA": "seba",
+      "playerB": "pepa",
+      "playerAId": "p_mtf6dopd_854",
+      "playerBId": "p_mtf6dope_4067",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 12,
+      "round": 2,
+      "jugado": true,
+      "archivedAt": 1788056163636
+    },
+    {
+      "playerA": "marlon",
+      "playerB": "seiji",
+      "playerAId": "p_mtf6dope_8479",
+      "playerBId": "p_mtf6dope_6944",
+      "scoreA": 0,
+      "scoreB": 1,
+      "id": 13,
+      "round": 2,
+      "jugado": true,
+      "archivedAt": 1788056163636
+    },
+    {
+      "playerA": "feitan",
+      "playerB": "gabo",
+      "playerAId": "p_mtf6dope_933",
+      "playerBId": "p_mtf6dope_2483",
+      "scoreA": 0,
+      "scoreB": 1,
+      "id": 14,
+      "round": 2,
+      "jugado": true,
+      "archivedAt": 1788056163636
+    },
+    {
+      "playerA": "pep",
+      "playerB": "darkin",
+      "playerAId": "p_mtf6eww8_4885",
+      "playerBId": "p_mtf6dope_4917",
+      "scoreA": 0,
+      "scoreB": 1,
+      "id": 15,
+      "round": 2,
+      "jugado": true,
+      "archivedAt": 1788056163636
+    },
+    {
+      "playerA": "kvn",
+      "playerB": "zubnico",
+      "playerAId": "p_mtf6dope_5476",
+      "playerBId": "p_mtf6dope_1902",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 16,
+      "round": 2,
+      "jugado": true,
+      "archivedAt": 1788056163636
+    },
+    {
+      "playerA": "sebaconsed",
+      "playerB": "trollsord",
+      "playerAId": "p_mtf6fl4n_573",
+      "playerBId": "p_mtf6eww9_281",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 17,
+      "round": 2,
+      "jugado": true,
+      "archivedAt": 1788056163636
+    },
+    {
+      "playerA": "minnesota",
+      "playerB": "andy",
+      "playerAId": "p_mtf6fl4n_8979",
+      "playerBId": "p_mtf6eww9_8429",
+      "scoreA": 1,
+      "scoreB": 0,
+      "id": 18,
+      "round": 2,
+      "jugado": true,
+      "archivedAt": 1788056163636
+    }
+  ],
+  "nextVersusId": 28,
+  "currentPhase": 1,
+  "tournamentWinner": null,
+  "knockoutRound": 0,
+  "groupRound": 3,
+  "accumulatedPoints": {
+    "p_mtf6dopd_854": 6,
+    "p_mtf6dopd_8074": 0,
+    "p_mtf6dope_4067": 3,
+    "p_mtf6dope_933": 0,
+    "p_mtf6dope_1902": 3,
+    "p_mtf6dope_6944": 9,
+    "p_mtf6dope_8095": 3,
+    "p_mtf6dope_2483": 6,
+    "p_mtf6dope_5476": 9,
+    "p_mtf6dope_8479": 0,
+    "p_mtf6dope_6285": 6,
+    "p_mtf6dope_4917": 3,
+    "p_mtf6eww8_4885": 3,
+    "p_mtf6eww9_281": 6,
+    "p_mtf6eww9_7305": 6,
+    "p_mtf6eww9_8429": 6,
+    "p_mtf6fl4n_8979": 6,
+    "p_mtf6fl4n_573": 6
+  },
+  "customQualifiedCount": 8,
+  "tournamentFinished": false,
+  "semifinalLosers": [],
+  "semifinalWinners": [],
+  "preFinalMatch": null,
+  "preFinalPlayed": false,
+  "finalMatch": null,
+  "finalPlayed": false,
+  "podium": {
+    "first": null,
+    "second": null,
+    "third": null,
+    "fourth": null
+  },
+  "tournamentVisible": true
+}
