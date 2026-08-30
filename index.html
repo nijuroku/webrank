@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Solo XLSX para exportar -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <title>LaMafia BEYBLADEX</title>
     <link
@@ -20,7 +20,6 @@
     <header class="header-sticky">
         <div class="header-left">
             <div class="header-logo">
-                <!-- <img src="https://iili.io/C4uBmtS.png" alt="R420"> -->
                 <a href="https://www.instagram.com/la_mafia_beyblade/" target="_blank">
                     <img src="https://iili.io/C4uBqCX.jpg" alt="LaMafia BEYBLADEX">
                 </a>
@@ -38,65 +37,33 @@
                 <span>🏅 <strong id="headerQualified">0</strong></span>
             </div>
             <span class="storage-status" id="storageStatus">💾 Guardado</span>
+            <button class="btn btn-sm btn-outline" id="themeToggleBtn" type="button" aria-pressed="false" title="Cambiar a tema claro">☀️ Tema claro</button>
         </div>
-        <!-- BARRA DE BÚSQUEDA DESPLEGABLE jRVYDWpk9Y52dA3Qc7E! -->
-
-        <!-- <div class="search-dropdown" id="searchDropdown">
-            <div class="search-dropdown-inner">
-                <input type="text" id="searchInput" placeholder="🔍 Buscar participante..." autocomplete="off" />
-                <div class="search-results" id="searchResults"></div>
-            </div>
-        </div> -->
     </header>
+
     <!-- CONTENIDO PRINCIPAL -->
     <div class="app-container">
 
         <!-- GESTIÓN DE PARTICIPANTES -->
         <div class="card">
-            <!-- ENCABEZADO CON ACCIONES DE TORNEO -->
             <div class="participant-header">
                 <div class="participant-header-left">
                     <h2 class="titulo-moderno" style="margin:0;">👤 Participantes</h2>
                     <span class="participant-count" id="participantCountBadge">0</span>
                 </div>
                 <div class="participant-header-right">
-                    <!-- TORNEO ACTIVO -->
-                    <div class="tournament-indicator" id="tournamentIndicator" style="display: none;">
-                        <span class="tournament-name">🏟️ <span id="currentTournamentName">Torneo</span></span>
-                        <span class="tournament-code">📋 Código: <strong
-                                id="currentTournamentCode">-----</strong></span>
-                        <span class="tournament-arbitros">👥 <span id="arbitrosCount">0</span></span>
-                    </div>
-
-                    <!-- BOTONES DE TORNEO -->
                     <div class="tournament-actions">
                         <button class="btn btn-sm btn-outline" id="createTournamentBtn" title="Crear nuevo torneo">
                             🏗️ Crear torneo
-                        </button>
-                        <button class="btn btn-sm btn-outline" id="joinTournamentBtn"
-                            title="Unirse a un torneo existente">
-                            🔗 Unirse
                         </button>
                         <button class="btn btn-sm btn-outline" id="listTournamentsBtn"
                             style="border-color: rgba(0, 212, 255, 0.15); color: #00D4FF;">
                             📋 Mis Torneos
                         </button>
-                        <button class="btn btn-sm btn-outline" id="uploadTournamentBtn" title="Subir torneo desde JSON">
-                            ⬆️ Subir torneo
-                        </button>
-                        <button class="btn btn-sm btn-outline" id="downloadTournamentBtn"
-                            style="border-color: rgba(0, 255, 136, 0.15); color: #00FF88;" title="Descargar torneo como JSON">
-                            💾 Descargar JSON
-                        </button>
-                        <button class="btn btn-sm btn-outline" id="importTournamentBtn"
-                            style="border-color: rgba(255, 136, 0, 0.15); color: #FF8800;" title="Importar torneo desde JSON">
-                            📂 Importar JSON
-                        </button>
                     </div>
                 </div>
             </div>
 
-            <!-- INPUT GROUP -->
             <div class="input-group">
                 <label for="newParticipantInput" class="titulo-moderno">👤 Participante</label>
                 <input type="text" id="newParticipantInput" placeholder="Ej: Ana, Carlos, Marta..." />
@@ -132,9 +99,11 @@
             </div>
 
             <div class="info-note">
-                ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma +diferencia · Derrota resta -diferencia
+                ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma 3pts · Derrota
+                                no suma pts
             </div>
         </div>
+
         <!-- SECCIÓN DEL TORNEO (OCULTA INICIALMENTE) -->
         <div id="tournamentSection" style="display: none;">
 
@@ -164,7 +133,7 @@
                     <div id="thirdPlaceMessage" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
                 </div>
 
-                <!-- GESTIÓN DE RONDAS - NUEVO DISEÑO -->
+                <!-- GESTIÓN DE RONDAS -->
                 <div class="card">
                     <div class="round-management">
                         <div class="round-management-header">
@@ -191,7 +160,7 @@
                                     ronda</button>
                                 <button class="btn btn-outline btn-full" id="nextGroupRoundBtn">➡️ Siguiente
                                     ronda</button>
-                                <button class="btn btn-outline btn-full" id="reshuffleGroupsBtn">🔀 Reordenar</button>
+                                <button class="btn btn-outline btn-full" id="reshuffleGroupsBtn">🔀 Cambiar cruces 0-0</button>
                                 <div class="qualified-selector-wrapper">
                                     <label for="qualifiedCountInput">🏆 Clasificados:</label>
                                     <input type="number" id="qualifiedCountInput" min="2" max="32" value="8" />
@@ -200,8 +169,8 @@
                             </div>
 
                             <div class="info-note-small">
-                                ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma +diferencia · Derrota
-                                resta -diferencia
+                                ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma 3pts · Derrota
+                                no suma pts
                             </div>
                         </div>
 
@@ -274,14 +243,6 @@
                     <hr />
 
                     <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
-                        <button class="btn btn-outline" id="forceSyncBtn"
-                            style="border-color: rgba(0, 212, 255, 0.2); color: #00D4FF;">
-                            🔄 Sincronizar ahora
-                        </button>
-                        <button class="btn btn-outline" id="refreshDataBtn"
-                            style="border-color: rgba(0, 255, 136, 0.2); color: #00FF88;">
-                            🔄 Forzar recarga
-                        </button>
                         <button class="btn btn-outline" id="exportDataBtn">📤 Exportar datos</button>
                         <button class="btn btn-outline" id="importDataBtn">📥 Importar datos</button>
                     </div>
@@ -299,12 +260,6 @@
                 
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.6rem;">
                     <div style="font-size:0.8rem; color:#4A4A6A;">Puntos totales acumulados por participante en todas las rondas</div>
-                    <div id="scoreControls" style="display:flex; align-items:center; gap:0.5rem;">
-                        <div class="dropdown" style="position:relative;">
-                            <button class="btn btn-outline btn-sm" id="scoreTournamentDropdownBtn" aria-haspopup="true" aria-expanded="false">📂 Cargar puntuaciones</button>
-                            <div id="scoreTournamentDropdownMenu" style="display:none; position:absolute; right:0; top:calc(100% + 6px); background: #0d0d1a; border:1px solid rgba(255,255,255,0.04); min-width:220px; box-shadow: 0 6px 18px rgba(0,0,0,0.6); z-index:50; padding:0.4rem; max-height:240px; overflow:auto; border-radius:8px;"></div>
-                        </div>
-                    </div>
                 </div>
                 <div id="totalScoreTableContainer" style="overflow-x: auto;"></div>
             </div>
@@ -316,6 +271,7 @@
                 style="color:#4A4A6A; text-decoration:none;">Instagram</a>
         </div>
     </div>
+
     <!-- MODAL DE LISTA DE TORNEOS -->
     <div class="modal-overlay" id="tournamentListModal">
         <div class="modal modal-large">
@@ -332,43 +288,13 @@
                 <div id="tournamentListContainer" style="max-height: 400px; overflow-y: auto;">
                     <div class="empty-message" style="text-align:center; padding:2rem;">
                         <span style="font-size:2rem; display:block; margin-bottom:0.5rem;">🏟️</span>
-                        No hay torneos guardados. Crea uno nuevo o únete a uno existente.
+                        No hay torneos guardados. Crea uno nuevo.
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <!-- MODAL DE NICKNAME -->
-    <div class="modal-overlay" id="nicknameModal" style="display: none; z-index: 9999;">
-        <div class="modal modal-nickname">
-            <div class="modal-header" style="justify-content: center; border-bottom: none;">
-                <h3 style="color: #00FF88; font-size: 1.5rem;">🏟️ Bienvenido</h3>
-            </div>
-            <div class="modal-body" style="text-align: center;">
-                <div style="font-size: 3rem; margin-bottom: 0.5rem;">👤</div>
-                <p style="color: #4A4A6A; margin-bottom: 1.5rem;">
-                    Ingresa tu nombre de usuario para comenzar
-                </p>
-                <input type="text" id="nicknameInput" placeholder="Ej: Árbitro_123" style="width: 100%; padding: 0.8rem 1rem; border-radius: 12px; 
-                          border: 2px solid rgba(0, 255, 136, 0.15); background: rgba(13,13,26,0.8); 
-                          color: #E8E8F0; font-size: 1.1rem; text-align: center; margin-bottom: 0.5rem;" maxlength="30"
-                    autofocus />
-                <div style="font-size: 0.7rem; color: #4A4A6A; margin-bottom: 1rem;">
-                    💡 Este nombre se usará para identificarte como árbitro
-                </div>
-                <button class="btn btn-primary" id="confirmNicknameBtn"
-                    style="width: 100%; padding: 0.8rem; font-size: 1rem;">
-                    🚀 Entrar al torneo
-                </button>
-                <div style="margin-top: 1rem; font-size: 0.7rem; color: #4A4A6A;">
-                    ⚡ El nombre se guardará en este dispositivo
-                </div>
-            </div>
-        </div>
-    </div>
-    <script src="config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="connect.js"></script>
+
     <script src="script.js"></script>
 </body>
 

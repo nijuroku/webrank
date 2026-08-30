@@ -2,34 +2,79 @@
     "use strict";
 
     // ============================================================
-    // 1. CONFIGURACIÓN DE SUPABASE
-    // ============================================================
-
-    /* SUPABASE_URL moved to config.js */
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inplbm5qbmJub3BrYXJwbGZ2aGRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0MDcxMzUsImV4cCI6MjEwMTk4MzEzNX0.wxjiQUJ3E-tbgWGsSEbCNj-qYR1l8xqsfC4pmR9tgsU';
-
-    /* Supabase client created in connect.js (window.supabase). */
-
-    // ============================================================
-    // 2. CONSTANTES
+    // 1. CONSTANTES
     // ============================================================
 
     const STORAGE_KEY = 'torneoData_v18';
-    const NICKNAME_KEY = 'beybladex_nickname';
+    const TORNEO_LIST_KEY = 'torneoList_v1';
+    const THEME_STORAGE_KEY = 'beybladex_theme';
 
     // ============================================================
-    // 3. ESTADO GLOBAL
+    // 2. ESTADO GLOBAL
     // ============================================================
 
-    // Torneo
     let tournamentName = 'LaMafia BEYBLADEX';
     let tournamentVisible = false;
     let tournamentFinished = false;
     let tournamentWinner = null;
+    let tournamentId = null; // ID único para el torneo actual
 
     // Participantes
     let participants = [];
     let accumulatedPoints = {};
+
+    // Helpers
+    function generateParticipantId() {
+        return 'p_' + Date.now().toString(36) + '_' + Math.floor(Math.random() * 10000);
+    }
+
+    function generateTournamentId() {
+        return 't_' + Date.now().toString(36) + '_' + Math.floor(Math.random() * 1000000);
+    }
+
+    function getParticipantById(id) {
+        if (!id) return null;
+        return participants.find(p => p && (p.id === id || p.id === String(id))) || null;
+    }
+
+    function getParticipantNameById(id) {
+        const p = getParticipantById(id);
+        return p ? p.name : null;
+    }
+
+    function getParticipantIdByName(name) {
+        if (!name) return null;
+        const p = participants.find(p => p && p.name === name);
+        return p ? p.id : null;
+    }
+
+    function participantExistsByName(name) {
+        const normalized = (name || '').trim().toLocaleLowerCase();
+        return participants.some(p => p && (p.name || '').trim().toLocaleLowerCase() === normalized);
+    }
+
+    function ensureParticipantsObjects() {
+        if (participants.length === 0) return;
+        if (participants[0] && typeof participants[0] === 'string') {
+            const names = [...participants];
+            participants = names.map(n => ({ id: generateParticipantId(), name: n }));
+            const newAccum = {};
+            for (const p of participants) {
+                newAccum[p.id] = (accumulatedPoints && (accumulatedPoints[p.name] || accumulatedPoints[p.id])) || 0;
+            }
+            accumulatedPoints = newAccum;
+            const nameToId = {};
+            participants.forEach(p => nameToId[p.name] = p.id);
+            versus.forEach(v => {
+                if (v.playerA && nameToId[v.playerA]) v.playerAId = nameToId[v.playerA];
+                if (v.playerB && nameToId[v.playerB]) v.playerBId = nameToId[v.playerB];
+            });
+            matchHistory.forEach(h => {
+                if (h.playerA && nameToId[h.playerA]) h.playerAId = nameToId[h.playerA];
+                if (h.playerB && nameToId[h.playerB]) h.playerBId = nameToId[h.playerB];
+            });
+        }
+    }
 
     // Partidos
     let versus = [];
@@ -62,21 +107,8 @@
         fourth: null
     };
 
-    // Supabase
-    let currentTournamentId = null;
-    let currentTournamentCode = null;
-    let realtimeSubscription = null;
-    let syncInterval = null;
-    let isSyncing = false;
-    let pendingChanges = false;
-    let saveTimeout = null;
-
-    // Usuario
-    let currentUserNickname = null;
-    let currentUserId = null;
-
     // ============================================================
-    // 4. DOM REFS
+    // 3. DOM REFS
     // ============================================================
 
     // Header
@@ -85,6 +117,25 @@
     const headerRounds = document.getElementById('headerRounds');
     const headerQualified = document.getElementById('headerQualified');
     const storageStatusEl = document.getElementById('storageStatus');
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+
+    // Tema
+    function applyTheme(theme) {
+        const isLight = theme === 'light';
+        document.body.classList.toggle('light-theme', isLight);
+        if (themeToggleBtn) {
+            themeToggleBtn.textContent = isLight ? '🌙 Tema oscuro' : '☀️ Tema claro';
+            themeToggleBtn.setAttribute('aria-pressed', String(isLight));
+            themeToggleBtn.title = isLight ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro';
+        }
+    }
+
+    applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
+    themeToggleBtn?.addEventListener('click', function () {
+        const nextTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
+        localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+        applyTheme(nextTheme);
+    });
 
     // Participantes
     const participantListEl = document.getElementById('participantListContainer');
@@ -96,12 +147,7 @@
 
     // Torneo
     const createTournamentBtn = document.getElementById('createTournamentBtn');
-    const joinTournamentBtn = document.getElementById('joinTournamentBtn');
     const listTournamentsBtn = document.getElementById('listTournamentsBtn');
-    const tournamentIndicator = document.getElementById('tournamentIndicator');
-    const currentTournamentName = document.getElementById('currentTournamentName');
-    const currentTournamentCodeEl = document.getElementById('currentTournamentCode');
-    const arbitrosCount = document.getElementById('arbitrosCount');
 
     // Enfrentamientos
     const versusListEl = document.getElementById('versusListContainer');
@@ -129,520 +175,18 @@
     // Import/Export
     const exportDataBtn = document.getElementById('exportDataBtn');
     const importDataBtn = document.getElementById('importDataBtn');
-    const uploadTournamentBtn = document.getElementById('uploadTournamentBtn');
     const fileInput = document.getElementById('fileInput');
 
-    // Dropdown de puntuaciones: referencias tempranas
-    const scoreDropdownBtnEl = document.getElementById('scoreTournamentDropdownBtn');
-    const scoreDropdownMenuEl = document.getElementById('scoreTournamentDropdownMenu');
-
-    // Asegurar toggle básico inmediatamente (para que el botón responda aunque populate no se haya ejecutado)
-    if (scoreDropdownBtnEl && scoreDropdownMenuEl) {
-        scoreDropdownBtnEl.addEventListener('click', function (e) {
-            e.stopPropagation();
-            const isOpen = scoreDropdownMenuEl.style.display === 'block';
-            scoreDropdownMenuEl.style.display = isOpen ? 'none' : 'block';
-            scoreDropdownBtnEl.setAttribute('aria-expanded', String(!isOpen));
-        });
-
-        document.addEventListener('click', function (e) {
-            if (!scoreDropdownBtnEl.contains(e.target) && !scoreDropdownMenuEl.contains(e.target)) {
-                scoreDropdownMenuEl.style.display = 'none';
-                scoreDropdownBtnEl.setAttribute('aria-expanded', 'false');
-            }
-        });
-    }
-
     // ============================================================
-    // 5. FUNCIONES DE USUARIO
-    // ============================================================
-
-    function getNickname() {
-        const saved = localStorage.getItem(NICKNAME_KEY);
-        if (saved && saved.trim() !== '') {
-            currentUserNickname = saved.trim();
-            return currentUserNickname;
-        }
-        return null;
-    }
-
-    function saveNickname(nickname) {
-        if (nickname && nickname.trim() !== '') {
-            localStorage.setItem(NICKNAME_KEY, nickname.trim());
-            currentUserNickname = nickname.trim();
-            return true;
-        }
-        return false;
-    }
-
-    function getCurrentUserId() {
-        return currentUserId || localStorage.getItem('temp_user_id') || 'anonymous';
-    }
-
-    function getCurrentUserName() {
-        return currentUserNickname || localStorage.getItem(NICKNAME_KEY) || 'Árbitro';
-    }
-
-    // ============================================================
-    // 6. FUNCIONES DE SUPABASE
-    // ============================================================
-
-    async function testSupabaseConnection() {
-        return await (window.supabaseApi && window.supabaseApi.testSupabaseConnection ? window.supabaseApi.testSupabaseConnection() : false);
-    }
-
-    async function initSupabaseAuth() {
-        // Delegar lógica de auth a supabaseApi y mantener sincronización del currentUserId aquí
-        if (window.supabaseApi && window.supabaseApi.initSupabaseAuth) {
-            const result = await window.supabaseApi.initSupabaseAuth(currentUserNickname);
-            // result puede ser session o data
-            if (result && result?.user?.id) {
-                currentUserId = result.user.id;
-            } else if (result && result?.data && result.data.user && result.data.user.id) {
-                currentUserId = result.data.user.id;
-            }
-            return result;
-        }
-
-        // Fallback: intentar usar el cliente global si existe
-        try {
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) console.error('Error al obtener sesión:', sessionError);
-            if (session?.user) {
-                currentUserId = session.user.id;
-                return session;
-            }
-            const { data, error } = await supabase.auth.signInAnonymously({ options: { data: { nickname: currentUserNickname || 'Árbitro', device: navigator.userAgent || 'unknown' } } });
-            if (error) {
-                currentUserId = 'temp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
-                return null;
-            }
-            if (data?.user) {
-                currentUserId = data.user.id;
-                return data;
-            }
-            return null;
-        } catch (error) {
-            console.error('Error en autenticación (fallback):', error);
-            currentUserId = 'temp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
-            return null;
-        }
-    }
-
-    async function addArbitro(torneoId, rol = 'arbitro') {
-        // Delegar a supabaseApi pasando usuario y nombre
-        if (window.supabaseApi && window.supabaseApi.addArbitro) {
-            return await window.supabaseApi.addArbitro(torneoId, rol, getCurrentUserId(), getCurrentUserName());
-        }
-        // Fallback: intentar usar cliente global
-        try {
-            const userId = getCurrentUserId();
-            const userName = getCurrentUserName();
-            const { data: existing } = await supabase.from('arbitros').select('*').eq('torneo_id', torneoId).eq('usuario_id', userId).maybeSingle();
-            if (existing) return { data: existing, error: null };
-            const { data, error } = await supabase.from('arbitros').insert([{ torneo_id: torneoId, usuario_id: userId, nombre_arbitro: userName, rol }]).select().single();
-            if (error) throw error;
-            return { data, error: null };
-        } catch (error) {
-            console.error('Error al agregar árbitro (fallback):', error);
-            return { data: null, error };
-        }
-    }
-
-    async function loadTournamentFromSupabase(torneoId) {
-        if (window.supabaseApi && window.supabaseApi.loadTournamentFromSupabase) {
-            return await window.supabaseApi.loadTournamentFromSupabase(torneoId);
-        }
-        try {
-            const [torneo, participantes, partidos, arbitros, resultados] = await Promise.all([
-                supabase.from('torneos').select('*').eq('id', torneoId).single(),
-                supabase.from('participantes').select('*').eq('torneo_id', torneoId).order('nombre'),
-                supabase.from('partidos').select('*').eq('torneo_id', torneoId).order('ronda', { ascending: true }),
-                supabase.from('arbitros').select('*').eq('torneo_id', torneoId),
-                supabase.from('resultados_finales').select('*').eq('torneo_id', torneoId).maybeSingle()
-            ]);
-
-            if (torneo.error) throw torneo.error;
-            if (participantes.error) throw participantes.error;
-            if (partidos.error) throw partidos.error;
-
-            return {
-                torneo: torneo.data,
-                participantes: participantes.data || [],
-                partidos: partidos.data || [],
-                arbitros: arbitros.data || [],
-                resultados: resultados.data || null,
-                error: null
-            };
-        } catch (error) {
-            console.error('Error al cargar torneo (fallback):', error);
-            return { error };
-        }
-    }
-
-    function applySupabaseDataToLocal(data) {
-        if (!data || data.error) return false;
-
-        try {
-            if (data.torneo) {
-                tournamentName = data.torneo.nombre || 'LaMafia BEYBLADEX';
-                currentPhase = data.torneo.fase_actual || 1;
-                groupRound = data.torneo.ronda_grupo || 0;
-                knockoutRound = data.torneo.ronda_eliminatoria || 0;
-                tournamentFinished = data.torneo.finalizado || false;
-                customQualifiedCount = data.torneo.configuracion?.clasificados || 8;
-
-                if (data.torneo.estado_completo && Object.keys(data.torneo.estado_completo).length > 0) {
-                    const estado = data.torneo.estado_completo;
-                    tournamentWinner = estado.tournamentWinner || null;
-                    nextVersusId = estado.nextVersusId || 1;
-                    preFinalMatch = estado.preFinalMatch || null;
-                    preFinalPlayed = estado.preFinalPlayed || false;
-                    finalMatch = estado.finalMatch || null;
-                    finalPlayed = estado.finalPlayed || false;
-                    semifinalLosers = estado.semifinalLosers || [];
-                    semifinalWinners = estado.semifinalWinners || [];
-                    podium = estado.podium || { first: null, second: null, third: null, fourth: null };
-                }
-            }
-
-            if (data.participantes) {
-                participants = data.participantes.map(p => p.nombre);
-                accumulatedPoints = {};
-                data.participantes.forEach(p => {
-                    accumulatedPoints[p.nombre] = p.puntos_acumulados || 0;
-                });
-            }
-
-            if (data.partidos) {
-                const participantMap = {};
-                if (data.participantes) {
-                    data.participantes.forEach(p => {
-                        participantMap[p.id] = p.nombre;
-                    });
-                }
-
-                const history = [];
-                const active = [];
-
-                data.partidos.forEach(p => {
-                    const match = {
-                        id: p.id,
-                        playerA: participantMap[p.jugador_a_id] || p.jugador_a_id,
-                        playerB: participantMap[p.jugador_b_id] || p.jugador_b_id,
-                        scoreA: p.score_a || 0,
-                        scoreB: p.score_b || 0,
-                        round: p.ronda || 0,
-                        fase: p.fase || 'grupos',
-                        jugado: p.jugado || false,
-                        dbId: p.id
-                    };
-
-                    if (p.jugado) {
-                        history.push(match);
-                    } else {
-                        active.push(match);
-                    }
-                });
-
-                matchHistory = history;
-                versus = active;
-            }
-
-            if (data.resultados && data.resultados.campeon_id) {
-                const participantMap = {};
-                if (data.participantes) {
-                    data.participantes.forEach(p => {
-                        participantMap[p.id] = p.nombre;
-                    });
-                }
-                podium.first = participantMap[data.resultados.campeon_id] || null;
-                podium.second = participantMap[data.resultados.subcampeon_id] || null;
-                podium.third = participantMap[data.resultados.tercer_id] || null;
-                podium.fourth = participantMap[data.resultados.cuarto_id] || null;
-            }
-
-            if (data.arbitros) {
-                document.getElementById('arbitrosCount').textContent = data.arbitros.length;
-            }
-
-            return true;
-        } catch (error) {
-            console.error('Error al aplicar datos:', error);
-            return false;
-        }
-    }
-
-    async function saveFullStateToSupabase(force = false) {
-        if (isSyncing && !force) {
-            pendingChanges = true;
-            return;
-        }
-
-        if (!currentTournamentId) {
-            saveToLocalStorage();
-            return;
-        }
-
-        isSyncing = true;
-
-        try {
-            // Crear un JSON completo con todo el estado del torneo
-            const estadoCompleto = {
-                // Metadatos del torneo
-                tournamentName,
-                currentPhase,
-                groupRound,
-                knockoutRound,
-                tournamentFinished,
-                customQualifiedCount,
-                version: Date.now(),
-                savedAt: new Date().toISOString(),
-                
-                // Participantes y puntuación
-                participants,
-                accumulatedPoints,
-                
-                // Partidos
-                matchHistory,
-                versus,
-                
-                // Eliminatorias
-                tournamentWinner,
-                nextVersusId,
-                preFinalMatch,
-                preFinalPlayed,
-                finalMatch,
-                finalPlayed,
-                semifinalLosers,
-                semifinalWinners,
-                podium,
-                tournamentVisible,
-                selectedRound
-            };
-
-            // Preparar un objeto de estado y delegar las operaciones a supabaseApi
-            const state = {
-                currentTournamentId,
-                tournamentName,
-                currentPhase,
-                groupRound,
-                knockoutRound,
-                tournamentFinished,
-                customQualifiedCount,
-                participants,
-                accumulatedPoints,
-                matchHistory,
-                versus,
-                podium,
-                estadoCompleto
-            };
-
-            if (window.supabaseApi && window.supabaseApi.saveFullStateToSupabase) {
-                const res = await window.supabaseApi.saveFullStateToSupabase(state, force);
-                if (res && res.error) throw res.error;
-            } else {
-                // Fallback: intentar guardar usando el cliente global (comportamiento original)
-                console.warn('supabaseApi.saveFullStateToSupabase no disponible, usando fallback local');
-                // Mantener el comportamiento original mínimo: intentar guardar pero sin reimplementar toda la lógica aquí.
-            }
-
-            pendingChanges = false;
-            showSyncNotification('💾 Datos guardados en la nube');
-            saveToLocalStorage();
-
-        } catch (error) {
-            console.error('Error al guardar en Supabase:', error);
-            showSyncNotification('❌ Error al guardar');
-            saveToLocalStorage();
-        } finally {
-            isSyncing = false;
-            if (pendingChanges) {
-                pendingChanges = false;
-                setTimeout(() => saveFullStateToSupabase(true), 1000);
-            }
-        }
-    }
-
-    async function syncFromSupabase(force = false) {
-        // Mostrar indicador
-        const indicator = document.getElementById('syncIndicator');
-        if (indicator) indicator.style.display = 'inline';
-
-        try {
-            console.log('🔄 Sincronizando desde Supabase...');
-
-            const data = await loadTournamentFromSupabase(currentTournamentId);
-            if (data.error) throw data.error;
-
-            // Guardar estado actual antes de actualizar
-            const previousState = {
-                participants: [...participants],
-                matchHistory: [...matchHistory],
-                versus: [...versus],
-                accumulatedPoints: { ...accumulatedPoints }
-            };
-
-            // Aplicar nuevos datos
-            const applied = applySupabaseDataToLocal(data);
-
-            if (applied) {
-                // Verificar si hubo cambios significativos
-                const hasChanges = JSON.stringify(previousState) !== JSON.stringify({
-                    participants,
-                    matchHistory,
-                    versus,
-                    accumulatedPoints
-                });
-
-                if (hasChanges || force) {
-                    console.log('🔄 Datos actualizados, renderizando UI...');
-                    renderAll();
-                    showSyncNotification('🔄 Datos actualizados desde la nube');
-                    return true;
-                } else {
-                    console.log('✅ No hay cambios nuevos');
-                    return false;
-                }
-            }
-
-            return { data, applied };
-        } catch (error) {
-            console.error('❌ Error al sincronizar desde Supabase:', error);
-            return { error };
-        } finally {
-            isSyncing = false;
-            if (pendingChanges) {
-                pendingChanges = false;
-                setTimeout(() => syncFromSupabase(true), 1000);
-            }
-            // Ocultar indicador
-            if (indicator) indicator.style.display = 'none';
-        }
-
-
-    }
-
-
-
-    function startAutoSync(intervalSeconds = 30) {
-        stopAutoSync();
-        syncFromSupabase();
-        syncInterval = setInterval(async () => {
-            await saveFullStateToSupabase();
-            await syncFromSupabase();
-        }, intervalSeconds * 1000);
-        console.log(`🔄 Sincronización automática cada ${intervalSeconds} segundos`);
-    }
-
-    function stopAutoSync() {
-        if (syncInterval) {
-            clearInterval(syncInterval);
-            syncInterval = null;
-            console.log('⏹️ Sincronización automática detenida');
-        }
-    }
-
-    function debounceSave() {
-        if (saveTimeout) {
-            clearTimeout(saveTimeout);
-        }
-        saveTimeout = setTimeout(() => {
-            saveFullStateToSupabase();
-            saveTimeout = null;
-        }, 500);
-    }
-
-    function showSyncNotification(message) {
-        const originalText = storageStatusEl.textContent;
-        storageStatusEl.textContent = message;
-        storageStatusEl.style.background = 'rgba(0, 212, 255, 0.15)';
-        storageStatusEl.style.color = '#00D4FF';
-        storageStatusEl.style.borderColor = 'rgba(0, 212, 255, 0.2)';
-
-        setTimeout(() => {
-            storageStatusEl.textContent = originalText;
-            storageStatusEl.style.background = 'rgba(240, 244, 249, 0.8)';
-            storageStatusEl.style.color = '#6e7f94';
-            storageStatusEl.style.borderColor = 'rgba(0, 255, 136, 0.12)';
-        }, 3000);
-    }
-
-    function subscribeToTournament(torneoId) {
-        if (realtimeSubscription) {
-            supabase.removeChannel(realtimeSubscription);
-            realtimeSubscription = null;
-        }
-
-        console.log('🔄 Suscribiendo a torneo:', torneoId);
-
-        realtimeSubscription = supabase
-            .channel('torneo-' + torneoId)
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'torneos',
-                filter: `id=eq.${torneoId}`
-            }, (payload) => {
-                console.log('📡 Cambio en torneo:', payload);
-                syncFromSupabase();
-            })
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'participantes',
-                filter: `torneo_id=eq.${torneoId}`
-            }, (payload) => {
-                console.log('👥 Cambio en participantes:', payload);
-                syncFromSupabase();
-            })
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'partidos',
-                filter: `torneo_id=eq.${torneoId}`
-            }, (payload) => {
-                console.log('⚔️ Cambio en partidos:', payload);
-                // Forzar sincronización inmediata
-                syncFromSupabase();
-            })
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'arbitros',
-                filter: `torneo_id=eq.${torneoId}`
-            }, (payload) => {
-                console.log('👤 Cambio en árbitros:', payload);
-                syncFromSupabase();
-            })
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'resultados_finales',
-                filter: `torneo_id=eq.${torneoId}`
-            }, (payload) => {
-                console.log('🏆 Cambio en resultados:', payload);
-                syncFromSupabase();
-            })
-            .subscribe((status) => {
-                console.log('📡 Estado de suscripción:', status);
-                if (status === 'SUBSCRIBED') {
-                    console.log('✅ Conectado a cambios en tiempo real');
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.warn('⚠️ Error en la conexión, reintentando...');
-                    // Reintentar después de 5 segundos
-                    setTimeout(() => subscribeToTournament(torneoId), 5000);
-                }
-            });
-    }
-
-    // ============================================================
-    // 7. FUNCIONES DE LOCALSTORAGE
+    // 4. FUNCIONES DE LOCALSTORAGE
     // ============================================================
 
     function saveToLocalStorage() {
         try {
+            // Guardar torneo actual
             const data = {
+                tournamentId,
+                tournamentName,
                 participants,
                 versus,
                 matchHistory,
@@ -661,17 +205,12 @@
                 finalMatch,
                 finalPlayed,
                 podium,
-                tournamentName,
-                tournamentVisible,
-                currentTournamentId,
-                currentTournamentCode
+                tournamentVisible
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
-            if (currentTournamentId) {
-                localStorage.setItem('currentTournamentId', currentTournamentId);
-                localStorage.setItem('currentTournamentCode', currentTournamentCode || '');
-            }
+            // Guardar en la lista de torneos
+            saveTournamentToList();
 
             storageStatusEl.textContent = '💾 Datos guardados';
             storageStatusEl.style.background = 'rgba(223, 240, 230, 0.9)';
@@ -694,6 +233,8 @@
             if (!stored) return false;
 
             const data = JSON.parse(stored);
+            tournamentId = data.tournamentId || null;
+            tournamentName = data.tournamentName || 'LaMafia BEYBLADEX';
             participants = data.participants || [];
             versus = data.versus || [];
             matchHistory = data.matchHistory || [];
@@ -712,13 +253,11 @@
             finalMatch = data.finalMatch || null;
             finalPlayed = data.finalPlayed || false;
             podium = data.podium || { first: null, second: null, third: null, fourth: null };
-            tournamentName = data.tournamentName || 'LaMafia BEYBLADEX';
             tournamentVisible = data.tournamentVisible || false;
-            currentTournamentId = data.currentTournamentId || null;
-            currentTournamentCode = data.currentTournamentCode || null;
 
+            ensureParticipantsObjects();
             participants.forEach(p => {
-                if (!(p in accumulatedPoints)) accumulatedPoints[p] = 0;
+                if (!(p.id in accumulatedPoints)) accumulatedPoints[p.id] = accumulatedPoints[p.name] || 0;
             });
 
             recalculateAccumulatedPoints();
@@ -733,7 +272,6 @@
             }, 2000);
 
             renderAll();
-            saveToLocalStorage();
             return true;
         } catch (e) {
             console.error('Error al cargar desde localStorage:', e);
@@ -741,166 +279,249 @@
         }
     }
 
-    // Descargar torneo actual como JSON
-    async function downloadTournamentJSON() {
-        try {
-            if (!currentTournamentId) {
-                alert('No hay torneo actual cargado');
-                return;
-            }
+    // ============================================================
+    // 5. GESTIÓN DE LISTA DE TORNEOS
+    // ============================================================
 
-            // Si está guardado en Supabase, descargarlo desde ahí
-            if (window.supabaseApi && window.supabaseApi.downloadTournamentAsJSON) {
-                const result = await window.supabaseApi.downloadTournamentAsJSON(currentTournamentId);
-                if (result.error) throw result.error;
-                
-                const jsonData = result.data;
-                const jsonString = JSON.stringify(jsonData, null, 2);
-                const blob = new Blob([jsonString], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `torneo_${tournamentName}_${new Date().getTime()}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                
-                showSyncNotification('✅ Torneo descargado como JSON');
-            } else {
-                // Fallback: descargar estado local
-                const estadoCompleto = {
-                    tournamentName,
-                    currentPhase,
-                    groupRound,
-                    knockoutRound,
-                    tournamentFinished,
-                    customQualifiedCount,
-                    participants,
-                    accumulatedPoints,
-                    matchHistory,
-                    versus,
-                    tournamentWinner,
-                    nextVersusId,
-                    preFinalMatch,
-                    preFinalPlayed,
-                    finalMatch,
-                    finalPlayed,
-                    semifinalLosers,
-                    semifinalWinners,
-                    podium,
-                    tournamentVisible,
-                    selectedRound,
-                    version: Date.now(),
-                    savedAt: new Date().toISOString()
-                };
-                
-                const jsonString = JSON.stringify(estadoCompleto, null, 2);
-                const blob = new Blob([jsonString], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `torneo_${tournamentName}_${new Date().getTime()}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                
-                showSyncNotification('✅ Torneo descargado (local)');
-            }
-        } catch (error) {
-            console.error('Error al descargar torneo:', error);
-            showSyncNotification('❌ Error al descargar torneo');
+    function getTournamentList() {
+        try {
+            const stored = localStorage.getItem(TORNEO_LIST_KEY);
+            if (!stored) return [];
+            return JSON.parse(stored);
+        } catch (e) {
+            return [];
         }
     }
 
-    // Restaurar torneo desde JSON
-    async function importTournamentJSON(jsonData) {
+    function saveTournamentToList() {
         try {
-            if (!jsonData || typeof jsonData !== 'object') {
-                throw new Error('Formato JSON inválido');
+            let list = getTournamentList();
+            
+            // Buscar si ya existe este torneo
+            const existingIndex = list.findIndex(t => t.id === tournamentId);
+            
+            const entry = {
+                id: tournamentId || generateTournamentId(),
+                name: tournamentName,
+                participantes: participants.length,
+                fecha: new Date().toISOString(),
+                finalizado: tournamentFinished,
+                currentPhase: currentPhase
+            };
+
+            if (!tournamentId) {
+                tournamentId = entry.id;
             }
 
-            if (!jsonData.participants || !Array.isArray(jsonData.participants)) {
-                throw new Error('JSON debe contener array de participants');
+            if (existingIndex >= 0) {
+                list[existingIndex] = entry;
+            } else {
+                list.push(entry);
             }
 
-            // Cargar datos del JSON
-            participants = jsonData.participants || [];
-            accumulatedPoints = jsonData.accumulatedPoints || {};
-            matchHistory = jsonData.matchHistory || [];
-            versus = jsonData.versus || [];
-            tournamentName = jsonData.tournamentName || 'Torneo Importado';
-            currentPhase = jsonData.currentPhase || 1;
-            groupRound = jsonData.groupRound || 1;
-            knockoutRound = jsonData.knockoutRound || 1;
-            tournamentFinished = jsonData.tournamentFinished || false;
-            customQualifiedCount = jsonData.customQualifiedCount || 0;
-            tournamentWinner = jsonData.tournamentWinner || null;
-            nextVersusId = jsonData.nextVersusId || 1;
-            preFinalMatch = jsonData.preFinalMatch || null;
-            preFinalPlayed = jsonData.preFinalPlayed || false;
-            finalMatch = jsonData.finalMatch || null;
-            finalPlayed = jsonData.finalPlayed || false;
-            semifinalLosers = jsonData.semifinalLosers || [];
-            semifinalWinners = jsonData.semifinalWinners || [];
-            podium = jsonData.podium || { first: null, second: null, third: null, fourth: null };
-            tournamentVisible = jsonData.tournamentVisible !== false;
-            selectedRound = jsonData.selectedRound || 0;
+            localStorage.setItem(TORNEO_LIST_KEY, JSON.stringify(list));
+        } catch (e) {
+            console.error('Error al guardar lista de torneos:', e);
+        }
+    }
 
-            // Si hay un torneo actual en Supabase, importar allá también
-            if (currentTournamentId && window.supabaseApi && window.supabaseApi.importTournamentFromJSON) {
-                const estadoCompleto = {
-                    tournamentName,
-                    currentPhase,
-                    groupRound,
-                    knockoutRound,
-                    tournamentFinished,
-                    customQualifiedCount,
-                    participants,
-                    accumulatedPoints,
-                    matchHistory,
-                    versus,
-                    tournamentWinner,
-                    nextVersusId,
-                    preFinalMatch,
-                    preFinalPlayed,
-                    finalMatch,
-                    finalPlayed,
-                    semifinalLosers,
-                    semifinalWinners,
-                    podium,
-                    tournamentVisible,
-                    selectedRound,
-                    version: Date.now(),
-                    savedAt: new Date().toISOString()
-                };
-                
-                await window.supabaseApi.importTournamentFromJSON(currentTournamentId, estadoCompleto);
+    function deleteTournamentFromList(id) {
+        try {
+            let list = getTournamentList();
+            list = list.filter(t => t.id !== id);
+            localStorage.setItem(TORNEO_LIST_KEY, JSON.stringify(list));
+        } catch (e) {
+            console.error('Error al eliminar torneo de la lista:', e);
+        }
+    }
+
+    function loadTournamentById(id) {
+        try {
+            // Guardar el torneo actual antes de cargar otro
+            if (tournamentId && tournamentId !== id) {
+                saveToLocalStorage();
             }
 
+            // Buscar en la lista de torneos guardados
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (!stored) return false;
+
+            const data = JSON.parse(stored);
+            if (data.tournamentId !== id) return false;
+
+            // Aplicar datos
+            tournamentId = data.tournamentId;
+            tournamentName = data.tournamentName || 'LaMafia BEYBLADEX';
+            participants = data.participants || [];
+            versus = data.versus || [];
+            matchHistory = data.matchHistory || [];
+            nextVersusId = data.nextVersusId || 1;
+            currentPhase = data.currentPhase || 1;
+            tournamentWinner = data.tournamentWinner || null;
+            knockoutRound = data.knockoutRound || 0;
+            groupRound = data.groupRound || 0;
+            accumulatedPoints = data.accumulatedPoints || {};
+            customQualifiedCount = data.customQualifiedCount || 8;
+            tournamentFinished = data.tournamentFinished || false;
+            semifinalLosers = data.semifinalLosers || [];
+            semifinalWinners = data.semifinalWinners || [];
+            preFinalMatch = data.preFinalMatch || null;
+            preFinalPlayed = data.preFinalPlayed || false;
+            finalMatch = data.finalMatch || null;
+            finalPlayed = data.finalPlayed || false;
+            podium = data.podium || { first: null, second: null, third: null, fourth: null };
+            tournamentVisible = data.tournamentVisible || false;
+
+            ensureParticipantsObjects();
+            participants.forEach(p => {
+                if (!(p.id in accumulatedPoints)) accumulatedPoints[p.id] = accumulatedPoints[p.name] || 0;
+            });
+
+            recalculateAccumulatedPoints();
+            qualifiedCountInput.value = customQualifiedCount;
             renderAll();
             saveToLocalStorage();
-            showSyncNotification('✅ Torneo importado correctamente');
-        } catch (error) {
-            console.error('Error al importar torneo:', error);
-            showSyncNotification('❌ Error al importar: ' + error.message);
+            return true;
+        } catch (e) {
+            console.error('Error al cargar torneo:', e);
+            return false;
         }
     }
 
-    function getAccumulatedScore(playerName) {
-        return accumulatedPoints[playerName] || 0;
+    // ============================================================
+    // 6. FUNCIONES DE PARTICIPANTES
+    // ============================================================
+
+    function addParticipant(name) {
+        const trimmed = (name || '').trim();
+        if (!trimmed) return null;
+        if (participantExistsByName(trimmed)) return null;
+        const id = generateParticipantId();
+        const obj = { id, name: trimmed };
+        participants.push(obj);
+        accumulatedPoints[id] = accumulatedPoints[id] || 0;
+        saveToLocalStorage();
+        return obj;
+    }
+
+    function removeParticipantById(id) {
+        const idx = participants.findIndex(p => p.id === id);
+        if (idx === -1) return false;
+        const name = participants[idx].name;
+        participants.splice(idx, 1);
+        if (accumulatedPoints && Object.prototype.hasOwnProperty.call(accumulatedPoints, id)) {
+            delete accumulatedPoints[id];
+        }
+        versus = versus.filter(v => {
+            const aId = v.playerAId || getParticipantIdByName(v.playerA);
+            const bId = v.playerBId || getParticipantIdByName(v.playerB);
+            return aId !== id && bId !== id && v.playerA !== name && v.playerB !== name;
+        });
+        matchHistory = matchHistory.filter(h => {
+            const aId = h.playerAId || getParticipantIdByName(h.playerA);
+            const bId = h.playerBId || getParticipantIdByName(h.playerB);
+            return aId !== id && bId !== id && h.playerA !== name && h.playerB !== name;
+        });
+        recalculateAccumulatedPoints();
+        renderAll();
+        saveToLocalStorage();
+        return true;
+    }
+
+    function renameParticipant(id, newName) {
+        const p = getParticipantById(id);
+        if (!p) return;
+        const oldName = p.name;
+        p.name = newName;
+
+        versus.forEach(v => {
+            if (v.playerAId === id || v.playerA === oldName) {
+                v.playerA = newName;
+                v.playerAId = id;
+            }
+            if (v.playerBId === id || v.playerB === oldName) {
+                v.playerB = newName;
+                v.playerBId = id;
+            }
+        });
+        matchHistory.forEach(h => {
+            if (h.playerAId === id || h.playerA === oldName) {
+                h.playerA = newName;
+                h.playerAId = id;
+            }
+            if (h.playerBId === id || h.playerB === oldName) {
+                h.playerB = newName;
+                h.playerBId = id;
+            }
+        });
+
+        recalculateAccumulatedPoints();
+        renderAll();
+        saveToLocalStorage();
+    }
+
+    function clearAllParticipants() {
+        const hasMatches = matchHistory.some(v => v.playerA || v.playerB);
+        const hasVersus = versus.some(v => v.playerA || v.playerB);
+
+        if (hasMatches || hasVersus) {
+            alert('❌ No se pueden borrar los participantes porque tienen partidos registrados.\n\nPrimero debes reiniciar el torneo o archivar las rondas.');
+            renderAll();
+            saveToLocalStorage();
+            return;
+        }
+
+        if (participants.length === 0) {
+            alert('No hay participantes para borrar.');
+            renderAll();
+            saveToLocalStorage();
+            return;
+        }
+
+        if (!confirm(`⚠️ ¿Estás seguro de borrar TODOS los ${participants.length} participantes?\n\nEsta acción no se puede deshacer.`)) {
+            renderAll();
+            saveToLocalStorage();
+            return;
+        }
+
+        participants = [];
+        accumulatedPoints = {};
+        tournamentVisible = false;
+        document.getElementById('tournamentSection').style.display = 'none';
+        renderAll();
+        saveToLocalStorage();
+        alert('✅ Todos los participantes han sido eliminados.');
+    }
+
+    // ============================================================
+    // 7. FUNCIONES DE PUNTUACIÓN
+    // ============================================================
+
+    function getAccumulatedScore(identifier) {
+        if (!identifier) return 0;
+        if (accumulatedPoints[identifier] !== undefined) return accumulatedPoints[identifier] || 0;
+        const id = getParticipantIdByName(identifier);
+        if (id && accumulatedPoints[id] !== undefined) return accumulatedPoints[id] || 0;
+        return 0;
     }
 
     function recalculateAccumulatedPoints() {
-        participants.forEach(p => accumulatedPoints[p] = 0);
+        ensureParticipantsObjects();
 
-        // Lógica: 3 puntos por victoria
+        participants.forEach(p => {
+            if (p && p.id) accumulatedPoints[p.id] = 0;
+        });
+
         const POINTS_PER_WIN = 3;
 
         for (let v of matchHistory) {
             if (v.round && v.round > 0) {
-                // Solo contar victorias que ya se han jugado (scoreA !== scoreB)
+                const aId = v.playerAId || getParticipantIdByName(v.playerA);
+                const bId = v.playerBId || getParticipantIdByName(v.playerB);
                 if (v.scoreA > v.scoreB) {
-                    accumulatedPoints[v.playerA] = (accumulatedPoints[v.playerA] || 0) + POINTS_PER_WIN;
+                    if (aId) accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_WIN;
                 } else if (v.scoreB > v.scoreA) {
-                    accumulatedPoints[v.playerB] = (accumulatedPoints[v.playerB] || 0) + POINTS_PER_WIN;
+                    if (bId) accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_WIN;
                 }
             }
         }
@@ -909,15 +530,16 @@
             if (v.round && v.round > 0) {
                 const existsInHistory = matchHistory.some(h =>
                     h.id === v.id &&
-                    h.playerA === v.playerA &&
-                    h.playerB === v.playerB
+                    (h.playerAId === v.playerAId || h.playerA === v.playerA) &&
+                    (h.playerBId === v.playerBId || h.playerB === v.playerB)
                 );
                 if (!existsInHistory) {
-                    // Solo contar si el partido ya se ha jugado
+                    const aId = v.playerAId || getParticipantIdByName(v.playerA);
+                    const bId = v.playerBId || getParticipantIdByName(v.playerB);
                     if (v.scoreA > v.scoreB) {
-                        accumulatedPoints[v.playerA] = (accumulatedPoints[v.playerA] || 0) + POINTS_PER_WIN;
+                        if (aId) accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_WIN;
                     } else if (v.scoreB > v.scoreA) {
-                        accumulatedPoints[v.playerB] = (accumulatedPoints[v.playerB] || 0) + POINTS_PER_WIN;
+                        if (bId) accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_WIN;
                     }
                 }
             }
@@ -927,34 +549,43 @@
     function getGroupRanking() {
         const groupMatches = [...matchHistory, ...versus].filter(v => v.round && v.round > 0);
         const ranking = participants.map(p => {
-            const points = getAccumulatedScore(p);
-            const playerMatches = groupMatches.filter(v => v.playerA === p || v.playerB === p);
-            const wins = playerMatches.filter(v =>
-                (v.playerA === p && v.scoreA > v.scoreB) ||
-                (v.playerB === p && v.scoreB > v.scoreA)
-            ).length;
-            
-            // Calcular diferencia de puntos (anotados - recibidos)
+            const pid = p.id || getParticipantIdByName(p.name || p);
+            const points = getAccumulatedScore(pid);
+
+            const playerMatches = groupMatches.filter(v => {
+                const aId = v.playerAId || getParticipantIdByName(v.playerA);
+                const bId = v.playerBId || getParticipantIdByName(v.playerB);
+                return aId === pid || bId === pid || v.playerA === p.name || v.playerB === p.name;
+            });
+
+            const wins = playerMatches.filter(v => {
+                const aId = v.playerAId || getParticipantIdByName(v.playerA);
+                const bId = v.playerBId || getParticipantIdByName(v.playerB);
+                if (aId === pid) return v.scoreA > v.scoreB;
+                if (bId === pid) return v.scoreB > v.scoreA;
+                if (v.playerA === p.name) return v.scoreA > v.scoreB;
+                if (v.playerB === p.name) return v.scoreB > v.scoreA;
+                return false;
+            }).length;
+
             let pointsFor = 0, pointsAgainst = 0;
             playerMatches.forEach(v => {
-                if (v.playerA === p) {
-                    pointsFor += v.scoreA;
-                    pointsAgainst += v.scoreB;
+                if ((v.playerAId && v.playerAId === pid) || v.playerA === p.name) {
+                    pointsFor += v.scoreA || 0;
+                    pointsAgainst += v.scoreB || 0;
                 } else {
-                    pointsFor += v.scoreB;
-                    pointsAgainst += v.scoreA;
+                    pointsFor += v.scoreB || 0;
+                    pointsAgainst += v.scoreA || 0;
                 }
             });
             const pointDifference = pointsFor - pointsAgainst;
-            
-            return { name: p, points, wins, pointDifference };
+
+            return { id: pid, name: p.name, points, wins, pointDifference };
         });
+
         ranking.sort((a, b) => {
-            // Ordenar por puntos acumulados (descendente)
             if (b.points !== a.points) return b.points - a.points;
-            // Si empate, ordenar por diferencia de puntos (descendente)
             if (b.pointDifference !== a.pointDifference) return b.pointDifference - a.pointDifference;
-            // Si sigue empatado, ordenar por victorias (descendente)
             return (b.wins || 0) - (a.wins || 0);
         });
         return ranking;
@@ -997,6 +628,10 @@
         return Array.from(rounds).sort((a, b) => a - b);
     }
 
+    // ============================================================
+    // 8. FUNCIONES DE GENERACIÓN DE PARTIDOS
+    // ============================================================
+
     function generatePairings(players) {
         const shuffled = [...players];
         for (let i = shuffled.length - 1; i > 0; i--) {
@@ -1008,10 +643,13 @@
         const numPairs = Math.floor(shuffled.length / 2);
 
         for (let i = 0; i < numPairs; i++) {
-            pairings.push({
-                playerA: shuffled[i * 2],
-                playerB: shuffled[i * 2 + 1]
-            });
+            const a = shuffled[i * 2];
+            const b = shuffled[i * 2 + 1];
+            const aName = (typeof a === 'string') ? a : (a && a.name) || '';
+            const bName = (typeof b === 'string') ? b : (b && b.name) || '';
+            const aId = (typeof a === 'object' && a && a.id) ? a.id : getParticipantIdByName(aName);
+            const bId = (typeof b === 'object' && b && b.id) ? b.id : getParticipantIdByName(bName);
+            pairings.push({ playerA: aName, playerB: bName, playerAId: aId, playerBId: bId });
         }
 
         return pairings;
@@ -1079,13 +717,6 @@
 
     function renderAll() {
         console.log('🎨 Renderizando UI...');
-        console.log('📊 Estado:', {
-            participants: participants.length,
-            versus: versus.length,
-            matchHistory: matchHistory.length,
-            tournamentVisible: tournamentVisible,
-            tournamentFinished: tournamentFinished
-        });
 
         try {
             const hasData = versus.length > 0 || matchHistory.length > 0 || tournamentFinished;
@@ -1093,12 +724,10 @@
                 tournamentVisible = true;
                 const section = document.getElementById('tournamentSection');
                 if (section) section.style.display = 'block';
-                console.log('✅ Sección del torneo mostrada');
             } else {
                 tournamentVisible = false;
                 const section = document.getElementById('tournamentSection');
                 if (section) section.style.display = 'none';
-                console.log('🔒 Sección del torneo ocultada');
             }
 
             renderTournamentName();
@@ -1110,7 +739,6 @@
             renderRoundManagement();
             updateStats();
             updateParticipantCountBadge();
-            updateTournamentIndicator();
 
             console.log('✅ UI renderizada correctamente');
         } catch (error) {
@@ -1119,11 +747,11 @@
     }
 
     function renderTournamentName() {
-        const headerEl = document.getElementById('tournamentNameHeader');
-        if (headerEl) {
-            headerEl.textContent = tournamentName;
-        }
         document.title = `${tournamentName} · BeybladeX`;
+        const titleEl = document.getElementById('siteTitle');
+        if (titleEl) titleEl.textContent = tournamentName;
+        const scoreTitle = document.getElementById('scoreTournamentName');
+        if (scoreTitle) scoreTitle.textContent = tournamentName;
     }
 
     function renderParticipants() {
@@ -1132,17 +760,34 @@
             return;
         }
         let html = '';
-        const sorted = [...participants].sort();
+        const sorted = [...participants].slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         sorted.forEach(p => {
-            const pts = getAccumulatedScore(p);
-            html += `<span class="participant-tag">${p} (${pts} pts) <button class="remove-btn" data-name="${p}">✕</button></span>`;
+            const pts = getAccumulatedScore(p.id || p.name);
+            html += `<span class="participant-tag">${p.name} (${pts} pts) <button class="edit-name-btn" data-id="${p.id}" title="Editar nombre">✎</button> <button class="remove-btn" data-id="${p.id}" title="Eliminar">✕</button></span>`;
         });
         participantListEl.innerHTML = html;
 
         document.querySelectorAll('.participant-tag .remove-btn').forEach(btn => {
             btn.addEventListener('click', function () {
-                const name = this.dataset.name;
-                removeParticipant(name);
+                const id = this.dataset.id;
+                removeParticipantById(id);
+            });
+        });
+
+        document.querySelectorAll('.participant-tag .edit-name-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const id = this.dataset.id;
+                const old = getParticipantById(id);
+                const oldName = old ? old.name : '';
+                const newName = prompt('Nuevo nombre para el participante:', oldName);
+                if (!newName) return;
+                const trimmed = newName.trim();
+                if (trimmed === '' || trimmed === oldName) return;
+                if (participantExistsByName(trimmed)) {
+                    alert('Ya existe un participante con ese nombre.');
+                    return;
+                }
+                renameParticipant(id, trimmed);
             });
         });
 
@@ -1248,10 +893,13 @@
         if (finalMatch && !finalPlayed) {
             matchesToShow.push(finalMatch);
         }
+        if (selectedRound !== 'all') {
+            matchesToShow = matchesToShow.filter(v => v.round === selectedRound);
+        }
 
         if (matchesToShow.length > 0) {
             let html = '';
-            const sortedMatches = matchesToShow.sort((a, b) => a.id - b.id);
+            const sortedMatches = matchesToShow;
 
             sortedMatches.forEach((v, index) => {
                 const isPlayed = (v.scoreA !== 0 || v.scoreB !== 0);
@@ -1328,11 +976,14 @@
                     const vsId = this.dataset.vsid;
                     const player = this.dataset.player;
                     const dir = parseInt(this.dataset.dir, 10);
-                    const vsIdNum = parseInt(vsId, 10);
+                    const vsIdNum = vsId;
+                    const isArchived = this.dataset.archived === 'true';
 
-                    if (preFinalMatch && preFinalMatch.id === vsIdNum) {
+                    if (isArchived) {
+                        updateArchivedScore(vsIdNum, player, dir);
+                    } else if (preFinalMatch && String(preFinalMatch.id) === String(vsIdNum)) {
                         updatePreFinalScore(player, dir);
-                    } else if (finalMatch && finalMatch.id === vsIdNum) {
+                    } else if (finalMatch && String(finalMatch.id) === String(vsIdNum)) {
                         updateFinalScore(player, dir);
                     } else {
                         updateScore(vsIdNum, player, dir);
@@ -1364,20 +1015,43 @@
                 filteredMatches.forEach((v) => {
                     const roundLabel = v.round ? `R${v.round}` : 'KO';
                     html += `
-                        <div class="versus-item archived-match" style="opacity:0.6;">
+                    <div class="versus-item archived-match" style="opacity:0.9;">
+                        <div style="font-size:.7rem;color:#00D4FF;margin-bottom:.35rem;">📅 Ronda anterior · editable</div>
+                        <div class="match-content">
+                            <div class="match-players">
                             <div class="player-score-block">
-                                <div class="score-display">${v.scoreA}</div>
+                                <div class="score-control">
+                                    <button class="dec-score" data-archived="true" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="-1">−</button>
+                                    <div class="score-display">${v.scoreA}</div>
+                                    <button class="inc-score" data-archived="true" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>
+                                </div>
                                 <span class="player-name">${v.playerA}</span>
                             </div>
                             <span class="vs-badge" style="color:#4A4A6A;">✅ VS <span class="round-tag">${roundLabel}</span></span>
                             <div class="player-score-block">
-                                <div class="score-display">${v.scoreB}</div>
+                                <div class="score-control">
+                                    <button class="dec-score" data-archived="true" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>
+                                    <div class="score-display">${v.scoreB}</div>
+                                    <button class="inc-score" data-archived="true" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>
+                                </div>
                                 <span class="player-name">${v.playerB}</span>
                             </div>
+                            </div>
                         </div>
+                    </div>
                     `;
                 });
                 versusListEl.innerHTML = html;
+
+                document.querySelectorAll('.inc-score[data-archived], .dec-score[data-archived]').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        const vsId = this.dataset.vsid;
+                        const player = this.dataset.player;
+                        const dir = parseInt(this.dataset.dir, 10);
+                        updateArchivedScore(vsId, player, dir);
+                    });
+                });
+
             } else {
                 versusListEl.innerHTML = `<div class="empty-message">No hay enfrentamientos en la Ronda ${selectedRound}.</div>`;
             }
@@ -1513,6 +1187,79 @@
 
         html += `</tbody></table>`;
         totalScoreTableEl.innerHTML = html;
+
+        const exportBtnId = 'exportScoreXlsxBtn';
+        if (!document.getElementById(exportBtnId)) {
+            const btn = document.createElement('button');
+            btn.id = exportBtnId;
+            btn.className = 'btn-sm';
+            btn.textContent = '📥 Descargar Excel (.xlsx)';
+            btn.style.marginTop = '0.5rem';
+            totalScoreTableEl.appendChild(btn);
+            btn.addEventListener('click', exportScoreTableXlsx);
+        }
+    }
+
+    function getScoreTableRows() {
+        const ranking = getGroupRanking();
+        const groupMatches = [...matchHistory, ...versus].filter(v => v.round && v.round > 0);
+        return ranking.map((item, idx) => {
+            const playerMatches = groupMatches.filter(v =>
+                v.playerAId === item.id || v.playerBId === item.id || v.playerA === item.name || v.playerB === item.name
+            );
+            const wins = playerMatches.filter(v =>
+                (v.playerAId === item.id || v.playerA === item.name) && v.scoreA > v.scoreB ||
+                (v.playerBId === item.id || v.playerB === item.name) && v.scoreB > v.scoreA
+            ).length;
+            const losses = playerMatches.filter(v =>
+                (v.playerAId === item.id || v.playerA === item.name) && v.scoreA < v.scoreB ||
+                (v.playerBId === item.id || v.playerB === item.name) && v.scoreB < v.scoreA
+            ).length;
+            const rounds = new Set(playerMatches.map(v => v.round).filter(Boolean));
+            return {
+                Posicion: idx + 1,
+                Participante: item.name,
+                Puntos: item.points,
+                'Diferencia de puntos': item.pointDifference,
+                Partidos: playerMatches.length,
+                Victorias: wins,
+                Derrotas: losses,
+                Rondas: rounds.size
+            };
+        });
+    }
+
+    function exportScoreTableXlsx() {
+        if (!window.XLSX) {
+            alert('La librería XLSX no está cargada. Descargando como CSV...');
+            exportScoreTableCSV();
+            return;
+        }
+        const worksheet = XLSX.utils.json_to_sheet(getScoreTableRows());
+        worksheet['!cols'] = [
+            { wch: 10 }, { wch: 28 }, { wch: 12 }, { wch: 22 },
+            { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }
+        ];
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Puntuación final');
+        const safeName = (tournamentName || 'torneo').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+        XLSX.writeFile(workbook, `tabla_puntuacion_${safeName}_${Date.now()}.xlsx`);
+    }
+
+    function exportScoreTableCSV() {
+        const rows = getScoreTableRows();
+        const headers = Object.keys(rows[0] || {});
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => headers.map(h => `"${String(row[h] || '').replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tabla_puntuacion_${tournamentName.replace(/\s+/g, '_')}_${Date.now()}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
     }
 
     function renderRoundManagement() {
@@ -1663,103 +1410,12 @@
         }
     }
 
-    function updateTournamentIndicator() {
-        const statusEl = document.getElementById('tournamentStatus');
-
-        if (currentTournamentId) {
-            tournamentIndicator.style.display = 'flex';
-            currentTournamentName.textContent = tournamentName;
-            currentTournamentCodeEl.textContent = currentTournamentCode || '-----';
-
-            checkTournamentStatus(currentTournamentId).then(result => {
-                if (statusEl) {
-                    if (result) {
-                        statusEl.textContent = '✅ Guardado';
-                        statusEl.className = 'tournament-status-indicator saved';
-                    } else {
-                        statusEl.textContent = '⚠️ No guardado';
-                        statusEl.className = 'tournament-status-indicator error';
-                    }
-                }
-            });
-
-            createTournamentBtn.textContent = '🏗️ Nuevo';
-            createTournamentBtn.classList.add('crear');
-            joinTournamentBtn.textContent = '🔗 Cambiar';
-            joinTournamentBtn.classList.add('unirse');
-        } else {
-            tournamentIndicator.style.display = 'none';
-            createTournamentBtn.textContent = '🏗️ Crear torneo';
-            createTournamentBtn.classList.remove('crear');
-            joinTournamentBtn.textContent = '🔗 Unirse';
-            joinTournamentBtn.classList.remove('unirse');
-            if (statusEl) {
-                statusEl.textContent = '';
-                statusEl.className = '';
-            }
-        }
-    }
-
     // ============================================================
-    // 10. FUNCIONES DE GESTIÓN DE TORNEO
+    // 10. FUNCIONES DE ACTUALIZACIÓN DE PUNTUACIONES
     // ============================================================
-
-    function removeParticipant(name) {
-        const inMatches = matchHistory.some(v => v.playerA === name || v.playerB === name);
-        const inVersus = versus.some(v => v.playerA === name || v.playerB === name);
-
-        if (inMatches || inVersus) {
-            alert(`No se puede eliminar a "${name}" porque tiene partidos registrados.`);
-            return;
-        }
-
-        participants = participants.filter(p => p !== name);
-        delete accumulatedPoints[name];
-        if (tournamentWinner === name) tournamentWinner = null;
-
-        renderAll();
-        saveToLocalStorage();
-        debounceSave();
-    }
-
-    function clearAllParticipants() {
-        const hasMatches = matchHistory.some(v => v.playerA || v.playerB);
-        const hasVersus = versus.some(v => v.playerA || v.playerB);
-
-        if (hasMatches || hasVersus) {
-            alert('❌ No se pueden borrar los participantes porque tienen partidos registrados.\n\nPrimero debes reiniciar el torneo o archivar las rondas.');
-            renderAll();
-            saveToLocalStorage();
-            return;
-        }
-
-        if (participants.length === 0) {
-            alert('No hay participantes para borrar.');
-            renderAll();
-            saveToLocalStorage();
-            return;
-        }
-
-        if (!confirm(`⚠️ ¿Estás seguro de borrar TODOS los ${participants.length} participantes?\n\nEsta acción no se puede deshacer.`)) {
-            renderAll();
-            saveToLocalStorage();
-            return;
-        }
-
-        const participantsCopy = [...participants];
-        for (const name of participantsCopy) {
-            removeParticipant(name);
-        }
-
-        tournamentVisible = false;
-        document.getElementById('tournamentSection').style.display = 'none';
-        renderAll();
-        saveToLocalStorage();
-        alert('✅ Todos los participantes han sido eliminados.');
-    }
 
     function updateScore(vsId, player, direction) {
-        const vs = versus.find(v => v.id === vsId);
+        const vs = versus.find(v => String(v.id) === String(vsId));
         if (!vs) return;
 
         if (vs.playerA === player) {
@@ -1773,10 +1429,26 @@
         } else {
             return;
         }
+        vs.jugado = vs.scoreA !== 0 || vs.scoreB !== 0;
 
         recalculateAccumulatedPoints();
         renderAll();
-        debounceSave();
+        saveToLocalStorage();
+    }
+
+    function updateArchivedScore(matchId, player, dir) {
+        const idx = matchHistory.findIndex(h => String(h.id) === String(matchId));
+        if (idx === -1) return;
+        const match = matchHistory[idx];
+        if (player === match.playerA) {
+            match.scoreA = Math.max(0, (match.scoreA || 0) + dir);
+        } else if (player === match.playerB) {
+            match.scoreB = Math.max(0, (match.scoreB || 0) + dir);
+        }
+        matchHistory[idx] = match;
+        recalculateAccumulatedPoints();
+        renderAll();
+        saveToLocalStorage();
     }
 
     function updatePreFinalScore(player, direction) {
@@ -1794,7 +1466,6 @@
         }
         renderAll();
         saveToLocalStorage();
-        debounceSave();
     }
 
     function updateFinalScore(player, direction) {
@@ -1812,126 +1483,10 @@
         }
         renderAll();
         saveToLocalStorage();
-        debounceSave();
-    }
-
-    function markPreFinalPlayed() {
-        if (!preFinalMatch) return;
-        if (preFinalMatch.scoreA === 0 && preFinalMatch.scoreB === 0) {
-            alert('Por favor, asigna puntuaciones antes de marcar como jugado.');
-            return;
-        }
-        if (preFinalMatch.scoreA === preFinalMatch.scoreB) {
-            alert('No puede haber empate en la PRE-FINAL. Asigna un ganador.');
-            return;
-        }
-        finalizePreFinal();
-    }
-
-    function autoFinishPreFinal() {
-        if (!preFinalMatch) return;
-        if (preFinalMatch.scoreA === 0 && preFinalMatch.scoreB === 0) {
-            preFinalMatch.scoreA = Math.floor(Math.random() * 5) + 1;
-            preFinalMatch.scoreB = Math.floor(Math.random() * 5) + 1;
-            while (preFinalMatch.scoreA === preFinalMatch.scoreB) {
-                preFinalMatch.scoreB = Math.floor(Math.random() * 5) + 1;
-            }
-            if (preFinalMatch.scoreA < preFinalMatch.scoreB) {
-                [preFinalMatch.scoreA, preFinalMatch.scoreB] = [preFinalMatch.scoreB, preFinalMatch.scoreA];
-            }
-        }
-        finalizePreFinal();
-    }
-
-    function finalizePreFinal() {
-        if (!preFinalMatch) return;
-        preFinalPlayed = true;
-
-        podium.third = preFinalMatch.scoreA > preFinalMatch.scoreB ?
-            preFinalMatch.playerA : preFinalMatch.playerB;
-        podium.fourth = preFinalMatch.playerA === podium.third ?
-            preFinalMatch.playerB : preFinalMatch.playerA;
-
-        const preFinalCopy = {
-            ...preFinalMatch,
-            id: preFinalMatch.id,
-            round: 0,
-            archivedAt: Date.now()
-        };
-        matchHistory.push(preFinalCopy);
-        preFinalMatch = null;
-
-        renderAll();
-        saveToLocalStorage();
-        debounceSave();
-        alert(`✅ PRE-FINAL finalizada!\n🥉 ${podium.third} es el 3er Lugar.\n4️⃣ ${podium.fourth} es el 4to Lugar.\n\n🏆 ¡Ahora la FINAL!`);
-    }
-
-    function markFinalPlayed() {
-        if (!finalMatch) return;
-        if (finalMatch.scoreA === 0 && finalMatch.scoreB === 0) {
-            alert('Por favor, asigna puntuaciones antes de marcar como jugado.');
-            return;
-        }
-        if (finalMatch.scoreA === finalMatch.scoreB) {
-            alert('No puede haber empate en la final. Asigna un ganador.');
-            return;
-        }
-        finalizeFinal();
-    }
-
-    function autoFinishFinal() {
-        if (!finalMatch) return;
-        if (finalMatch.scoreA === 0 && finalMatch.scoreB === 0) {
-            finalMatch.scoreA = Math.floor(Math.random() * 5) + 1;
-            finalMatch.scoreB = Math.floor(Math.random() * 5) + 1;
-            while (finalMatch.scoreA === finalMatch.scoreB) {
-                finalMatch.scoreB = Math.floor(Math.random() * 5) + 1;
-            }
-            if (finalMatch.scoreA < finalMatch.scoreB) {
-                [finalMatch.scoreA, finalMatch.scoreB] = [finalMatch.scoreB, finalMatch.scoreA];
-            }
-        }
-        finalizeFinal();
-    }
-
-    function finalizeFinal() {
-        if (!finalMatch) return;
-        finalPlayed = true;
-        tournamentWinner = finalMatch.scoreA > finalMatch.scoreB ?
-            finalMatch.playerA : finalMatch.playerB;
-        const loser = finalMatch.playerA === tournamentWinner ?
-            finalMatch.playerB : finalMatch.playerA;
-
-        podium.first = tournamentWinner;
-        podium.second = loser;
-        tournamentFinished = true;
-
-        const finalCopy = {
-            ...finalMatch,
-            id: finalMatch.id,
-            round: 0,
-            archivedAt: Date.now()
-        };
-        matchHistory.push(finalCopy);
-        finalMatch = null;
-
-        renderAll();
-        saveToLocalStorage();
-        debounceSave();
-
-        let message = `🏆 ¡CAMPEÓN: ${tournamentWinner}! 🏆\n🥈 Subcampeón: ${loser}`;
-        if (podium.third) {
-            message += `\n🥉 3er Lugar: ${podium.third}`;
-        }
-        if (podium.fourth) {
-            message += `\n4️⃣ 4to Lugar: ${podium.fourth}`;
-        }
-        alert(message);
     }
 
     // ============================================================
-    // 11. FUNCIONES DE GENERACIÓN DE RONDAS
+    // 11. FUNCIONES DE GESTIÓN DE TORNEO
     // ============================================================
 
     function generateGroupRound() {
@@ -1976,6 +1531,8 @@
         const newVersus = pairings.map(p => ({
             playerA: p.playerA,
             playerB: p.playerB,
+            playerAId: p.playerAId,
+            playerBId: p.playerBId,
             scoreA: 0,
             scoreB: 0,
             id: nextVersusId++,
@@ -1993,10 +1550,6 @@
         recalculateAccumulatedPoints();
         renderAll();
         saveToLocalStorage();
-        saveFullStateToSupabase(true); // Forzar guardado inmediato
-
-        // Notificar a otros árbitros (opcional)
-        showSyncNotification('📋 Nueva ronda generada y sincronizada');
     }
 
     function startKnockout() {
@@ -2012,7 +1565,7 @@
         }
 
         const ranking = getGroupRanking();
-        const qualified = ranking.slice(0, qualifiedCount).map(p => p.name);
+        const qualified = ranking.slice(0, qualifiedCount).map(p => ({ id: p.id, name: p.name }));
 
         if (qualified.length < 2) {
             alert('No hay suficientes participantes con puntos para eliminatorias.');
@@ -2049,8 +1602,10 @@
         for (let i = 0; i < shuffled.length; i += 2) {
             if (i + 1 < shuffled.length) {
                 versus.push({
-                    playerA: shuffled[i],
-                    playerB: shuffled[i + 1],
+                    playerA: shuffled[i].name,
+                    playerB: shuffled[i + 1].name,
+                    playerAId: shuffled[i].id,
+                    playerBId: shuffled[i + 1].id,
                     scoreA: 0,
                     scoreB: 0,
                     id: nextVersusId++,
@@ -2072,7 +1627,6 @@
         recalculateAccumulatedPoints();
         renderAll();
         saveToLocalStorage();
-        debounceSave();
 
         alert(`✅ Eliminatorias iniciadas con ${versus.length} enfrentamientos.\n\n📊 ${qualified.length} jugadores clasificados.`);
     }
@@ -2182,11 +1736,312 @@
         recalculateAccumulatedPoints();
         renderAll();
         saveToLocalStorage();
-        debounceSave();
     }
 
     // ============================================================
-    // 12. FUNCIONES DE INICIALIZACIÓN
+    // 12. FUNCIONES DE PARTIDOS ESPECIALES
+    // ============================================================
+
+    function markPreFinalPlayed() {
+        if (!preFinalMatch) return;
+        if (preFinalMatch.scoreA === 0 && preFinalMatch.scoreB === 0) {
+            alert('Por favor, asigna puntuaciones antes de marcar como jugado.');
+            return;
+        }
+        if (preFinalMatch.scoreA === preFinalMatch.scoreB) {
+            alert('No puede haber empate en la PRE-FINAL. Asigna un ganador.');
+            return;
+        }
+        finalizePreFinal();
+    }
+
+    function autoFinishPreFinal() {
+        if (!preFinalMatch) return;
+        if (preFinalMatch.scoreA === 0 && preFinalMatch.scoreB === 0) {
+            preFinalMatch.scoreA = Math.floor(Math.random() * 5) + 1;
+            preFinalMatch.scoreB = Math.floor(Math.random() * 5) + 1;
+            while (preFinalMatch.scoreA === preFinalMatch.scoreB) {
+                preFinalMatch.scoreB = Math.floor(Math.random() * 5) + 1;
+            }
+            if (preFinalMatch.scoreA < preFinalMatch.scoreB) {
+                [preFinalMatch.scoreA, preFinalMatch.scoreB] = [preFinalMatch.scoreB, preFinalMatch.scoreA];
+            }
+        }
+        finalizePreFinal();
+    }
+
+    function finalizePreFinal() {
+        if (!preFinalMatch) return;
+        preFinalPlayed = true;
+
+        podium.third = preFinalMatch.scoreA > preFinalMatch.scoreB ?
+            preFinalMatch.playerA : preFinalMatch.playerB;
+        podium.fourth = preFinalMatch.playerA === podium.third ?
+            preFinalMatch.playerB : preFinalMatch.playerA;
+
+        const preFinalCopy = {
+            ...preFinalMatch,
+            id: preFinalMatch.id,
+            round: 0,
+            archivedAt: Date.now()
+        };
+        matchHistory.push(preFinalCopy);
+        preFinalMatch = null;
+
+        renderAll();
+        saveToLocalStorage();
+        alert(`✅ PRE-FINAL finalizada!\n🥉 ${podium.third} es el 3er Lugar.\n4️⃣ ${podium.fourth} es el 4to Lugar.\n\n🏆 ¡Ahora la FINAL!`);
+    }
+
+    function markFinalPlayed() {
+        if (!finalMatch) return;
+        if (finalMatch.scoreA === 0 && finalMatch.scoreB === 0) {
+            alert('Por favor, asigna puntuaciones antes de marcar como jugado.');
+            return;
+        }
+        if (finalMatch.scoreA === finalMatch.scoreB) {
+            alert('No puede haber empate en la final. Asigna un ganador.');
+            return;
+        }
+        finalizeFinal();
+    }
+
+    function autoFinishFinal() {
+        if (!finalMatch) return;
+        if (finalMatch.scoreA === 0 && finalMatch.scoreB === 0) {
+            finalMatch.scoreA = Math.floor(Math.random() * 5) + 1;
+            finalMatch.scoreB = Math.floor(Math.random() * 5) + 1;
+            while (finalMatch.scoreA === finalMatch.scoreB) {
+                finalMatch.scoreB = Math.floor(Math.random() * 5) + 1;
+            }
+            if (finalMatch.scoreA < finalMatch.scoreB) {
+                [finalMatch.scoreA, finalMatch.scoreB] = [finalMatch.scoreB, finalMatch.scoreA];
+            }
+        }
+        finalizeFinal();
+    }
+
+    function finalizeFinal() {
+        if (!finalMatch) return;
+        finalPlayed = true;
+        tournamentWinner = finalMatch.scoreA > finalMatch.scoreB ?
+            finalMatch.playerA : finalMatch.playerB;
+        const loser = finalMatch.playerA === tournamentWinner ?
+            finalMatch.playerB : finalMatch.playerA;
+
+        podium.first = tournamentWinner;
+        podium.second = loser;
+        tournamentFinished = true;
+
+        const finalCopy = {
+            ...finalMatch,
+            id: finalMatch.id,
+            round: 0,
+            archivedAt: Date.now()
+        };
+        matchHistory.push(finalCopy);
+        finalMatch = null;
+
+        renderAll();
+        saveToLocalStorage();
+
+        let message = `🏆 ¡CAMPEÓN: ${tournamentWinner}! 🏆\n🥈 Subcampeón: ${loser}`;
+        if (podium.third) {
+            message += `\n🥉 3er Lugar: ${podium.third}`;
+        }
+        if (podium.fourth) {
+            message += `\n4️⃣ 4to Lugar: ${podium.fourth}`;
+        }
+        alert(message);
+    }
+
+    // ============================================================
+    // 13. FUNCIONES DE UTILIDAD
+    // ============================================================
+
+    function startTournament() {
+        if (participants.length < 2) {
+            alert('❌ Necesitas al menos 2 participantes para iniciar el torneo.');
+            return;
+        }
+
+        if (!tournamentId) {
+            tournamentId = generateTournamentId();
+        }
+
+        tournamentVisible = true;
+        document.getElementById('tournamentSection').style.display = 'block';
+
+        setTimeout(() => {
+            const section = document.getElementById('tournamentSection');
+            if (section) {
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
+
+        renderAll();
+        saveToLocalStorage();
+    }
+
+    function editTournamentName() {
+        const newName = prompt('Ingresa el nuevo nombre del torneo:', tournamentName);
+        if (newName && newName.trim() !== '') {
+            tournamentName = newName.trim();
+            renderTournamentName();
+            saveToLocalStorage();
+        }
+    }
+
+    function resetTournament() {
+        if (!confirm('⚠️ ¿Reiniciar el torneo?\n\nSe eliminarán TODOS los enfrentamientos y el progreso.\nLos participantes se mantienen.')) return;
+
+        versus = [];
+        matchHistory = [];
+        accumulatedPoints = {};
+        nextVersusId = 1;
+        currentPhase = 1;
+        tournamentWinner = null;
+        tournamentFinished = false;
+        knockoutRound = 0;
+        groupRound = 0;
+        selectedRound = 'all';
+        preFinalMatch = null;
+        preFinalPlayed = false;
+        finalMatch = null;
+        finalPlayed = false;
+        semifinalLosers = [];
+        semifinalWinners = [];
+        podium = { first: null, second: null, third: null, fourth: null };
+        tournamentVisible = false;
+
+        participants.forEach(p => accumulatedPoints[p.id] = 0);
+
+        renderAll();
+        saveToLocalStorage();
+        alert('✅ Torneo reiniciado. Los participantes se mantienen.');
+    }
+
+    // ============================================================
+    // 14. FUNCIONES DE LISTA DE TORNEOS
+    // ============================================================
+
+    function showTournamentList() {
+        const modal = document.getElementById('tournamentListModal');
+        const container = document.getElementById('tournamentListContainer');
+
+        modal.classList.add('active');
+        const list = getTournamentList();
+
+        if (list.length === 0) {
+            container.innerHTML = `
+                <div style="text-align:center; padding:2rem; color:#4A4A6A;">
+                    <div style="font-size:2rem; margin-bottom:0.5rem;">🏟️</div>
+                    No tienes torneos guardados.
+                    <div style="margin-top:0.5rem; font-size:0.8rem;">
+                        Crea uno nuevo desde el botón "Crear torneo".
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+        const sorted = list.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+        sorted.forEach((t) => {
+            const estado = t.finalizado ? 'finalizado' : 'activo';
+            const estadoLabel = t.finalizado ? '🏁 Finalizado' : '🔄 Activo';
+            const esActual = t.id === tournamentId;
+            const fecha = new Date(t.fecha);
+            const fechaStr = fecha.toLocaleDateString('es-ES', {
+                day: '2-digit', month: 'short', year: 'numeric'
+            });
+
+            html += `
+                <div class="tournament-list-item ${esActual ? 'active' : ''}" style="${esActual ? 'border-color: rgba(0, 255, 136, 0.3); background: rgba(0, 255, 136, 0.05);' : ''}">
+                    <div class="info">
+                        <div class="name">
+                            ${esActual ? '🟢 ' : ''}${t.name}
+                            ${esActual ? '<span style="font-size:0.6rem; color:#00FF88; margin-left:0.3rem;">(Actual)</span>' : ''}
+                        </div>
+                        <div class="details">
+                            <span>👥 ${t.participantes || 0} participantes</span>
+                            <span>📅 ${fechaStr}</span>
+                            <span class="status ${estado}">${estadoLabel}</span>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:0.3rem;">
+                        ${!esActual ? `<button class="btn-cargar" data-torneo-id="${t.id}">📂 Cargar</button>` : ''}
+                        <button class="btn-eliminar" data-torneo-id="${t.id}">🗑️</button>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+
+        container.querySelectorAll('.btn-cargar').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const torneoId = this.dataset.torneoId;
+                if (loadTournamentById(torneoId)) {
+                    document.getElementById('tournamentListModal').classList.remove('active');
+                    alert('✅ Torneo cargado correctamente');
+                } else {
+                    alert('❌ Error al cargar el torneo');
+                }
+            });
+        });
+
+        container.querySelectorAll('.btn-eliminar').forEach(btn => {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const torneoId = this.dataset.torneoId;
+                const torneo = sorted.find(t => t.id === torneoId);
+
+                if (!confirm(`⚠️ ¿Eliminar el torneo "${torneo?.name}"?\n\nEsta acción eliminará todos los datos asociados.`)) {
+                    return;
+                }
+
+                if (torneoId === tournamentId) {
+                    if (!confirm('⚠️ Estás eliminando el torneo actual. ¿Continuar?')) {
+                        return;
+                    }
+                    // Limpiar estado actual
+                    tournamentId = null;
+                    participants = [];
+                    versus = [];
+                    matchHistory = [];
+                    accumulatedPoints = {};
+                    tournamentVisible = false;
+                    document.getElementById('tournamentSection').style.display = 'none';
+                    localStorage.removeItem(STORAGE_KEY);
+                }
+
+                deleteTournamentFromList(torneoId);
+                showTournamentList();
+                renderAll();
+                alert('✅ Torneo eliminado');
+            });
+        });
+
+        const searchInput = document.getElementById('tournamentSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.oninput = function () {
+                const query = this.value.toLowerCase().trim();
+                const items = container.querySelectorAll('.tournament-list-item');
+                items.forEach(item => {
+                    const name = item.querySelector('.name')?.textContent?.toLowerCase() || '';
+                    const match = name.includes(query);
+                    item.style.display = match ? 'flex' : 'none';
+                });
+            };
+            setTimeout(() => searchInput.focus(), 100);
+        }
+    }
+
+    // ============================================================
+    // 15. FUNCIONES DE INICIALIZACIÓN
     // ============================================================
 
     function initializeWith16Participants() {
@@ -2197,8 +2052,12 @@
             'Manuel', 'Natalia', 'Óscar', 'Paula'
         ];
 
-        participants = nombres;
-        participants.forEach(p => accumulatedPoints[p] = 0);
+        if (!tournamentId) {
+            tournamentId = generateTournamentId();
+        }
+
+        participants = nombres.map(n => ({ id: generateParticipantId(), name: n }));
+        participants.forEach(p => { if (p && p.id) accumulatedPoints[p.id] = accumulatedPoints[p.id] || 0; });
 
         groupRound = 1;
         const pairings = generatePairings(participants);
@@ -2206,6 +2065,8 @@
         const newVersus = pairings.map(p => ({
             playerA: p.playerA,
             playerB: p.playerB,
+            playerAId: p.playerAId || getParticipantIdByName(p.playerA),
+            playerBId: p.playerBId || getParticipantIdByName(p.playerB),
             scoreA: 0,
             scoreB: 0,
             id: nextVersusId++,
@@ -2245,86 +2106,15 @@
         qualifiedCountInput.value = 8;
         selectedRound = 1;
         recalculateAccumulatedPoints();
+        tournamentVisible = true;
         saveToLocalStorage();
     }
 
-    async function initTournamentFromSupabase(torneoId, codigo = null) {
-        try {
-            currentTournamentId = torneoId;
-            currentTournamentCode = codigo;
-
-            const data = await loadTournamentFromSupabase(torneoId);
-            if (data.error) throw data.error;
-
-            applySupabaseDataToLocal(data);
-            updateTournamentIndicator();
-            renderAll();
-            startAutoSync(600);
-            subscribeToTournament(torneoId);
-
-            return { success: true };
-        } catch (error) {
-            console.error('Error al inicializar torneo:', error);
-            return { success: false, error };
-        }
-    }
-
-    async function leaveCurrentTournament() {
-        stopAutoSync();
-
-        if (realtimeSubscription) {
-            supabase.removeChannel(realtimeSubscription);
-            realtimeSubscription = null;
-        }
-
-        await saveFullStateToSupabase(true);
-
-        currentTournamentId = null;
-        currentTournamentCode = null;
-        participants = [];
-        versus = [];
-        matchHistory = [];
-        accumulatedPoints = {};
-        tournamentWinner = null;
-        tournamentFinished = false;
-        currentPhase = 1;
-        groupRound = 0;
-        knockoutRound = 0;
-        podium = { first: null, second: null, third: null, fourth: null };
-
-        updateTournamentIndicator();
-        renderAll();
-        saveToLocalStorage();
-    }
-
-    async function initializeAppAfterAuth() {
-        console.log('🚀 Inicializando aplicación después de autenticación...');
+    function initializeApp() {
+        console.log('🚀 Iniciando aplicación...');
 
         try {
-            console.log('👤 Usuario:', getCurrentUserName());
-            console.log('🆔 ID:', getCurrentUserId());
-
-            // Cargar datos desde localStorage
-            console.log('📂 Cargando datos desde localStorage...');
             const loaded = loadFromLocalStorage();
-            console.log('📂 Datos cargados:', loaded ? '✅ Sí' : '❌ No');
-
-            // Verificar si hay un torneo activo guardado
-            const savedTournamentId = localStorage.getItem('currentTournamentId');
-            const savedTournamentCode = localStorage.getItem('currentTournamentCode');
-            console.log('📋 Torneo guardado:', savedTournamentId || 'Ninguno');
-
-            if (savedTournamentId) {
-                console.log('🔄 Intentando cargar torneo desde Supabase...');
-                const result = await initTournamentFromSupabase(savedTournamentId, savedTournamentCode);
-                if (result.success) {
-                    console.log('✅ Torneo cargado desde Supabase');
-                    renderAll();
-                    return;
-                } else {
-                    console.warn('⚠️ No se pudo cargar desde Supabase, usando localStorage');
-                }
-            }
 
             if (loaded) {
                 console.log('✅ Datos cargados desde localStorage');
@@ -2335,1009 +2125,92 @@
                 renderAll();
             }
 
-            // Iniciar sincronización automática
-            console.log('🔄 Iniciando sincronización automática...');
-            startAutoSync(600);
-
-            // Poblar dropdown de torneos para la tabla de puntuaciones
-            try {
-                await populateScoreTournamentDropdown();
-            } catch (pe) {
-                console.warn('No se pudo poblar dropdown de puntuaciones:', pe);
-            }
-
             console.log('🚀 App inicializada correctamente');
-
         } catch (error) {
-            console.error('❌ Error al inicializar app después de autenticación:', error);
-            // Mostrar error en la UI pero no bloquear
-            showSyncNotification('⚠️ Error al cargar datos: ' + error.message);
-
-            // Intentar renderizar de todas formas con lo que haya
-            try {
-                renderAll();
-            } catch (renderError) {
-                console.error('❌ Error al renderizar:', renderError);
-            }
+            console.error('❌ Error al inicializar app:', error);
         }
     }
 
     // ============================================================
-    // 13. FUNCIONES DE MODAL Y UTILIDADES
+    // 16. EVENT LISTENERS
     // ============================================================
 
-    function showModal(content, autoClose = false) {
-        closeModal();
-
-        const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay active';
-        overlay.id = 'modalOverlay';
-
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-header">
-                <h3 style="margin:0;"></h3>
-                <button class="modal-close" id="modalCloseBtn">✕</button>
-            </div>
-            <div class="modal-body">
-                ${content}
-            </div>
-        `;
-
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-
-        overlay.addEventListener('click', function (e) {
-            if (e.target === this && !autoClose) {
-                closeModal();
-            }
-        });
-
-        document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
-        document.addEventListener('keydown', modalKeyHandler);
-    }
-
-    function modalKeyHandler(e) {
-        if (e.key === 'Escape') {
-            closeModal();
-        }
-    }
-
-    function closeModal() {
-        const overlay = document.getElementById('modalOverlay');
-        if (overlay) {
-            overlay.remove();
-        }
-        document.removeEventListener('keydown', modalKeyHandler);
-    }
-
-    function generateUniqueCode() {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let code = '';
-        for (let i = 0; i < 6; i++) {
-            code += chars[Math.floor(Math.random() * chars.length)];
-        }
-        return code.slice(0, 3) + '-' + code.slice(3);
-    }
-
-    function editTournamentName() {
-        const newName = prompt('Ingresa el nuevo nombre del torneo:', tournamentName);
-        if (newName && newName.trim() !== '') {
-            tournamentName = newName.trim();
-            renderTournamentName();
-            saveToLocalStorage();
-            debounceSave();
-        }
-    }
-
-    function startTournament() {
-        if (participants.length < 2) {
-            alert('❌ Necesitas al menos 2 participantes para iniciar el torneo.');
-            return;
-        }
-
-        tournamentVisible = true;
-        document.getElementById('tournamentSection').style.display = 'block';
-
-        setTimeout(() => {
-            const section = document.getElementById('tournamentSection');
-            if (section) {
-                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }, 100);
-
-        renderAll();
-        saveToLocalStorage();
-        debounceSave();
-    }
-
-    // ============================================================
-    // 14. FUNCIONES DE LISTA DE TORNEOS
-    // ============================================================
-
-    // === Subir torneo desde archivo JSON ===
-    if (uploadTournamentBtn && fileInput) {
-        uploadTournamentBtn.addEventListener('click', function () {
-            // usar el input de archivo existente
-            fileInput.accept = '.json';
-            fileInput.onchange = async function (ev) {
-                const f = ev.target.files && ev.target.files[0];
-                if (!f) return;
-                try {
-                    const text = await f.text();
-                    const estado = JSON.parse(text);
-                    await uploadTournamentJSONToDB(estado);
-                } catch (e) {
-                    console.error('Error leyendo JSON:', e);
-                    alert('❌ Error leyendo archivo JSON: ' + e.message);
-                } finally {
-                    // limpiar valor para permitir seleccionar el mismo archivo de nuevo
-                    fileInput.value = '';
-                }
-            };
-            fileInput.click();
-        });
-    }
-
-    async function uploadTournamentJSONToDB(estado) {
-        try {
-            // Nombre del torneo
-            const nombre = estado.tournamentName || estado.nombre || ('Torneo importado ' + new Date().toLocaleString());
-            // Asegurar autenticación antes de crear el torneo (puede crear sesión anónima)
-            try {
-                await initSupabaseAuth();
-            } catch (e) {
-                console.warn('initSupabaseAuth falló (no crítico):', e);
-            }
-
-            // Obtener user id real desde supabase auth cuando sea posible (necesario para políticas RLS)
-            let createdBy = getCurrentUserId() || 'importer';
-            try {
-                const authUser = (await supabase.auth.getUser())?.data?.user;
-                if (authUser && authUser.id) createdBy = authUser.id;
-            } catch (e) {
-                console.warn('No se pudo obtener auth user desde supabase.auth.getUser():', e);
-            }
-            const customQualified = estado.customQualifiedCount || estado.config?.clasificados || 8;
-
-            // Crear torneo (delegar a supabaseApi si existe)
-            let crearRes = null;
-            if (window.supabaseApi && window.supabaseApi.createTournament) {
-                crearRes = await window.supabaseApi.createTournament(nombre, createdBy, customQualified);
-            } else {
-                // Fallback: crear directamente
-                const { data, error } = await supabase.from('torneos').insert([{
-                    nombre: nombre.trim(),
-                    codigo: (estado.codigo) ? estado.codigo : (Math.random().toString(36).substring(2, 8)).toUpperCase(),
-                    configuracion: { clasificados: customQualified },
-                    estado: 'finalizado',
-                    fase_actual: estado.currentPhase || 1,
-                    ronda_grupo: estado.groupRound || 0,
-                    ronda_eliminatoria: estado.knockoutRound || 0,
-                    finalizado: !!estado.tournamentFinished,
-                    creado_por: createdBy,
-                    estado_completo: estado,
-                    fecha_creacion: estado.savedAt ? new Date(estado.savedAt).toISOString() : new Date().toISOString(),
-                    fecha_actualizacion: new Date().toISOString()
-                }]).select().single();
-                if (error) throw error;
-                crearRes = { data };
-            }
-
-            console.log('crearRes (createTournament) =>', crearRes);
-            if (!crearRes || !crearRes.data) {
-                console.error('Create tournament response invalid:', crearRes);
-                throw new Error('No se pudo crear torneo');
-            }
-            const torneo = crearRes.data;
-            const torneoId = torneo.id;
-            console.log('Torneo creado en la BD con id:', torneoId);
-
-            // Preparar state para delegar a saveFullStateToSupabase (connect.js)
-            const state = {
-                currentTournamentId: torneoId,
-                tournamentName: nombre,
-                currentPhase: estado.currentPhase || 1,
-                groupRound: estado.groupRound || 0,
-                knockoutRound: estado.knockoutRound || 0,
-                tournamentFinished: !!estado.tournamentFinished,
-                customQualifiedCount: customQualified,
-                participants: estado.participants || [],
-                accumulatedPoints: estado.accumulatedPoints || {},
-                matchHistory: estado.matchHistory || [],
-                versus: estado.versus || [],
-                podium: estado.podium || {},
-                estadoCompleto: estado
-            };
-
-            // Delegar guardado de participantes/partidos/resultados si la API existe
-            if (window.supabaseApi && window.supabaseApi.saveFullStateToSupabase) {
-                console.log('Delegando guardado a supabaseApi.saveFullStateToSupabase, state:', state);
-                const res = await window.supabaseApi.saveFullStateToSupabase(state);
-                console.log('saveFullStateToSupabase result =>', res);
-                if (res && res.error) {
-                    console.error('Error desde saveFullStateToSupabase:', res.error);
-                    throw res.error;
-                }
-            } else {
-                console.warn('supabaseApi.saveFullStateToSupabase no disponible; usando fallback de inserción directa');
-                // Fallback simple: upsert participantes y partidos manualmente
-                // (implementación mínima porque lo ideal es usar la API central)
-                const participants = state.participants || [];
-                if (participants.length > 0) {
-                    const pRecords = participants.map(n => ({ torneo_id: torneoId, nombre: n, puntos_acumulados: (state.accumulatedPoints || {})[n] || 0 }));
-                    const { error: pErr } = await supabase.from('participantes').upsert(pRecords, { onConflict: 'torneo_id,nombre' });
-                    if (pErr) console.error('Error upsert participantes (fallback):', pErr);
-                    else console.log('Participantes upsert (fallback) OK');
-                }
-
-                // Insert de partidos (no deduplicado avanzado en fallback)
-                const allMatches = [ ...(state.matchHistory || []), ...(state.versus || []) ];
-                if (allMatches.length > 0) {
-                    // obtener mapping nombre -> id
-                    const { data: participantsDb } = await supabase.from('participantes').select('id,nombre').eq('torneo_id', torneoId);
-                    const nameToId = {};
-                    (participantsDb || []).forEach(p => nameToId[p.nombre] = p.id);
-
-                    const inserts = [];
-                    for (const m of allMatches) {
-                        const aId = nameToId[m.playerA] || null;
-                        const bId = nameToId[m.playerB] || null;
-                        if (!aId || !bId) continue;
-                        const jugado = !!m.jugado || ((m.scoreA||0) !== (m.scoreB||0));
-                        const ganador = (jugado && m.scoreA !== m.scoreB) ? (m.scoreA > m.scoreB ? aId : bId) : null;
-                        inserts.push({ torneo_id: torneoId, jugador_a_id: aId, jugador_b_id: bId, fase: m.fase || 'grupos', ronda: m.round || m.ronda || 0, score_a: m.scoreA || 0, score_b: m.scoreB || 0, jugado, ganador_id: ganador, fecha_partido: m.fecha || new Date().toISOString() });
-                    }
-                    if (inserts.length > 0) {
-                        const { data: insertedMatches, error: insErr } = await supabase.from('partidos').insert(inserts).select();
-                        if (insErr) console.error('Error insert partidos (fallback):', insErr);
-                        else console.log('Partidos insertados (fallback):', (insertedMatches || []).length);
-                    }
-                }
-
-                // resultados_finales fallback
-                if (state.tournamentFinished || (state.podium && Object.keys(state.podium).length > 0)) {
-                    const podium = state.podium || {};
-                    const { data: parts } = await supabase.from('participantes').select('id,nombre').eq('torneo_id', torneoId);
-                    const map = {};
-                    (parts || []).forEach(p => map[p.nombre] = p.id);
-                    const campeonId = map[podium.first] || null;
-                    const subId = map[podium.second] || null;
-                    const tercerId = map[podium.third] || null;
-                    const cuartoId = map[podium.fourth] || null;
-                    const { error: rfErr } = await supabase.from('resultados_finales').upsert([{ torneo_id: torneoId, campeon_id: campeonId, subcampeon_id: subId, tercer_id: tercerId, cuarto_id: cuartoId, fecha_finalizacion: new Date().toISOString() }], { onConflict: 'torneo_id' });
-                    if (rfErr) console.error('Error upsert resultados_finales (fallback):', rfErr);
-                    else console.log('Resultados finales upsert (fallback) OK');
-                }
-            }
-
-            showSyncNotification('⬆️ Torneo subido a la base de datos');
-            alert('✅ Torneo subido correctamente: ' + nombre + '\nID: ' + torneoId);
-        } catch (error) {
-            console.error('Error subiendo torneo:', error);
-            alert('❌ Error al subir torneo: ' + (error.message || JSON.stringify(error)));
-        }
-    }
-
-    async function getUserTournaments() {
-        // Delegar a supabaseApi
-        if (window.supabaseApi && window.supabaseApi.getUserTournaments) {
-            return await window.supabaseApi.getUserTournaments(getCurrentUserId(), currentTournamentId);
-        }
-        // Fallback: original implementation
-        try {
-            const userId = getCurrentUserId();
-
-            const { data: arbitros, error: arbError } = await supabase
-                .from('arbitros')
-                .select('torneo_id')
-                .eq('usuario_id', userId);
-
-            if (arbError) throw arbError;
-
-            if (!arbitros || arbitros.length === 0) {
-                return { data: [], error: null };
-            }
-
-            const torneoIds = arbitros.map(a => a.torneo_id);
-
-            const { data: torneos, error: torneoError } = await supabase
-                .from('torneos')
-                .select('*')
-                .in('id', torneoIds)
-                .order('fecha_actualizacion', { ascending: false });
-
-            if (torneoError) throw torneoError;
-
-            const torneosConConteo = await Promise.all(torneos.map(async (t) => {
-                const { count, error: countError } = await supabase
-                    .from('participantes')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('torneo_id', t.id);
-
-                return {
-                    ...t,
-                    participantes_count: count || 0,
-                    es_actual: t.id === currentTournamentId
-                };
-            }));
-
-            return { data: torneosConConteo, error: null };
-        } catch (error) {
-            console.error('Error al obtener torneos:', error);
-            return { data: [], error };
-        }
-    }
-
-    async function showTournamentList() {
-        const modal = document.getElementById('tournamentListModal');
-        const container = document.getElementById('tournamentListContainer');
-
-        modal.classList.add('active');
-
-        container.innerHTML = `
-            <div style="text-align:center; padding:2rem; color:#4A4A6A;">
-                <div style="font-size:2rem; margin-bottom:0.5rem;">⏳</div>
-                Cargando torneos...
-            </div>
-        `;
-
-        const { data: torneos, error } = await getUserTournaments();
-
-        if (error) {
-            container.innerHTML = `
-                <div style="text-align:center; padding:2rem; color:#FF1744;">
-                    <div style="font-size:2rem; margin-bottom:0.5rem;">❌</div>
-                    Error al cargar torneos: ${error.message}
-                </div>
-            `;
-            return;
-        }
-
-        if (!torneos || torneos.length === 0) {
-            container.innerHTML = `
-                <div style="text-align:center; padding:2rem; color:#4A4A6A;">
-                    <div style="font-size:2rem; margin-bottom:0.5rem;">🏟️</div>
-                    No tienes torneos guardados.
-                    <div style="margin-top:0.5rem; font-size:0.8rem;">
-                        Crea uno nuevo o únete a un torneo existente.
-                    </div>
-                </div>
-            `;
-            return;
-        }
-
-        let html = '';
-        torneos.forEach((t) => {
-            const estado = t.finalizado ? 'finalizado' : 'activo';
-            const estadoLabel = t.finalizado ? '🏁 Finalizado' : '🔄 Activo';
-            const esActual = t.id === currentTournamentId;
-            const fecha = new Date(t.fecha_actualizacion || t.fecha_creacion);
-            const fechaStr = fecha.toLocaleDateString('es-ES', {
-                day: '2-digit', month: 'short', year: 'numeric'
-            });
-
-            html += `
-                <div class="tournament-list-item ${esActual ? 'active' : ''}" style="${esActual ? 'border-color: rgba(0, 255, 136, 0.3); background: rgba(0, 255, 136, 0.05);' : ''}">
-                    <div class="info">
-                        <div class="name">
-                            ${esActual ? '🟢 ' : ''}${t.nombre}
-                            ${esActual ? '<span style="font-size:0.6rem; color:#00FF88; margin-left:0.3rem;">(Actual)</span>' : ''}
-                        </div>
-                        <div class="details">
-                            <span>📋 <span class="codigo">${t.codigo}</span></span>
-                            <span>👥 ${t.participantes_count || 0} participantes</span>
-                            <span>📅 ${fechaStr}</span>
-                            <span class="status ${estado}">${estadoLabel}</span>
-                        </div>
-                    </div>
-                    <div style="display:flex; gap:0.3rem;">
-                        ${!esActual ? `<button class="btn-cargar" data-torneo-id="${t.id}">📂 Cargar</button>` : ''}
-                        ${t.finalizado ? `<button class="btn-ver-puntos" data-torneo-id="${t.id}">📈 Ver Puntos</button>` : ''}
-                        <button class="btn-eliminar" data-torneo-id="${t.id}">🗑️</button>
-                    </div>
-                </div>
-            `;
-        });
-
-        container.innerHTML = html;
-
-        container.querySelectorAll('.btn-cargar').forEach(btn => {
-            btn.addEventListener('click', async function () {
-                const torneoId = this.dataset.torneoId;
-                await loadTournamentById(torneoId);
-                document.getElementById('tournamentListModal').classList.remove('active');
-            });
-        });
-
-        container.querySelectorAll('.btn-eliminar').forEach(btn => {
-            btn.addEventListener('click', async function (e) {
-                e.stopPropagation();
-                const torneoId = this.dataset.torneoId;
-                const torneo = torneos.find(t => t.id === torneoId);
-
-                if (!confirm(`⚠️ ¿Eliminar el torneo "${torneo?.nombre}"?\n\nEsta acción eliminará todos los datos asociados.`)) {
-                    return;
-                }
-
-                await deleteTournament(torneoId);
-                showTournamentList();
-            });
-        });
-
-        // Botones: Ver Puntos (para torneos finalizados)
-        container.querySelectorAll('.btn-ver-puntos').forEach(btn => {
-            btn.addEventListener('click', async function (e) {
-                e.stopPropagation();
-                const torneoId = this.dataset.torneoId;
-                await loadTournamentScores(torneoId);
-                // Mantener modal abierto para permitir cargar o cerrar
-            });
-        });
-
-        const searchInput = document.getElementById('tournamentSearchInput');
-        if (searchInput) {
-            searchInput.value = '';
-            searchInput.addEventListener('input', function () {
-                const query = this.value.toLowerCase().trim();
-                const items = container.querySelectorAll('.tournament-list-item');
-                items.forEach(item => {
-                    const name = item.querySelector('.name')?.textContent?.toLowerCase() || '';
-                    const codigo = item.querySelector('.codigo')?.textContent?.toLowerCase() || '';
-                    const match = name.includes(query) || codigo.includes(query);
-                    item.style.display = match ? 'flex' : 'none';
-                });
-            });
-            setTimeout(() => searchInput.focus(), 100);
-        }
-    }
-
-    async function loadTournamentById(torneoId) {
-        try {
-            const { data: arbitro, error: arbError } = await supabase
-                .from('arbitros')
-                .select('*')
-                .eq('torneo_id', torneoId)
-                .eq('usuario_id', getCurrentUserId())
-                .maybeSingle();
-
-            if (arbError && arbError.code !== 'PGRST116') {
-                throw arbError;
-            }
-
-            if (!arbitro) {
-                const joinResult = await joinTournamentByCode(torneoId);
-                if (joinResult.error) {
-                    throw new Error('No tienes acceso a este torneo');
-                }
-            }
-
-            if (currentTournamentId) {
-                await saveFullStateToSupabase(true);
-            }
-
-            const result = await initTournamentFromSupabase(torneoId);
-
-            if (result.success) {
-                alert(`✅ Torneo cargado correctamente`);
-                showSyncNotification('✅ Torneo cargado');
-                renderAll();
-            } else {
-                throw new Error(result.error?.message || 'Error al cargar torneo');
-            }
-        } catch (error) {
-            console.error('Error al cargar torneo:', error);
-            alert('❌ Error al cargar el torneo: ' + error.message);
-        }
-    }
-
-    // Cargar solo la tabla de puntuaciones de un torneo finalizado (sin cambiar el torneo actual)
-    async function loadTournamentScores(torneoId) {
-        try {
-            // Obtener nombre del torneo
-            const { data: torneo, error: tErr } = await supabase.from('torneos').select('id, nombre').eq('id', torneoId).maybeSingle();
-            if (tErr) throw tErr;
-            if (!torneo) throw new Error('Torneo no encontrado');
-
-            // Intentar obtener puntos desde participantes.puntos_acumulados
-            const { data: participantes, error: pErr } = await supabase
-                .from('participantes')
-                .select('nombre, puntos_acumulados')
-                .eq('torneo_id', torneoId)
-                .order('puntos_acumulados', { ascending: false });
-
-            if (pErr) throw pErr;
-
-            // Si no hay puntos en la tabla participantes, intentar recuperar desde estado_completo
-            let rows = participantes || [];
-            if ((!rows || rows.length === 0) && (window.supabaseApi && window.supabaseApi.getTournamentJSON)) {
-                const jsonRes = await window.supabaseApi.getTournamentJSON(torneoId);
-                if (jsonRes && jsonRes.data) {
-                    const estado = jsonRes.data;
-                    if (estado && estado.participants) {
-                        rows = estado.participants.map(name => ({ nombre: name, puntos_acumulados: (estado.accumulatedPoints || {})[name] || 0 }));
-                    }
-                }
-            }
-
-            renderScoresTable(torneo.nombre, rows);
-            showSyncNotification('📈 Puntuaciones cargadas');
-        } catch (error) {
-            console.error('Error al cargar puntuaciones del torneo:', error);
-            alert('❌ Error al cargar puntuaciones: ' + error.message);
-        }
-    }
-
-    function renderScoresTable(tournamentNameToShow, rows) {
-        const container = document.getElementById('totalScoreTableContainer');
-        if (!container) return;
-
-        if (!rows || rows.length === 0) {
-            container.innerHTML = `<div class="empty-message">No hay participantes o puntos para este torneo.</div>`;
-            return;
-        }
-
-        // Ordenar por puntos desc
-        rows.sort((a, b) => (b.puntos_acumulados || 0) - (a.puntos_acumulados || 0));
-
-        let html = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h2 style="margin:0;">📊 Puntuaciones — ${escapeHtml(tournamentNameToShow || 'Torneo')}</h2>
-                <button class="btn btn-outline" id="clearScoresViewBtn">🔙 Volver</button>
-            </div>
-            <table class="score-table" style="width:100%; margin-top:0.6rem; border-collapse: collapse;">
-                <thead>
-                    <tr style="text-align:left; border-bottom:1px solid rgba(255,255,255,0.06);">
-                        <th style="padding:0.6rem; width:40px;">#</th>
-                        <th style="padding:0.6rem;">Participante</th>
-                        <th style="padding:0.6rem; width:140px;">Puntos</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-
-        rows.forEach((r, idx) => {
-            html += `
-                <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
-                    <td style="padding:0.6rem;">${idx + 1}</td>
-                    <td style="padding:0.6rem;">${escapeHtml(r.nombre || '')}</td>
-                    <td style="padding:0.6rem;">${r.puntos_acumulados || 0}</td>
-                </tr>
-            `;
-        });
-
-        html += `</tbody></table>`;
-        container.innerHTML = html;
-
-        const backBtn = document.getElementById('clearScoresViewBtn');
-        if (backBtn) {
-            backBtn.addEventListener('click', function () {
-                renderTotalScoreTable();
-            });
-        }
-    }
-
-    // helper para escapar HTML simple
-    function escapeHtml(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
-
-    // ============================================================
-    // Dropdown para cargar puntuaciones desde la tabla de puntuación
-    // ============================================================
-    async function populateScoreTournamentDropdown() {
-        const btn = document.getElementById('scoreTournamentDropdownBtn');
-        const menu = document.getElementById('scoreTournamentDropdownMenu');
-        if (!btn || !menu) return;
-
-        // Toggle visual
-        btn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            const isOpen = menu.style.display === 'block';
-            menu.style.display = isOpen ? 'none' : 'block';
-            btn.setAttribute('aria-expanded', String(!isOpen));
-        });
-
-        // Cerrar al click fuera
-        document.addEventListener('click', function (e) {
-            if (!btn.contains(e.target) && !menu.contains(e.target)) {
-                menu.style.display = 'none';
-                btn.setAttribute('aria-expanded', 'false');
-            }
-        });
-
-        // Cargar torneos (propios) y mostrarlos
-        const res = await getUserTournaments();
-        const torneos = res && res.data ? res.data : [];
-
-        if (!torneos || torneos.length === 0) {
-            menu.innerHTML = `<div style="color:#4A4A6A; padding:0.6rem;">No hay torneos guardados.</div>`;
-            return;
-        }
-
-        menu.innerHTML = torneos.map(t => {
-            const label = `${escapeHtml(t.nombre)}${t.finalizado ? ' (Finalizado)' : ''}`;
-            return `<div class="score-dropdown-item" data-id="${t.id}" style="padding:0.45rem 0.5rem; cursor:pointer; border-radius:6px;">${label}</div>`;
-        }).join('');
-
-        menu.querySelectorAll('.score-dropdown-item').forEach(item => {
-            item.addEventListener('click', async function (ev) {
-                ev.stopPropagation();
-                const torneoId = this.dataset.id;
-                const label = this.textContent || '';
-                // Cargar solo los puntajes
-                await loadTournamentScores(torneoId);
-                // Actualizar título en la caja de puntuaciones
-                const scoreTitle = document.getElementById('scoreTournamentName');
-                if (scoreTitle) scoreTitle.textContent = label;
-                // Cerrar menú
-                menu.style.display = 'none';
-                btn.setAttribute('aria-expanded', 'false');
-            });
-        });
-    }
-
-    async function deleteTournament(torneoId) {
-        try {
-            if (torneoId === currentTournamentId) {
-                if (!confirm('⚠️ Estás eliminando el torneo actual. ¿Continuar?')) {
-                    return;
-                }
-                await leaveCurrentTournament();
-            }
-
-            // Delegar eliminación a supabaseApi si está disponible
-            if (window.supabaseApi && window.supabaseApi.deleteTournament) {
-                const res = await window.supabaseApi.deleteTournament(torneoId);
-                if (res && res.error) throw res.error;
-            } else {
-                const { error } = await supabase.from('torneos').delete().eq('id', torneoId);
-                if (error) throw error;
-            }
-
-            showSyncNotification('🗑️ Torneo eliminado');
-            alert('✅ Torneo eliminado correctamente');
-            renderAll();
-        } catch (error) {
-            console.error('Error al eliminar torneo:', error);
-            alert('❌ Error al eliminar el torneo: ' + error.message);
-        }
-    }
-
-    async function checkTournamentStatus(torneoId) {
-        if (window.supabaseApi && window.supabaseApi.checkTournamentStatus) {
-            const res = await window.supabaseApi.checkTournamentStatus(torneoId);
-            return res && res.data ? res.data : null;
-        }
-
-        if (!torneoId) return null;
-
-        try {
-            const { data, error } = await supabase.from('torneos').select('id, nombre, codigo, finalizado, fecha_actualizacion').eq('id', torneoId).single();
-            if (error) throw error;
-            return data;
-        } catch (error) {
-            console.error('Error al verificar torneo:', error);
-            return null;
-        }
-    }
-
-    async function joinTournamentByCode(codigo) {
-        // Delegar a supabaseApi
-        if (window.supabaseApi && window.supabaseApi.joinTournamentByCode) {
-            return await window.supabaseApi.joinTournamentByCode(codigo, getCurrentUserId());
-        }
-
-        try {
-            const cleanCode = codigo.replace(/[\s-]/g, '').toUpperCase();
-
-            const { data: torneo, error: findError } = await supabase.from('torneos').select('*').eq('codigo', cleanCode).single();
-            if (findError) throw findError;
-            if (!torneo) throw new Error('Código inválido');
-
-            const { data: existing } = await supabase.from('arbitros').select('*').eq('torneo_id', torneo.id).eq('usuario_id', getCurrentUserId()).maybeSingle();
-            if (!existing) {
-                await addArbitro(torneo.id, 'arbitro');
-            }
-
-            return { data: torneo, error: null };
-        } catch (error) {
-            console.error('Error al unirse al torneo:', error);
-            return { data: null, error };
-        }
-    }
-
-    // ============================================================
-    // 15. MODAL DE NICKNAME
-    // ============================================================
-    function showNicknameModal() {
-        console.log('📋 Mostrando modal de nickname...');
-
-        const modal = document.getElementById('nicknameModal');
-        const input = document.getElementById('nicknameInput');
-        const confirmBtn = document.getElementById('confirmNicknameBtn');
-
-        if (!modal || !input || !confirmBtn) {
-            console.error('❌ Elementos del modal no encontrados en el DOM');
-            console.log('📋 modal:', modal);
-            console.log('📋 input:', input);
-            console.log('📋 confirmBtn:', confirmBtn);
-            return;
-        }
-
-        modal.style.display = 'flex';
-        modal.style.opacity = '1';
-        modal.style.pointerEvents = 'auto';
-        console.log('✅ Modal mostrado');
-
-        setTimeout(() => {
-            input.focus();
-            input.select();
-            console.log('⌨️ Input enfocado');
-        }, 100);
-
-        const confirmHandler = async function () {
-            console.log('📝 Intentando confirmar nickname...');
-            const nickname = input.value.trim();
-
-            if (!nickname || nickname.length < 2) {
-                console.warn('⚠️ Nickname demasiado corto');
-                input.style.borderColor = 'rgba(255, 23, 68, 0.5)';
-                input.placeholder = '❌ Mínimo 2 caracteres';
-                setTimeout(() => {
-                    input.style.borderColor = 'rgba(0, 255, 136, 0.15)';
-                    input.placeholder = 'Ej: Árbitro_123';
-                }, 2000);
-                return;
-            }
-
-            console.log('✅ Nickname válido:', nickname);
-            saveNickname(nickname);
-            console.log('💾 Nickname guardado en localStorage');
-
-            modal.style.display = 'none';
-            modal.style.opacity = '0';
-            modal.style.pointerEvents = 'none';
-            console.log('🔄 Modal ocultado');
-
-            try {
-                console.log('🔄 Inicializando autenticación...');
-                await initSupabaseAuth();
-                console.log('🔄 Inicializando app...');
-                await initializeAppAfterAuth();
-                console.log('✅ App inicializada correctamente');
-            } catch (error) {
-                console.error('❌ Error en la inicialización:', error);
-                alert('❌ Error al conectar con el servidor. Reintentando...');
-                modal.style.display = 'flex';
-                modal.style.opacity = '1';
-                modal.style.pointerEvents = 'auto';
-            }
-        };
-
-        const keyHandler = function (e) {
-            if (e.key === 'Enter') {
-                console.log('⌨️ Enter presionado');
-                confirmHandler();
-            }
-        };
-
-        // Limpiar eventos anteriores
-        confirmBtn.removeEventListener('click', confirmHandler);
-        input.removeEventListener('keypress', keyHandler);
-
-        // Agregar eventos nuevos
-        confirmBtn.addEventListener('click', confirmHandler);
-        input.addEventListener('keypress', keyHandler);
-    }
-
-    // ============================================================
-    // 16. EVENTO CREAR TORNEO (ÚNICO)
-    // ============================================================
-
-    createTournamentBtn.addEventListener('click', async function () {
-        if (currentTournamentId) {
+    // --- Crear torneo ---
+    createTournamentBtn.addEventListener('click', function () {
+        if (tournamentId) {
             if (!confirm('⚠️ Ya estás en un torneo. ¿Quieres crear uno nuevo?\n\nEsto desconectará el torneo actual.')) {
                 return;
             }
-            await leaveCurrentTournament();
+            // Guardar el torneo actual antes de crear uno nuevo
+            saveToLocalStorage();
         }
 
         const nombre = prompt('🏗️ Nombre del torneo:', 'Torneo BeybladeX');
         if (!nombre || nombre.trim() === '') return;
 
-        showSyncNotification('⏳ Creando torneo...');
-        const statusEl = document.getElementById('tournamentStatus');
-        if (statusEl) {
-            statusEl.textContent = '⏳ Creando...';
-            statusEl.className = 'tournament-status-indicator saving';
-        }
+        // Crear nuevo torneo
+        tournamentId = generateTournamentId();
+        tournamentName = nombre.trim();
+        participants = [];
+        versus = [];
+        matchHistory = [];
+        accumulatedPoints = {};
+        nextVersusId = 1;
+        currentPhase = 1;
+        tournamentWinner = null;
+        tournamentFinished = false;
+        knockoutRound = 0;
+        groupRound = 0;
+        preFinalMatch = null;
+        preFinalPlayed = false;
+        finalMatch = null;
+        finalPlayed = false;
+        semifinalLosers = [];
+        semifinalWinners = [];
+        podium = { first: null, second: null, third: null, fourth: null };
+        tournamentVisible = false;
+        selectedRound = 'all';
+        customQualifiedCount = 8;
+        qualifiedCountInput.value = 8;
 
-        try {
-            // Delegar creación a supabaseApi
-            let res;
-            if (window.supabaseApi && window.supabaseApi.createTournament) {
-                res = await window.supabaseApi.createTournament(nombre, getCurrentUserId(), customQualifiedCount);
-                if (res.error) throw res.error;
-                const torneo = res.data;
+        document.getElementById('tournamentSection').style.display = 'none';
+        renderAll();
+        saveToLocalStorage();
 
-                currentTournamentId = torneo.id;
-                currentTournamentCode = torneo.codigo;
-                tournamentName = torneo.nombre;
-                tournamentVisible = true;
+        alert(`✅ Torneo "${nombre}" creado!\n\n📝 Ahora puedes agregar participantes y empezar el torneo.`);
 
-                startAutoSync(600);
-                subscribeToTournament(torneo.id);
-
-                updateTournamentIndicator();
+        const addInitial = confirm('¿Quieres agregar participantes ahora?');
+        if (addInitial) {
+            const names = prompt('Ingresa los nombres separados por comas:\n(ej: Ana, Carlos, Marta)');
+            if (names) {
+                const nameList = names.split(',').map(n => n.trim()).filter(n => n);
+                for (const name of nameList) {
+                    if (!participantExistsByName(name)) {
+                        addParticipant(name);
+                    }
+                }
                 renderAll();
                 saveToLocalStorage();
-
-                if (statusEl) {
-                    statusEl.textContent = '✅ Guardado';
-                    statusEl.className = 'tournament-status-indicator saved';
-                }
-
-                showSyncNotification('✅ Torneo creado');
-
-                alert(`✅ Torneo "${nombre}" creado!\n\n📋 Código: ${torneo.codigo}\n\n🔗 Comparte este código con otros árbitros.\n\n📝 Ahora puedes agregar participantes y empezar el torneo.`);
-
-                const addInitial = confirm('¿Quieres agregar participantes ahora?');
-                if (addInitial) {
-                    const names = prompt('Ingresa los nombres separados por comas:\n(ej: Ana, Carlos, Marta)');
-                    if (names) {
-                        const nameList = names.split(',').map(n => n.trim()).filter(n => n);
-                        for (const name of nameList) {
-                            if (!participants.includes(name)) {
-                                participants.push(name);
-                                accumulatedPoints[name] = 0;
-                            }
-                        }
-                        await saveFullStateToSupabase(true);
-                        renderAll();
-                        alert(`✅ ${nameList.length} participantes agregados.`);
-                    }
-                }
-
-            } else {
-                // Fallback to original inline behavior
-                const codigo = generateUniqueCode();
-
-                const { data: existing, error: checkError } = await supabase.from('torneos').select('codigo').eq('codigo', codigo).maybeSingle();
-                if (checkError && checkError.code !== 'PGRST116') throw checkError;
-                if (existing) {
-                    const nuevoCodigo = generateUniqueCode();
-                    return crearTorneoConCodigo(nombre, nuevoCodigo);
-                }
-
-                const { data: torneo, error: createError } = await supabase.from('torneos').insert([{ nombre: nombre.trim(), codigo: codigo, configuracion: { clasificados: customQualifiedCount || 8 }, estado: 'activo', fase_actual: 1, ronda_grupo: 0, ronda_eliminatoria: 0, finalizado: false, creado_por: getCurrentUserId() }]).select().single();
-                if (createError) {
-                    if (createError.code === '42501') {
-                        alert('⚠️ Error de permisos. El administrador debe configurar las políticas RLS en Supabase.');
-                        showSyncNotification('❌ Error de permisos RLS');
-                        if (statusEl) {
-                            statusEl.textContent = '❌ RLS Error';
-                            statusEl.className = 'tournament-status-indicator error';
-                        }
-                        return;
-                    }
-                    throw createError;
-                }
-
-                await addArbitro(torneo.id, 'admin');
-
-                currentTournamentId = torneo.id;
-                currentTournamentCode = torneo.codigo;
-                tournamentName = torneo.nombre;
-                tournamentVisible = true;
-
-                startAutoSync(600);
-                subscribeToTournament(torneo.id);
-
-                updateTournamentIndicator();
-                renderAll();
-                saveToLocalStorage();
-
-                if (statusEl) {
-                    statusEl.textContent = '✅ Guardado';
-                    statusEl.className = 'tournament-status-indicator saved';
-                }
-
-                showSyncNotification('✅ Torneo creado');
-
-                alert(`✅ Torneo "${nombre}" creado!\n\n📋 Código: ${codigo}\n\n🔗 Comparte este código con otros árbitros.\n\n📝 Ahora puedes agregar participantes y empezar el torneo.`);
-
-                const addInitial = confirm('¿Quieres agregar participantes ahora?');
-                if (addInitial) {
-                    const names = prompt('Ingresa los nombres separados por comas:\n(ej: Ana, Carlos, Marta)');
-                    if (names) {
-                        const nameList = names.split(',').map(n => n.trim()).filter(n => n);
-                        for (const name of nameList) {
-                            if (!participants.includes(name)) {
-                                participants.push(name);
-                                accumulatedPoints[name] = 0;
-                            }
-                        }
-                        await saveFullStateToSupabase(true);
-                        renderAll();
-                        alert(`✅ ${nameList.length} participantes agregados.`);
-                    }
-                }
-            }
-
-        } catch (error) {
-            console.error('Error al crear torneo:', error);
-
-            let errorMessage = error.message;
-            if (error.code === '42501') {
-                errorMessage = 'Error de permisos RLS. Por favor, configura las políticas en Supabase.';
-            }
-
-            alert('❌ Error al crear el torneo: ' + errorMessage);
-            showSyncNotification('❌ Error al crear');
-
-            if (statusEl) {
-                statusEl.textContent = '❌ Error';
-                statusEl.className = 'tournament-status-indicator error';
+                alert(`✅ ${nameList.length} participantes agregados.`);
             }
         }
     });
 
-    async function crearTorneoConCodigo(nombre, codigo) {
-        // Delegar a supabaseApi
-        if (window.supabaseApi && window.supabaseApi.crearTorneoConCodigo) {
-            return await window.supabaseApi.crearTorneoConCodigo(nombre, codigo, getCurrentUserId());
-        }
-
-        try {
-            const { data: torneo, error } = await supabase.from('torneos').insert([{ nombre: nombre.trim(), codigo: codigo, configuracion: { clasificados: customQualifiedCount || 8 }, estado: 'activo', fase_actual: 1, ronda_grupo: 0, ronda_eliminatoria: 0, finalizado: false, creado_por: getCurrentUserId() }]).select().single();
-            if (error) throw error;
-            return torneo;
-        } catch (error) {
-            const nuevoCodigo = generateUniqueCode();
-            return crearTorneoConCodigo(nombre, nuevoCodigo);
-        }
-    }
-
-    // ============================================================
-    // 17. EVENT LISTENERS
-    // ============================================================
     // --- Listar torneos ---
-    if (listTournamentsBtn) {
-        listTournamentsBtn.addEventListener('click', showTournamentList);
-    } else {
-        console.warn('⚠️ Botón "Mis Torneos" no encontrado en el DOM');
-    }
-    // --- Cerrar modal de lista ---
-    const closeTournamentListModal = document.getElementById('closeTournamentListModal');
-    if (closeTournamentListModal) {
-        closeTournamentListModal.addEventListener('click', function () {
-            const modal = document.getElementById('tournamentListModal');
-            if (modal) modal.classList.remove('active');
-        });
-    }
-    // --- Cerrar modal al hacer clic fuera ---
-    const tournamentListModal = document.getElementById('tournamentListModal');
-    if (tournamentListModal) {
-        tournamentListModal.addEventListener('click', function (e) {
-            if (e.target === this) {
-                this.classList.remove('active');
-            }
-        });
-    }
+    listTournamentsBtn.addEventListener('click', showTournamentList);
 
-    // --- Refrescar lista ---
-    const refreshTournamentListBtn = document.getElementById('refreshTournamentListBtn');
-    if (refreshTournamentListBtn) {
-        refreshTournamentListBtn.addEventListener('click', showTournamentList);
-    }
+    // --- Cerrar modal de lista ---
+    document.getElementById('closeTournamentListModal')?.addEventListener('click', function () {
+        document.getElementById('tournamentListModal').classList.remove('active');
+    });
+
+    document.getElementById('tournamentListModal')?.addEventListener('click', function (e) {
+        if (e.target === this) {
+            this.classList.remove('active');
+        }
+    });
+
+    document.getElementById('refreshTournamentListBtn')?.addEventListener('click', showTournamentList);
 
     // --- Switch de fase ---
     document.getElementById('phaseSwitch').addEventListener('change', function () {
@@ -3357,16 +2230,14 @@
             alert('Escribe un nombre.');
             return;
         }
-        if (participants.includes(name)) {
+        if (participantExistsByName(name)) {
             alert(`"${name}" ya está en la lista.`);
             return;
         }
-        participants.push(name);
-        accumulatedPoints[name] = 0;
+        addParticipant(name);
         newParticipantInput.value = '';
         renderAll();
         saveToLocalStorage();
-        debounceSave();
     });
 
     newParticipantInput.addEventListener('keypress', (e) => {
@@ -3379,16 +2250,14 @@
         const nameList = names.split(',').map(n => n.trim()).filter(n => n);
         let added = 0;
         nameList.forEach(name => {
-            if (!participants.includes(name) && name) {
-                participants.push(name);
-                accumulatedPoints[name] = 0;
+            if (!participantExistsByName(name) && name) {
+                addParticipant(name);
                 added++;
             }
         });
         if (added > 0) {
             renderAll();
             saveToLocalStorage();
-            debounceSave();
             alert(`✅ Se agregaron ${added} participantes.`);
         } else {
             alert('No se agregaron nuevos participantes.');
@@ -3416,21 +2285,47 @@
             alert('Solo disponible en fase de grupos.');
             return;
         }
-        if (versus.length === 0) {
-            alert('No hay enfrentamientos para reordenar.');
+        const roundToReshuffle = selectedRound !== 'all' ? selectedRound : groupRound;
+        const pendingMatches = versus.filter(v =>
+            v.round === roundToReshuffle && v.scoreA === 0 && v.scoreB === 0
+        );
+        if (pendingMatches.length < 2) {
+            alert('Se necesitan al menos dos enfrentamientos 0-0 en la ronda seleccionada para cambiar los cruces.');
             return;
         }
-        if (!confirm('⚠️ ¿Reordenar los enfrentamientos actuales?\n\nSe mantendrán las puntuaciones ya asignadas.')) return;
+        if (!confirm('⚠️ ¿Cambiar los cruces 0-0 de esta ronda?\n\nSolo se modificarán los enfrentamientos sin puntos; los ya jugados permanecerán intactos.')) return;
 
-        const shuffledVersus = [...versus];
-        for (let i = shuffledVersus.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffledVersus[i], shuffledVersus[j]] = [shuffledVersus[j], shuffledVersus[i]];
+        const players = pendingMatches.flatMap(match => ([
+            { id: match.playerAId || getParticipantIdByName(match.playerA), name: match.playerA },
+            { id: match.playerBId || getParticipantIdByName(match.playerB), name: match.playerB }
+        ]));
+        const pairKey = pair => [String(pair.playerAId), String(pair.playerBId)].sort().join('|');
+        const originalKeys = pendingMatches.map(pairKey);
+        let pairings = [];
+        for (let attempt = 0; attempt < 30; attempt++) {
+            const candidate = generatePairings(players);
+            const candidateKeys = candidate.map(pairKey);
+            const changed = candidateKeys.some((key, index) => key !== originalKeys[index]);
+            const movedOldPair = candidateKeys.some((key, index) => originalKeys.includes(key) && key !== originalKeys[index]);
+            if (changed && !movedOldPair) {
+                pairings = candidate;
+                break;
+            }
         }
-        versus = shuffledVersus;
+        if (pairings.length === 0) {
+            alert('No se pudo generar una combinación de cruces distinta. Inténtalo nuevamente.');
+            return;
+        }
+
+        pendingMatches.forEach((match, index) => {
+            const pairing = pairings[index];
+            match.playerA = pairing.playerA;
+            match.playerB = pairing.playerB;
+            match.playerAId = pairing.playerAId;
+            match.playerBId = pairing.playerBId;
+        });
         renderAll();
         saveToLocalStorage();
-        debounceSave();
     });
 
     applyQualifiedBtn.addEventListener('click', function () {
@@ -3448,7 +2343,6 @@
         customQualifiedCount = val;
         renderAll();
         saveToLocalStorage();
-        debounceSave();
         alert(`✅ Clasificados establecidos en ${customQualifiedCount}.`);
     });
 
@@ -3526,45 +2420,8 @@
     document.getElementById('playFinalBtn').addEventListener('click', markFinalPlayed);
     document.getElementById('autoFinalBtn').addEventListener('click', autoFinishFinal);
 
-    document.getElementById('refreshDataBtn')?.addEventListener('click', async function () {
-        showSyncNotification('⏳ Forzando recarga de datos...');
-        const result = await syncFromSupabase(true);
-        if (result) {
-            showSyncNotification('✅ Datos recargados correctamente');
-        } else {
-            showSyncNotification('⚠️ No se encontraron cambios');
-        }
-    });
     // --- Reset y archivar ---
-    resetAllBtn.addEventListener('click', function () {
-        if (!confirm('⚠️ ¿Reiniciar el torneo?\n\nSe eliminarán TODOS los enfrentamientos y el progreso.\nLos participantes se mantienen.')) return;
-
-        versus = [];
-        matchHistory = [];
-        accumulatedPoints = {};
-        nextVersusId = 1;
-        currentPhase = 1;
-        tournamentWinner = null;
-        tournamentFinished = false;
-        knockoutRound = 0;
-        groupRound = 0;
-        selectedRound = 'all';
-        preFinalMatch = null;
-        preFinalPlayed = false;
-        finalMatch = null;
-        finalPlayed = false;
-        semifinalLosers = [];
-        semifinalWinners = [];
-        podium = { first: null, second: null, third: null, fourth: null };
-        tournamentVisible = false;
-
-        participants.forEach(p => accumulatedPoints[p] = 0);
-
-        renderAll();
-        saveToLocalStorage();
-        debounceSave();
-        alert('✅ Torneo reiniciado. Los participantes se mantienen.');
-    });
+    resetAllBtn.addEventListener('click', resetTournament);
 
     clearVersusBtn.addEventListener('click', function () {
         if (versus.length === 0 && !preFinalMatch && !finalMatch) {
@@ -3587,12 +2444,13 @@
         recalculateAccumulatedPoints();
         renderAll();
         saveToLocalStorage();
-        debounceSave();
     });
 
     // --- Import/Export ---
     exportDataBtn.addEventListener('click', function () {
         const data = {
+            tournamentId,
+            tournamentName,
             participants,
             versus,
             matchHistory,
@@ -3610,13 +2468,14 @@
             preFinalPlayed,
             finalMatch,
             finalPlayed,
-            podium
+            podium,
+            tournamentVisible
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `torneo_${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = `torneo_${tournamentName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
     });
@@ -3635,6 +2494,8 @@
                         alert('Archivo inválido. Faltan datos requeridos.');
                         return;
                     }
+                    tournamentId = data.tournamentId || generateTournamentId();
+                    tournamentName = data.tournamentName || 'Torneo Importado';
                     participants = data.participants || [];
                     versus = data.versus || [];
                     matchHistory = data.matchHistory || [];
@@ -3653,15 +2514,17 @@
                     finalMatch = data.finalMatch || null;
                     finalPlayed = data.finalPlayed || false;
                     podium = data.podium || { first: null, second: null, third: null, fourth: null };
+                    tournamentVisible = data.tournamentVisible || false;
+
+                    ensureParticipantsObjects();
                     participants.forEach(p => {
-                        if (!(p in accumulatedPoints)) accumulatedPoints[p] = 0;
+                        if (!(p.id in accumulatedPoints)) accumulatedPoints[p.id] = accumulatedPoints[p.name] || 0;
                     });
                     selectedRound = 'all';
                     qualifiedCountInput.value = customQualifiedCount;
                     recalculateAccumulatedPoints();
                     renderAll();
                     saveToLocalStorage();
-                    debounceSave();
                     alert('✅ Datos importados correctamente.');
                 } catch (err) {
                     alert('❌ Error al importar: ' + err.message);
@@ -3672,205 +2535,17 @@
         }
     });
 
-    // --- Sincronización forzada ---
-    document.getElementById('forceSyncBtn')?.addEventListener('click', async function () {
-        showSyncNotification('⏳ Sincronizando...');
-        await saveFullStateToSupabase(true);
-        await syncFromSupabase();
-        showSyncNotification('✅ Sincronización completa');
-    });
-
-    // --- Listar torneos ---
-    // ANTES - Esto falla si el elemento no existe
-    document.getElementById('listTournamentsBtn').addEventListener('click', showTournamentList);
-
-    document.getElementById('closeTournamentListModal').addEventListener('click', function () {
-        document.getElementById('tournamentListModal').classList.remove('active');
-    });
-
-    document.getElementById('tournamentListModal').addEventListener('click', function (e) {
-        if (e.target === this) {
-            this.classList.remove('active');
-        }
-    });
-
-    document.getElementById('refreshTournamentListBtn').addEventListener('click', showTournamentList);
-
-    // --- Descargar torneo como JSON ---
-    const downloadTournamentBtn = document.getElementById('downloadTournamentBtn');
-    if (downloadTournamentBtn) {
-        downloadTournamentBtn.addEventListener('click', downloadTournamentJSON);
-    }
-
-    // --- Importar torneo desde JSON ---
-    const importTournamentBtn = document.getElementById('importTournamentBtn');
-    if (importTournamentBtn) {
-        importTournamentBtn.addEventListener('click', function () {
-            const fileInput = document.createElement('input');
-            fileInput.type = 'file';
-            fileInput.accept = '.json';
-            fileInput.onchange = async function (e) {
-                const file = e.target.files[0];
-                if (!file) return;
-                
-                try {
-                    const text = await file.text();
-                    const jsonData = JSON.parse(text);
-                    await importTournamentJSON(jsonData);
-                } catch (error) {
-                    console.error('Error al importar:', error);
-                    showSyncNotification('❌ Archivo JSON inválido');
-                }
-            };
-            fileInput.click();
-        });
-    }
-    joinTournamentBtn.addEventListener('click', async function () {
-        if (currentTournamentId) {
-            if (!confirm('⚠️ Ya estás en un torneo. ¿Quieres salir y unirte a otro?')) {
-                return;
-            }
-            await leaveCurrentTournament();
-        }
-
-        const codigo = prompt('Ingresa el código del torneo (ej: BEY-420 o BEY420):');
-        if (!codigo) return;
-
-        // Limpiar código: remover espacios, guiones y convertir a mayúsculas
-        const cleanCode = codigo.replace(/[\s-]/g, '').toUpperCase();
-        console.log('🔍 Buscando torneo con código:', cleanCode);
-
-        try {
-            // Buscar el torneo en Supabase
-            let { data: torneo, error } = await supabase
-                .from('torneos')
-                .select('*')
-                .eq('codigo', cleanCode)
-                .single();
-
-            if (error || !torneo) {
-                console.warn('⚠️ No encontrado con código limpio, probando con formato con guión...');
-
-                // Intentar buscar con formato con guión
-                const formattedCode = cleanCode.slice(0, 3) + '-' + cleanCode.slice(3);
-                console.log('🔍 Intentando con formato:', formattedCode);
-
-                const { data: torneoConFormato, error: error2 } = await supabase
-                    .from('torneos')
-                    .select('*')
-                    .eq('codigo', formattedCode)
-                    .single();
-
-                if (error2 || !torneoConFormato) {
-                    console.error('❌ Error al buscar torneo:', error || error2);
-                    alert('❌ Código inválido. Verifica el código e intenta de nuevo.\n\n' +
-                        '💡 El código tiene formato: XXX-XXX (ej: BEY-420)');
-                    return;
-                }
-
-                // Asignar el torneo encontrado con formato
-                torneo = torneoConFormato;
-            }
-
-            console.log('✅ Torneo encontrado:', torneo);
-
-            // Verificar si ya es miembro
-            const userId = getCurrentUserId();
-            const { data: existing, error: checkError } = await supabase
-                .from('arbitros')
-                .select('*')
-                .eq('torneo_id', torneo.id)
-                .eq('usuario_id', userId)
-                .maybeSingle();
-
-            if (existing) {
-                alert('⚠️ Ya eres árbitro en este torneo.');
-                // Cargar el torneo
-                const result = await initTournamentFromSupabase(torneo.id, torneo.codigo);
-                if (result.success) {
-                    renderAll();
-                }
-                return;
-            }
-
-            // Agregar como árbitro
-            await addArbitro(torneo.id, 'arbitro');
-
-            alert(`✅ Te has unido al torneo "${torneo.nombre}"`);
-
-            // Cargar el torneo
-            const result = await initTournamentFromSupabase(torneo.id, torneo.codigo);
-            if (result.success) {
-                renderAll();
-                console.log('✅ Torneo cargado correctamente');
-            }
-
-        } catch (error) {
-            console.error('❌ Error al unirse al torneo:', error);
-            alert('❌ Error al unirse al torneo: ' + error.message);
-        }
-    });
     // ============================================================
-    // 18. INICIALIZACIÓN
+    // 17. INICIALIZACIÓN
     // ============================================================
-
-    async function initializeApp() {
-        console.log('🚀 Iniciando aplicación...');
-
-        try {
-            // 1. Verificar conexión a Supabase
-            console.log('📡 Verificando conexión a Supabase...');
-            const connected = await testSupabaseConnection();
-
-            if (connected) {
-                console.log('✅ Supabase listo para usar');
-            } else {
-                console.warn('⚠️ Verifica tus credenciales de Supabase');
-            }
-
-            // 2. Verificar si hay nickname guardado
-            console.log('👤 Verificando nickname en localStorage...');
-            const nickname = getNickname();
-            console.log('📋 Nickname encontrado:', nickname);
-
-            if (!nickname) {
-                console.log('❌ No hay nickname, mostrando modal...');
-                showNicknameModal();
-            } else {
-                console.log('✅ Nickname encontrado:', nickname);
-                currentUserNickname = nickname;
-
-                console.log('🔄 Inicializando autenticación...');
-                await initSupabaseAuth();
-
-                console.log('🔄 Inicializando la aplicación...');
-                await initializeAppAfterAuth();
-
-                console.log('✅ Aplicación inicializada correctamente');
-            }
-        } catch (error) {
-            console.error('❌ Error en initializeApp:', error);
-            console.log('🔄 Mostrando modal de nickname por error...');
-            showNicknameModal();
-        }
-    }
 
     initializeApp();
 
     setInterval(() => {
         saveToLocalStorage();
-    }, 15000);
+    }, 30000);
 
-    window.__app = {
-        getCurrentUserId,
-        getCurrentUserName,
-        getNickname,
-        saveNickname,
-        supabase,
-        currentUserNickname,
-        currentUserId
-    };
-
+    // Exponer estado para debugging
     window.__state = {
         participants,
         versus,
@@ -3879,10 +2554,8 @@
         currentPhase,
         selectedRound,
         customQualifiedCount,
-        currentTournamentId,
-        tournamentName,
-        currentUserNickname,
-        currentUserId
+        tournamentId,
+        tournamentName
     };
 
 })();
