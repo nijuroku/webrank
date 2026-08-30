@@ -296,10 +296,10 @@
     function saveTournamentToList() {
         try {
             let list = getTournamentList();
-            
+
             // Buscar si ya existe este torneo
             const existingIndex = list.findIndex(t => t.id === tournamentId);
-            
+
             const entry = {
                 id: tournamentId || generateTournamentId(),
                 name: tournamentName,
@@ -1920,44 +1920,112 @@
         saveToLocalStorage();
         alert('✅ Torneo reiniciado. Los participantes se mantienen.');
     }
-
     // ============================================================
     // 14. FUNCIONES DE LISTA DE TORNEOS
     // ============================================================
 
-    function showTournamentList() {
-        const modal = document.getElementById('tournamentListModal');
-        const container = document.getElementById('tournamentListContainer');
+    // NUEVA: Función para obtener Gists desde la API de Vercel
+    async function fetchGistsFromAPI() {
+        try {
+            const loadingIndicator = document.getElementById('gistLoadingIndicator');
+            if (loadingIndicator) loadingIndicator.style.display = 'block';
 
-        modal.classList.add('active');
-        const list = getTournamentList();
+            console.log('📡 Solicitando Gists al servidor...');
 
-        if (list.length === 0) {
-            container.innerHTML = `
-                <div style="text-align:center; padding:2rem; color:#4A4A6A;">
-                    <div style="font-size:2rem; margin-bottom:0.5rem;">🏟️</div>
-                    No tienes torneos guardados.
-                    <div style="margin-top:0.5rem; font-size:0.8rem;">
-                        Crea uno nuevo desde el botón "Crear torneo".
-                    </div>
+            // Llamar a nuestra API de Vercel
+            const response = await fetch('/api/gists');
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log('📋 Datos recibidos:', data);
+
+            if (loadingIndicator) loadingIndicator.style.display = 'none';
+
+            if (!data.success) {
+                throw new Error(data.error || 'Error desconocido');
+            }
+
+            return data.gists || [];
+
+        } catch (error) {
+            console.error('❌ Error al obtener Gists:', error);
+            const loadingIndicator = document.getElementById('gistLoadingIndicator');
+            if (loadingIndicator) loadingIndicator.style.display = 'none';
+
+            // Mostrar mensaje de error amigable
+            const container = document.getElementById('tournamentListContainer');
+            if (container) {
+                container.innerHTML = `
+                <div style="text-align:center; padding:1rem; color:#FF1744;">
+                    <div style="font-size:2rem; margin-bottom:0.5rem;">⚠️</div>
+                    <p>No se pudieron cargar los Gists: ${error.message}</p>
+                    <p style="font-size:0.8rem; color:#4A4A6A; margin-top:0.5rem;">
+                        💡 Verifica que tu usuario de GitHub tenga Gists públicos con archivos .json
+                    </p>
                 </div>
             `;
-            return;
+            }
+            return [];
+        }
+    }
+
+    // Función modificada: showTournamentList con soporte para Gists
+    async function showTournamentList() {
+        const modal = document.getElementById('tournamentListModal');
+        const container = document.getElementById('tournamentListContainer');
+        const loadingIndicator = document.getElementById('gistLoadingIndicator');
+
+        modal.classList.add('active');
+
+        // Mostrar indicador de carga
+        if (loadingIndicator) loadingIndicator.style.display = 'block';
+        container.innerHTML = `
+        <div style="text-align:center; padding:2rem; color:#4A4A6A;">
+            <div style="font-size:2rem; margin-bottom:0.5rem;">⏳</div>
+            Cargando torneos...
+        </div>
+    `;
+
+        // 1. Obtener torneos locales
+        const localList = getTournamentList();
+
+        // 2. Obtener Gists públicos
+        let gistList = [];
+        try {
+            gistList = await fetchGistsFromAPI();
+        } catch (error) {
+            console.warn('Error al cargar Gists:', error);
         }
 
+        if (loadingIndicator) loadingIndicator.style.display = 'none';
+
+        // 3. Construir la vista
         let html = '';
-        const sorted = list.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-        sorted.forEach((t) => {
-            const estado = t.finalizado ? 'finalizado' : 'activo';
-            const estadoLabel = t.finalizado ? '🏁 Finalizado' : '🔄 Activo';
-            const esActual = t.id === tournamentId;
-            const fecha = new Date(t.fecha);
-            const fechaStr = fecha.toLocaleDateString('es-ES', {
-                day: '2-digit', month: 'short', year: 'numeric'
-            });
-
+        // Sección: Torneos locales
+        if (localList.length > 0) {
             html += `
+            <div style="margin-bottom: 1rem;">
+                <div style="font-size:0.8rem; color:#00FF88; margin-bottom:0.5rem; display:flex; align-items:center; gap:0.5rem;">
+                    <span>📁</span> Torneos guardados localmente
+                    <span style="font-size:0.65rem; color:#4A4A6A;">(${localList.length})</span>
+                </div>
+        `;
+
+            const sorted = localList.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+            sorted.forEach((t) => {
+                const estado = t.finalizado ? 'finalizado' : 'activo';
+                const estadoLabel = t.finalizado ? '🏁 Finalizado' : '🔄 Activo';
+                const esActual = t.id === tournamentId;
+                const fecha = new Date(t.fecha);
+                const fechaStr = fecha.toLocaleDateString('es-ES', {
+                    day: '2-digit', month: 'short', year: 'numeric'
+                });
+
+                html += `
                 <div class="tournament-list-item ${esActual ? 'active' : ''}" style="${esActual ? 'border-color: rgba(0, 255, 136, 0.3); background: rgba(0, 255, 136, 0.05);' : ''}">
                     <div class="info">
                         <div class="name">
@@ -1976,11 +2044,72 @@
                     </div>
                 </div>
             `;
-        });
+            });
+
+            html += `</div>`;
+        }
+
+        // Sección: Gists públicos
+        if (gistList.length > 0) {
+            html += `
+            <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05);">
+                <div style="font-size:0.8rem; color:#00D4FF; margin-bottom:0.5rem; display:flex; align-items:center; gap:0.5rem;">
+                    <span>☁️</span> Torneos en GitHub Gist
+                    <span style="font-size:0.65rem; color:#4A4A6A;">(${gistList.length})</span>
+                </div>
+        `;
+
+            gistList.forEach((gist) => {
+                const fecha = new Date(gist.updated);
+                const fechaStr = fecha.toLocaleDateString('es-ES', {
+                    day: '2-digit', month: 'short', year: 'numeric'
+                });
+
+                html += `
+                <div class="tournament-list-item" style="border-color: rgba(0, 212, 255, 0.1);">
+                    <div class="info">
+                        <div class="name" style="color: #00D4FF;">
+                            📄 ${gist.name}
+                        </div>
+                        <div class="details">
+                            <span>📅 ${fechaStr}</span>
+                            <span>🔗 <a href="${gist.url}" target="_blank" style="color:#4A4A6A; text-decoration:underline;">Ver en GitHub</a></span>
+                            ${gist.isPublic ? '<span style="color:#00FF88;">🔓 Público</span>' : ''}
+                        </div>
+                    </div>
+                    <button class="btn-cargar" data-gist-url="${gist.rawUrl}" style="border-color: rgba(0, 212, 255, 0.2); color: #00D4FF;">
+                        📂 Cargar
+                    </button>
+                </div>
+            `;
+            });
+
+            html += `</div>`;
+        }
+
+        // Si no hay nada
+        if (localList.length === 0 && gistList.length === 0) {
+            html = `
+            <div style="text-align:center; padding:2rem; color:#4A4A6A;">
+                <div style="font-size:2rem; margin-bottom:0.5rem;">🏟️</div>
+                No tienes torneos guardados.
+                <div style="margin-top:0.5rem; font-size:0.8rem;">
+                    Crea uno nuevo desde el botón "Crear torneo" o 
+                    <button class="btn btn-sm btn-outline" id="refreshGistsFromEmptyBtn" 
+                        style="border-color: rgba(0, 212, 255, 0.2); color: #00D4FF;">
+                        ☁️ cargar desde GitHub
+                    </button>
+                </div>
+            </div>
+        `;
+        }
 
         container.innerHTML = html;
 
-        container.querySelectorAll('.btn-cargar').forEach(btn => {
+        // === EVENT LISTENERS ===
+
+        // Cargar torneo local
+        container.querySelectorAll('.btn-cargar[data-torneo-id]').forEach(btn => {
             btn.addEventListener('click', function () {
                 const torneoId = this.dataset.torneoId;
                 if (loadTournamentById(torneoId)) {
@@ -1992,11 +2121,24 @@
             });
         });
 
+        // Cargar desde Gist
+        container.querySelectorAll('.btn-cargar[data-gist-url]').forEach(btn => {
+            btn.addEventListener('click', async function () {
+                const url = this.dataset.gistUrl;
+                if (url) {
+                    document.getElementById('urlInput').value = url;
+                    await loadTournamentFromUrl();
+                    document.getElementById('tournamentListModal').classList.remove('active');
+                }
+            });
+        });
+
+        // Eliminar torneo local
         container.querySelectorAll('.btn-eliminar').forEach(btn => {
             btn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 const torneoId = this.dataset.torneoId;
-                const torneo = sorted.find(t => t.id === torneoId);
+                const torneo = localList.find(t => t.id === torneoId);
 
                 if (!confirm(`⚠️ ¿Eliminar el torneo "${torneo?.name}"?\n\nEsta acción eliminará todos los datos asociados.`)) {
                     return;
@@ -2006,7 +2148,6 @@
                     if (!confirm('⚠️ Estás eliminando el torneo actual. ¿Continuar?')) {
                         return;
                     }
-                    // Limpiar estado actual
                     tournamentId = null;
                     participants = [];
                     versus = [];
@@ -2024,6 +2165,12 @@
             });
         });
 
+        // Botón para recargar Gists desde el mensaje vacío
+        document.getElementById('refreshGistsFromEmptyBtn')?.addEventListener('click', function () {
+            showTournamentList();
+        });
+
+        // Búsqueda
         const searchInput = document.getElementById('tournamentSearchInput');
         if (searchInput) {
             searchInput.value = '';
@@ -2040,6 +2187,11 @@
         }
     }
 
+    // NUEVO: Event listener para recargar Gists manualmente
+    document.getElementById('refreshGistsBtn')?.addEventListener('click', function () {
+        showTournamentList();
+    });
+    
     // ============================================================
     // 15. FUNCIONES DE INICIALIZACIÓN
     // ============================================================
@@ -2534,6 +2686,263 @@
             this.value = '';
         }
     });
+
+    // ============================================================
+    // MODAL DE CARGAR DESDE URL
+    // ============================================================
+    // ============================================================
+    // FUNCIÓN DE NOTIFICACIÓN (REEMPLAZO PARA showSyncNotification)
+    // ============================================================
+    // ============================================================
+    // FUNCIÓN DE IMPORTACIÓN DE TORNEO DESDE JSON
+    // ============================================================
+
+    async function importTournamentJSON(jsonData) {
+        try {
+            if (!jsonData || typeof jsonData !== 'object') {
+                throw new Error('Formato JSON inválido');
+            }
+
+            if (!jsonData.participants || !Array.isArray(jsonData.participants)) {
+                throw new Error('JSON debe contener array de participants');
+            }
+
+            console.log('📥 Importando torneo:', jsonData.tournamentName || 'Sin nombre');
+
+            // Guardar el torneo actual antes de importar
+            if (tournamentId) {
+                saveToLocalStorage();
+            }
+
+            // Cargar datos del JSON
+            tournamentId = jsonData.tournamentId || generateTournamentId();
+            tournamentName = jsonData.tournamentName || 'Torneo Importado';
+            participants = jsonData.participants || [];
+            accumulatedPoints = jsonData.accumulatedPoints || {};
+            matchHistory = jsonData.matchHistory || [];
+            versus = jsonData.versus || [];
+            currentPhase = jsonData.currentPhase || 1;
+            groupRound = jsonData.groupRound || 0;
+            knockoutRound = jsonData.knockoutRound || 0;
+            tournamentFinished = jsonData.tournamentFinished || false;
+            customQualifiedCount = jsonData.customQualifiedCount || 8;
+            tournamentWinner = jsonData.tournamentWinner || null;
+            nextVersusId = jsonData.nextVersusId || 1;
+            preFinalMatch = jsonData.preFinalMatch || null;
+            preFinalPlayed = jsonData.preFinalPlayed || false;
+            finalMatch = jsonData.finalMatch || null;
+            finalPlayed = jsonData.finalPlayed || false;
+            semifinalLosers = jsonData.semifinalLosers || [];
+            semifinalWinners = jsonData.semifinalWinners || [];
+            podium = jsonData.podium || { first: null, second: null, third: null, fourth: null };
+            tournamentVisible = jsonData.tournamentVisible !== false;
+            selectedRound = jsonData.selectedRound || 'all';
+
+            // Asegurar que los participantes tengan IDs
+            ensureParticipantsObjects();
+
+            // Asegurar que cada participante tenga puntos
+            participants.forEach(p => {
+                if (p && p.id && !(p.id in accumulatedPoints)) {
+                    accumulatedPoints[p.id] = accumulatedPoints[p.name] || 0;
+                }
+            });
+
+            if (qualifiedCountInput) {
+                qualifiedCountInput.value = customQualifiedCount;
+            }
+
+            recalculateAccumulatedPoints();
+
+            // Mostrar la sección del torneo
+            tournamentVisible = true;
+            const section = document.getElementById('tournamentSection');
+            if (section) section.style.display = 'block';
+
+            renderAll();
+            saveToLocalStorage();
+
+            console.log('✅ Torneo importado correctamente:', tournamentName);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Error al importar torneo:', error);
+            showSyncNotification('❌ Error al importar: ' + error.message);
+            throw error;
+        }
+    }
+
+
+    function showSyncNotification(message) {
+        const storageStatusEl = document.getElementById('storageStatus');
+        if (!storageStatusEl) {
+            console.log('📢 Notificación:', message);
+            return;
+        }
+
+        // Guardar el texto original
+        const originalText = storageStatusEl.textContent;
+        const originalBg = storageStatusEl.style.background;
+        const originalColor = storageStatusEl.style.color;
+
+        // Mostrar el mensaje
+        storageStatusEl.textContent = message;
+        storageStatusEl.style.background = 'rgba(0, 212, 255, 0.15)';
+        storageStatusEl.style.color = '#00D4FF';
+        storageStatusEl.style.borderColor = 'rgba(0, 212, 255, 0.2)';
+
+        // Restaurar después de 3 segundos
+        clearTimeout(storageStatusEl._timeout);
+        storageStatusEl._timeout = setTimeout(() => {
+            storageStatusEl.textContent = originalText || '💾 Guardado';
+            storageStatusEl.style.background = originalBg || 'rgba(240, 244, 249, 0.8)';
+            storageStatusEl.style.color = originalColor || '#6e7f94';
+            storageStatusEl.style.borderColor = 'rgba(0, 255, 136, 0.12)';
+        }, 3000);
+    }
+
+    // Mostrar modal de carga desde URL
+    function showLoadUrlModal() {
+        const modal = document.getElementById('loadUrlModal');
+        if (modal) {
+            modal.classList.add('active');
+            modal.style.display = 'flex';
+            // Enfocar el input automáticamente
+            setTimeout(() => {
+                const input = document.getElementById('urlInput');
+                if (input) input.focus();
+            }, 100);
+        }
+    }
+
+    // Cerrar modal
+    function closeLoadUrlModal() {
+        const modal = document.getElementById('loadUrlModal');
+        if (modal) {
+            modal.classList.remove('active');
+            modal.style.display = 'none';
+            // Limpiar el input
+            const input = document.getElementById('urlInput');
+            if (input) input.value = '';
+        }
+    }
+
+    // ============================================================
+    // CARGAR TORNEO DESDE URL (VERSIÓN CORREGIDA)
+    // ============================================================
+
+    async function loadTournamentFromUrl() {
+        const input = document.getElementById('urlInput');
+        const url = input.value.trim();
+
+        if (!url) {
+            alert('Por favor, ingresa una URL válida');
+            return;
+        }
+
+        const loadBtn = document.getElementById('loadFromUrlBtn');
+        const originalText = loadBtn.textContent;
+        loadBtn.textContent = '⏳ Cargando...';
+        loadBtn.disabled = true;
+
+        try {
+            showSyncNotification('⏳ Cargando torneo desde URL...');
+
+            console.log('📡 Intentando cargar desde:', url);
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            console.log('📡 Status:', response.status);
+
+            if (!response.ok) {
+                throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const jsonData = await response.json();
+            console.log('✅ Datos recibidos:', jsonData);
+            console.log('✅ Participantes:', jsonData.participants?.length);
+
+            // Validar que sea un torneo válido
+            if (!jsonData.participants || !Array.isArray(jsonData.participants)) {
+                throw new Error('El archivo no es un torneo válido (falta "participants")');
+            }
+
+            // Importar los datos
+            await importTournamentJSON(jsonData);
+
+            showSyncNotification('✅ Torneo cargado desde URL');
+            alert('✅ Torneo cargado correctamente desde la URL\n\n' +
+                `📊 Participantes: ${jsonData.participants.length}\n` +
+                `⚔️ Partidos: ${(jsonData.matchHistory?.length || 0) + (jsonData.versus?.length || 0)}`);
+
+            // Cerrar el modal
+            closeLoadUrlModal();
+
+        } catch (error) {
+            console.error('❌ Error al cargar desde URL:', error);
+            showSyncNotification('❌ Error al cargar: ' + error.message);
+
+            let errorMsg = '❌ Error al cargar desde URL:\n\n';
+            errorMsg += error.message + '\n\n';
+
+            if (error.message.includes('CORS') || error.message.includes('cross-origin')) {
+                errorMsg += '🔒 Error de CORS. Verifica que la URL permita acceso desde tu dominio.\n\n';
+                errorMsg += '💡 Prueba la URL en el navegador para confirmar que es accesible.';
+            } else if (error.message.includes('404')) {
+                errorMsg += '🔍 Archivo no encontrado (404). Verifica que la URL sea correcta.';
+            } else if (error.message.includes('JSON')) {
+                errorMsg += '📄 El archivo no es un JSON válido. Verifica el contenido.';
+            } else {
+                errorMsg += '💡 Asegúrate de que la URL sea pública y accesible.';
+            }
+
+            alert(errorMsg);
+        } finally {
+            loadBtn.textContent = originalText;
+            loadBtn.disabled = false;
+        }
+    }
+
+    // ============================================================
+    // EVENT LISTENERS PARA EL MODAL
+    // ============================================================
+
+    // Botón para abrir el modal de carga desde URL
+    document.getElementById('loadUrlBtn')?.addEventListener('click', showLoadUrlModal);
+
+
+    // Botón para cerrar el modal
+    document.getElementById('closeLoadUrlModal')?.addEventListener('click', closeLoadUrlModal);
+
+    // Cerrar al hacer clic fuera del modal
+    document.getElementById('loadUrlModal')?.addEventListener('click', function (e) {
+        if (e.target === this) {
+            closeLoadUrlModal();
+        }
+    });
+
+    // Botón de carga
+    document.getElementById('loadFromUrlBtn')?.addEventListener('click', loadTournamentFromUrl);
+
+    // Cargar con Enter en el input
+    document.getElementById('urlInput')?.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            loadTournamentFromUrl();
+        }
+    });
+
+    // Cerrar con Escape
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            closeLoadUrlModal();
+        }
+    });
+
 
     // ============================================================
     // 17. INICIALIZACIÓN
