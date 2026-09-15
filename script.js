@@ -87,6 +87,7 @@
     let knockoutRound = 0;
     let currentPhaseView = 'groups';
     let selectedRound = 'all';
+    let selectedPlayerFilterId = null;
 
     // Configuración
     let customQualifiedCount = 8;
@@ -144,6 +145,12 @@
     const newParticipantInput = document.getElementById('newParticipantInput');
     const addBtn = document.getElementById('addParticipantBtn');
     const addMultipleBtn = document.getElementById('addMultipleBtn');
+    const participantCard = document.getElementById('participantCard');
+    const participantToggleBtn = document.getElementById('participantToggleBtn');
+    const classificationContent = document.getElementById('classificationContent');
+    const classificationToggleBtn = document.getElementById('classificationToggleBtn');
+    const resetTournamentPanel = document.getElementById('resetTournamentPanel');
+    const resetTournamentToggleBtn = document.getElementById('resetTournamentToggleBtn');
 
     // Torneo
     const createTournamentBtn = document.getElementById('createTournamentBtn');
@@ -156,6 +163,10 @@
     const roundDisplayEl = document.getElementById('roundDisplay');
     const winnerMessageEl = document.getElementById('winnerMessage');
     const thirdPlaceMessageEl = document.getElementById('thirdPlaceMessage');
+    const playerFilterBar = document.getElementById('playerFilterBar');
+    const playerFilterName = document.getElementById('playerFilterName');
+    const playerFilterStats = document.getElementById('playerFilterStats');
+    const clearPlayerFilterBtn = document.getElementById('clearPlayerFilterBtn');
 
     // Estadísticas
     const scoreSummaryEl = document.getElementById('scoreSummaryContainer');
@@ -632,27 +643,50 @@
     // 8. FUNCIONES DE GENERACIÓN DE PARTIDOS
     // ============================================================
 
-    function generatePairings(players) {
-        const shuffled = [...players];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    function getPairKey(playerAId, playerBId, playerAName = '', playerBName = '') {
+        const a = String(playerAId || playerAName).trim().toLocaleLowerCase();
+        const b = String(playerBId || playerBName).trim().toLocaleLowerCase();
+        return [a, b].sort().join('|');
+    }
+
+    function getPreviousGroupPairKeys(matches = [...matchHistory, ...versus]) {
+        return new Set(matches
+            .filter(match => match.round && match.round > 0)
+            .map(match => getPairKey(match.playerAId, match.playerBId, match.playerA, match.playerB)));
+    }
+
+    function generatePairings(players, excludedKeys = new Set()) {
+        const normalized = players.map(player => {
+            const name = (typeof player === 'string') ? player : (player && player.name) || '';
+            const id = (typeof player === 'object' && player && player.id) ? player.id : getParticipantIdByName(name);
+            return { id, name };
+        });
+
+        // Buscar la combinación con más cruces válidos. Así nunca se repite A-B
+        // como B-A y, si ya se agotaron algunos rivales, descansan los mínimos posibles.
+        let best = [];
+        function search(remaining, current) {
+            if (current.length > best.length) best = [...current];
+            if (remaining.length < 2 || current.length + Math.floor(remaining.length / 2) <= best.length) return;
+
+            const first = remaining[0];
+            const opponents = remaining.slice(1).sort(() => Math.random() - 0.5);
+            for (const opponent of opponents) {
+                const key = getPairKey(first.id, opponent.id, first.name, opponent.name);
+                if (excludedKeys.has(key)) continue;
+                const next = remaining.filter(player => player !== first && player !== opponent);
+                search(next, current.concat({
+                    playerA: first.name,
+                    playerB: opponent.name,
+                    playerAId: first.id,
+                    playerBId: opponent.id
+                }));
+            }
+            search(remaining.slice(1), current);
         }
 
-        const pairings = [];
-        const numPairs = Math.floor(shuffled.length / 2);
-
-        for (let i = 0; i < numPairs; i++) {
-            const a = shuffled[i * 2];
-            const b = shuffled[i * 2 + 1];
-            const aName = (typeof a === 'string') ? a : (a && a.name) || '';
-            const bName = (typeof b === 'string') ? b : (b && b.name) || '';
-            const aId = (typeof a === 'object' && a && a.id) ? a.id : getParticipantIdByName(aName);
-            const bId = (typeof b === 'object' && b && b.id) ? b.id : getParticipantIdByName(bName);
-            pairings.push({ playerA: aName, playerB: bName, playerAId: aId, playerBId: bId });
-        }
-
-        return pairings;
+        search(normalized.sort(() => Math.random() - 0.5), []);
+        return best;
     }
 
     function getKnockoutRoundName(round) {
@@ -872,7 +906,12 @@
             titleEl.textContent = roundTitle;
         }
 
-        if (tournamentFinished && tournamentWinner) {
+        if (selectedPlayerFilterId && !getParticipantById(selectedPlayerFilterId)) {
+            selectedPlayerFilterId = null;
+        }
+        if (!selectedPlayerFilterId && playerFilterBar) playerFilterBar.hidden = true;
+
+        if (tournamentFinished && tournamentWinner && !selectedPlayerFilterId) {
             versusListEl.innerHTML = renderPodium();
             winnerMessageEl.innerHTML = '';
             thirdPlaceMessageEl.innerHTML = '';
@@ -886,15 +925,34 @@
             return;
         }
 
-        let matchesToShow = [...versus];
-        if (preFinalMatch && !preFinalPlayed) {
-            matchesToShow.push(preFinalMatch);
+        let matchesToShow;
+        if (selectedPlayerFilterId) {
+            matchesToShow = [...matchHistory, ...versus];
+            if (preFinalMatch && !matchesToShow.includes(preFinalMatch)) matchesToShow.push(preFinalMatch);
+            if (finalMatch && !matchesToShow.includes(finalMatch)) matchesToShow.push(finalMatch);
+            matchesToShow = matchesToShow.filter(match => {
+                const aId = match.playerAId || getParticipantIdByName(match.playerA);
+                const bId = match.playerBId || getParticipantIdByName(match.playerB);
+                return String(aId) === String(selectedPlayerFilterId) || String(bId) === String(selectedPlayerFilterId);
+            });
+        } else {
+            matchesToShow = [...versus];
+            if (preFinalMatch && !preFinalPlayed) matchesToShow.push(preFinalMatch);
+            if (finalMatch && !finalPlayed) matchesToShow.push(finalMatch);
+            if (selectedRound !== 'all') matchesToShow = matchesToShow.filter(v => v.round === selectedRound);
         }
-        if (finalMatch && !finalPlayed) {
-            matchesToShow.push(finalMatch);
-        }
-        if (selectedRound !== 'all') {
-            matchesToShow = matchesToShow.filter(v => v.round === selectedRound);
+
+        const filteredPlayer = selectedPlayerFilterId ? getParticipantById(selectedPlayerFilterId) : null;
+        if (playerFilterBar) {
+            playerFilterBar.hidden = !filteredPlayer;
+            if (filteredPlayer) {
+                const wins = matchesToShow.filter(match =>
+                    (String(match.playerAId || getParticipantIdByName(match.playerA)) === String(selectedPlayerFilterId) && match.scoreA > match.scoreB) ||
+                    (String(match.playerBId || getParticipantIdByName(match.playerB)) === String(selectedPlayerFilterId) && match.scoreB > match.scoreA)
+                ).length;
+                playerFilterName.textContent = filteredPlayer.name;
+                playerFilterStats.textContent = `${getAccumulatedScore(filteredPlayer.id)} pts · ${matchesToShow.length} partidos · ${wins} victorias`;
+            }
         }
 
         if (matchesToShow.length > 0) {
@@ -906,6 +964,9 @@
                 const statusClass = isPlayed ? 'played' : 'unplayed';
                 const isPreFinal = v === preFinalMatch;
                 const isFinal = v === finalMatch;
+                const isArchived = matchHistory.includes(v);
+                const playerAId = v.playerAId || getParticipantIdByName(v.playerA);
+                const playerBId = v.playerBId || getParticipantIdByName(v.playerB);
 
                 let extraClass = '';
                 let badgeText = 'VS';
@@ -938,29 +999,30 @@
                 }
 
                 html += `
-                    <div class="versus-item ${extraClass} ${statusClass}" data-vsindex="${index}">
+                    <div class="versus-item ${extraClass} ${statusClass} ${isArchived ? 'archived-match' : ''}" data-vsindex="${index}">
+                        ${isArchived ? `<div class="archived-match-label">📅 ${v.round ? `Ronda ${v.round}` : 'Eliminatorias'} · editable</div>` : ''}
                         ${isPreFinal ? `<div class="prefinal-badge">🥉 PRE-FINAL</div>` : ''}
                         ${isFinal ? `<div class="final-badge">🏆 FINAL</div>` : ''}
                         <div class="match-content">
                             <div class="match-players">
                                 <div class="player-score-block">
                                     <div class="score-control">
-                                        <button class="dec-score" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="-1">−</button>
+                                        <button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerA}" data-vsid="${v.id}" data-dir="-1">−</button>
                                         <div class="score-display">${v.scoreA}</div>
-                                        <button class="inc-score" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>
+                                        <button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>
                                     </div>
-                                    <span class="player-name">${v.playerA}</span>
+                                    <button class="player-name player-filter-trigger" data-player-filter-id="${playerAId}" type="button" title="Ver partidos de ${v.playerA}">${v.playerA}</button>
                                 </div>
 
                                 <span class="vs-badge" style="color:${badgeColor};">${badgeText}</span>
 
                                 <div class="player-score-block">
                                     <div class="score-control">
-                                        <button class="dec-score" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>
+                                        <button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>
                                         <div class="score-display">${v.scoreB}</div>
-                                        <button class="inc-score" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>
+                                        <button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>
                                     </div>
-                                    <span class="player-name">${v.playerB}</span>
+                                    <button class="player-name player-filter-trigger" data-player-filter-id="${playerBId}" type="button" title="Ver partidos de ${v.playerB}">${v.playerB}</button>
                                 </div>
                             </div>
                             ${controlButtons}
@@ -1008,7 +1070,7 @@
                 });
             });
 
-        } else if (matchHistory.length > 0 && selectedRound !== 'all') {
+        } else if (!selectedPlayerFilterId && matchHistory.length > 0 && selectedRound !== 'all') {
             const filteredMatches = matchHistory.filter(v => v.round === selectedRound);
             if (filteredMatches.length > 0) {
                 let html = '';
@@ -1025,7 +1087,7 @@
                                     <div class="score-display">${v.scoreA}</div>
                                     <button class="inc-score" data-archived="true" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>
                                 </div>
-                                <span class="player-name">${v.playerA}</span>
+                                <button class="player-name player-filter-trigger" data-player-filter-id="${v.playerAId || getParticipantIdByName(v.playerA)}" type="button" title="Ver partidos de ${v.playerA}">${v.playerA}</button>
                             </div>
                             <span class="vs-badge" style="color:#4A4A6A;">✅ VS <span class="round-tag">${roundLabel}</span></span>
                             <div class="player-score-block">
@@ -1034,7 +1096,7 @@
                                     <div class="score-display">${v.scoreB}</div>
                                     <button class="inc-score" data-archived="true" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>
                                 </div>
-                                <span class="player-name">${v.playerB}</span>
+                                <button class="player-name player-filter-trigger" data-player-filter-id="${v.playerBId || getParticipantIdByName(v.playerB)}" type="button" title="Ver partidos de ${v.playerB}">${v.playerB}</button>
                             </div>
                             </div>
                         </div>
@@ -1056,7 +1118,9 @@
                 versusListEl.innerHTML = `<div class="empty-message">No hay enfrentamientos en la Ronda ${selectedRound}.</div>`;
             }
         } else {
-            versusListEl.innerHTML = `<div class="empty-message">Sin enfrentamientos activos. Genera una ronda de grupos o inicia eliminatorias.</div>`;
+            versusListEl.innerHTML = selectedPlayerFilterId
+                ? `<div class="empty-message">Este jugador todavía no tiene enfrentamientos registrados.</div>`
+                : `<div class="empty-message">Sin enfrentamientos activos. Genera una ronda de grupos o inicia eliminatorias.</div>`;
         }
 
         thirdPlaceMessageEl.innerHTML = '';
@@ -1386,6 +1450,21 @@
             startBtn.disabled = false;
             startBtn.title = '';
         }
+
+        const mobileRoundInfo = document.getElementById('mobileRoundInfo');
+        const mobileNextBtn = document.getElementById('mobileNextRoundBtn');
+        const mobileKnockoutBtn = document.getElementById('mobileKnockoutBtn');
+        if (mobileRoundInfo) {
+            mobileRoundInfo.textContent = currentPhase === 2 ? getRoundTitle() : `Ronda ${groupRound}`;
+        }
+        if (mobileNextBtn) {
+            mobileNextBtn.textContent = currentPhase === 2 ? '➡️ Siguiente eliminatoria' : '➡️ Siguiente ronda';
+            mobileNextBtn.disabled = tournamentFinished;
+        }
+        if (mobileKnockoutBtn) {
+            mobileKnockoutBtn.disabled = currentPhase === 2 || tournamentFinished || (versus.length === 0 && matchHistory.length === 0);
+            mobileKnockoutBtn.textContent = tournamentFinished ? '🏆 Finalizado' : (currentPhase === 2 ? '⏳ Eliminatorias' : '🏁 Eliminatorias');
+        }
     }
 
     function updateStats() {
@@ -1520,13 +1599,14 @@
             }
         }
 
-        groupRound++;
-        const pairings = generatePairings(participants);
+        const pairings = generatePairings(participants, getPreviousGroupPairKeys());
 
         if (pairings.length === 0) {
-            alert('No se pudieron generar enfrentamientos.');
+            alert('Todos los participantes ya se han enfrentado entre sí. No quedan cruces nuevos disponibles.');
             return;
         }
+
+        groupRound++;
 
         const newVersus = pairings.map(p => ({
             playerA: p.playerA,
@@ -1871,6 +1951,7 @@
 
         tournamentVisible = true;
         document.getElementById('tournamentSection').style.display = 'block';
+        setParticipantsCollapsed(true);
 
         setTimeout(() => {
             const section = document.getElementById('tournamentSection');
@@ -1905,6 +1986,7 @@
         knockoutRound = 0;
         groupRound = 0;
         selectedRound = 'all';
+        selectedPlayerFilterId = null;
         preFinalMatch = null;
         preFinalPlayed = false;
         finalMatch = null;
@@ -1915,6 +1997,12 @@
         tournamentVisible = false;
 
         participants.forEach(p => accumulatedPoints[p.id] = 0);
+        setParticipantsCollapsed(false);
+        if (resetTournamentPanel && resetTournamentToggleBtn) {
+            resetTournamentPanel.hidden = true;
+            resetTournamentToggleBtn.setAttribute('aria-expanded', 'false');
+            resetTournamentToggleBtn.textContent = '⚙️ Opciones del torneo';
+        }
 
         renderAll();
         saveToLocalStorage();
@@ -2277,6 +2365,8 @@
                 renderAll();
             }
 
+            if (tournamentVisible) setParticipantsCollapsed(true);
+
             console.log('🚀 App inicializada correctamente');
         } catch (error) {
             console.error('❌ Error al inicializar app:', error);
@@ -2423,6 +2513,45 @@
 
     document.getElementById('startTournamentBtn')?.addEventListener('click', startTournament);
 
+    function setParticipantsCollapsed(collapsed) {
+        if (!participantCard || !participantToggleBtn) return;
+        participantCard.classList.toggle('participants-collapsed', collapsed);
+        participantToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+        participantToggleBtn.textContent = collapsed ? '▼ Mostrar participantes' : '▲ Ocultar participantes';
+    }
+
+    participantToggleBtn?.addEventListener('click', function () {
+        setParticipantsCollapsed(!participantCard.classList.contains('participants-collapsed'));
+    });
+
+    versusListEl?.addEventListener('click', function (event) {
+        const trigger = event.target.closest('.player-filter-trigger');
+        if (!trigger) return;
+        selectedPlayerFilterId = trigger.dataset.playerFilterId;
+        selectedRound = 'all';
+        renderRoundSelector();
+        renderVersus();
+    });
+
+    clearPlayerFilterBtn?.addEventListener('click', function () {
+        selectedPlayerFilterId = null;
+        renderVersus();
+    });
+
+    classificationToggleBtn?.addEventListener('click', function () {
+        const shouldExpand = classificationContent.hidden;
+        classificationContent.hidden = !shouldExpand;
+        classificationToggleBtn.setAttribute('aria-expanded', String(shouldExpand));
+        classificationToggleBtn.textContent = shouldExpand ? '▲ Ocultar clasificación' : '▼ Mostrar clasificación';
+    });
+
+    resetTournamentToggleBtn?.addEventListener('click', function () {
+        const shouldExpand = resetTournamentPanel.hidden;
+        resetTournamentPanel.hidden = !shouldExpand;
+        resetTournamentToggleBtn.setAttribute('aria-expanded', String(shouldExpand));
+        resetTournamentToggleBtn.textContent = shouldExpand ? '▲ Ocultar opciones' : '⚙️ Opciones del torneo';
+    });
+
     document.getElementById('editTournamentNameBtn')?.addEventListener('click', editTournamentName);
 
     // --- Gestión de rondas ---
@@ -2431,6 +2560,13 @@
     document.getElementById('nextGroupRoundBtn').addEventListener('click', function () {
         generateGroupRound();
     });
+
+    document.getElementById('mobileNextRoundBtn')?.addEventListener('click', function () {
+        if (currentPhase === 2) nextKnockoutRound();
+        else generateGroupRound();
+    });
+
+    document.getElementById('mobileKnockoutBtn')?.addEventListener('click', startKnockout);
 
     document.getElementById('reshuffleGroupsBtn').addEventListener('click', function () {
         if (currentPhase !== 1) {
@@ -2451,21 +2587,10 @@
             { id: match.playerAId || getParticipantIdByName(match.playerA), name: match.playerA },
             { id: match.playerBId || getParticipantIdByName(match.playerB), name: match.playerB }
         ]));
-        const pairKey = pair => [String(pair.playerAId), String(pair.playerBId)].sort().join('|');
-        const originalKeys = pendingMatches.map(pairKey);
-        let pairings = [];
-        for (let attempt = 0; attempt < 30; attempt++) {
-            const candidate = generatePairings(players);
-            const candidateKeys = candidate.map(pairKey);
-            const changed = candidateKeys.some((key, index) => key !== originalKeys[index]);
-            const movedOldPair = candidateKeys.some((key, index) => originalKeys.includes(key) && key !== originalKeys[index]);
-            if (changed && !movedOldPair) {
-                pairings = candidate;
-                break;
-            }
-        }
-        if (pairings.length === 0) {
-            alert('No se pudo generar una combinación de cruces distinta. Inténtalo nuevamente.');
+        const matchesToKeep = [...matchHistory, ...versus.filter(match => !pendingMatches.includes(match))];
+        const pairings = generatePairings(players, getPreviousGroupPairKeys(matchesToKeep));
+        if (pairings.length !== pendingMatches.length) {
+            alert('No existe otra combinación completa sin repetir enfrentamientos anteriores.');
             return;
         }
 

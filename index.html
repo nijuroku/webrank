@@ -46,13 +46,17 @@
     <div class="app-container">
 
         <!-- GESTIÓN DE PARTICIPANTES -->
-        <div class="card">
+        <div class="card participant-card" id="participantCard">
             <div class="participant-header">
                 <div class="participant-header-left">
                     <h2 class="titulo-moderno" style="margin:0;">👤 Participantes</h2>
                     <span class="participant-count" id="participantCountBadge">0</span>
                 </div>
                 <div class="participant-header-right">
+                    <button class="btn btn-sm btn-outline participant-toggle" id="participantToggleBtn"
+                        type="button" aria-expanded="true" aria-controls="participantCard">
+                        ▲ Ocultar participantes
+                    </button>
                     <div class="tournament-actions">
                         <button class="btn btn-sm btn-outline" id="createTournamentBtn" title="Crear nuevo torneo">
                             🏗️ Crear torneo
@@ -112,11 +116,30 @@
         <!-- SECCIÓN DEL TORNEO (OCULTA INICIALMENTE) -->
         <div id="tournamentSection" style="display: none;">
 
-            <!-- GRID: ENFRENTAMIENTOS + GESTIÓN -->
+            <!-- GESTIÓN PRINCIPAL DE RONDAS -->
+            <div class="card mobile-round-actions" aria-label="Gestión rápida de rondas">
+                <div class="mobile-round-actions-title">
+                    <span>🔄 Gestión de rondas</span>
+                    <span class="round-info" id="mobileRoundInfo">Ronda 0</span>
+                </div>
+                <div class="mobile-round-buttons">
+                    <button class="btn btn-success" id="mobileNextRoundBtn">➡️ Siguiente ronda</button>
+                    <button class="btn btn-warning" id="mobileKnockoutBtn">🏁 Eliminatorias</button>
+                </div>
+                <button class="round-options-toggle" id="resetTournamentToggleBtn" type="button"
+                    aria-expanded="false" aria-controls="resetTournamentPanel">
+                    ⚙️ Opciones del torneo
+                </button>
+                <div class="round-reset-panel" id="resetTournamentPanel" hidden>
+                    <button class="btn btn-outline" id="resetAllBtn">🔄 Reiniciar torneo</button>
+                </div>
+            </div>
+
+            <!-- ENFRENTAMIENTOS Y CLASIFICACIÓN -->
             <div class="grid-2col">
 
                 <!-- ENFRENTAMIENTOS -->
-                <div class="card">
+                <div class="card matches-card">
                     <div>
                         <h2 class="titulo-futurista">⚔️ Enfrentamientos</h2>
                         <span id="phaseDisplay" class="phase-badge">Fase 1 · Grupos</span>
@@ -131,6 +154,15 @@
                                 class="matches-count">(0)</span></button>
                     </div>
 
+                    <div id="playerFilterBar" class="player-filter-bar" hidden>
+                        <div>
+                            <span class="player-filter-label">🔎 Jugador</span>
+                            <strong id="playerFilterName"></strong>
+                            <span id="playerFilterStats"></span>
+                        </div>
+                        <button class="btn btn-sm btn-outline" id="clearPlayerFilterBtn" type="button">✕ Ver todos</button>
+                    </div>
+
                     <div id="versusListContainer" class="versus-grid scrollable-list">
                         <div class="empty-message">Sin enfrentamientos. Genera una ronda de grupos.</div>
                     </div>
@@ -138,9 +170,9 @@
                     <div id="thirdPlaceMessage" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
                 </div>
 
-                <!-- GESTIÓN DE RONDAS -->
-                <div class="card">
-                    <div class="round-management">
+                <!-- Controles heredados conservados para la lógica interna -->
+                <div class="card classification-card" id="classificationCard">
+                    <div class="round-management legacy-round-management" aria-hidden="true">
                         <div class="round-management-header">
                             <h3 class="titulo-moderno">🔄 Gestión de Rondas</h3>
                             <div class="phase-switch-container">
@@ -229,30 +261,35 @@
                             style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.8rem;">
                             <button class="btn btn-danger btn-full" id="clearVersusBtn">🗑️ Archivar ronda
                                 actual</button>
-                            <button class="btn btn-outline btn-full" id="resetAllBtn">🔄 Reiniciar torneo</button>
                         </div>
                     </div>
 
                     <hr />
 
-                    <div
-                        style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                    <div class="classification-header">
                         <h2 style="margin:0;" class="titulo-futurista">📊 Clasificación</h2>
-                        <button class="btn btn-outline btn-sm" id="editTournamentNameBtn">✏️ Editar nombre</button>
+                        <button class="btn btn-sm btn-outline classification-toggle" id="classificationToggleBtn"
+                            type="button" aria-expanded="false" aria-controls="classificationContent">
+                            ▼ Mostrar clasificación
+                        </button>
                     </div>
-                    <div style="font-size:0.8rem; color:#4A4A6A; margin-bottom: 1rem;">Puntos acumulados (todas las
-                        rondas)</div>
-                    <div id="scoreSummaryContainer" class="scrollable-list" style="max-height: 250px;">
-                        <div class="empty-message">No hay datos de puntos aún.</div>
-                    </div>
+                    <div id="classificationContent" class="classification-content" hidden>
+                        <div class="classification-toolbar">
+                            <div style="font-size:0.8rem; color:#4A4A6A;">Puntos acumulados (todas las rondas)</div>
+                            <button class="btn btn-outline btn-sm" id="editTournamentNameBtn">✏️ Editar nombre</button>
+                        </div>
+                        <div id="scoreSummaryContainer" class="scrollable-list" style="max-height: 250px;">
+                            <div class="empty-message">No hay datos de puntos aún.</div>
+                        </div>
 
-                    <hr />
+                        <hr />
 
-                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
-                        <button class="btn btn-outline" id="exportDataBtn">📤 Exportar datos</button>
-                        <button class="btn btn-outline" id="importDataBtn">📥 Importar datos</button>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                            <button class="btn btn-outline" id="exportDataBtn">📤 Exportar datos</button>
+                            <button class="btn btn-outline" id="importDataBtn">📥 Importar datos</button>
+                        </div>
+                        <input type="file" id="fileInput" accept=".json" style="display:none;">
                     </div>
-                    <input type="file" id="fileInput" accept=".json" style="display:none;">
                 </div>
             </div>
 
