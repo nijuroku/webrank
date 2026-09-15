@@ -131,7 +131,15 @@
                     ⚙️ Opciones del torneo
                 </button>
                 <div class="round-reset-panel" id="resetTournamentPanel" hidden>
-                    <button class="btn btn-outline" id="resetAllBtn">🔄 Reiniciar torneo</button>
+                    <button class="btn btn-outline" id="editTournamentNameBtn">✏️ Cambiar nombre del torneo</button>
+                    <div class="tournament-qualified-option">
+                        <label for="qualifiedCountInput">🏆 Cantidad de clasificados</label>
+                        <div>
+                            <input type="number" id="qualifiedCountInput" min="2" max="32" value="8" />
+                            <button class="btn btn-sm btn-success" id="applyQualifiedBtn">Aplicar</button>
+                        </div>
+                    </div>
+                    <button class="btn btn-danger" id="resetAllBtn">🔄 Reiniciar torneo</button>
                 </div>
             </div>
 
@@ -199,11 +207,6 @@
                                     ronda</button>
                                 <button class="btn btn-outline btn-full" id="reshuffleGroupsBtn">🔀 Cambiar cruces
                                     0-0</button>
-                                <div class="qualified-selector-wrapper">
-                                    <label for="qualifiedCountInput">🏆 Clasificados:</label>
-                                    <input type="number" id="qualifiedCountInput" min="2" max="32" value="8" />
-                                    <button class="btn btn-sm btn-success" id="applyQualifiedBtn">Aplicar</button>
-                                </div>
                             </div>
 
                             <div class="info-note-small">
@@ -276,7 +279,6 @@
                     <div id="classificationContent" class="classification-content" hidden>
                         <div class="classification-toolbar">
                             <div style="font-size:0.8rem; color:#4A4A6A;">Puntos acumulados (todas las rondas)</div>
-                            <button class="btn btn-outline btn-sm" id="editTournamentNameBtn">✏️ Editar nombre</button>
                         </div>
                         <div id="scoreSummaryContainer" class="scrollable-list" style="max-height: 250px;">
                             <div class="empty-message">No hay datos de puntos aún.</div>
