@@ -42,10 +42,27 @@
         </div>
     </header>
 
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-expanded="false"
+        aria-controls="mainTabNavigation" aria-label="Abrir navegación">☰</button>
+    <div class="mobile-nav-backdrop" id="mobileNavBackdrop" hidden></div>
+
+    <nav class="tab-navigation" id="mainTabNavigation" aria-label="Secciones del torneo">
+        <button class="tab-navigation-btn active" data-tab="participants" type="button" title="Participantes">
+            <span class="tab-icon" aria-hidden="true">👥</span><span class="tab-label">Participantes</span>
+        </button>
+        <button class="tab-navigation-btn" data-tab="matches" type="button" title="Enfrentamientos">
+            <span class="tab-icon" aria-hidden="true">⚔️</span><span class="tab-label">VS</span>
+        </button>
+        <button class="tab-navigation-btn" data-tab="table" type="button" title="Tabla de puntuación">
+            <span class="tab-icon" aria-hidden="true">📊</span><span class="tab-label">Tabla</span>
+        </button>
+    </nav>
+
     <!-- CONTENIDO PRINCIPAL -->
     <div class="app-container">
 
         <!-- GESTIÓN DE PARTICIPANTES -->
+        <section class="tab-panel active" id="participantsTabPanel" data-tab-panel="participants">
         <div class="card participant-card" id="participantCard">
             <div class="participant-header">
                 <div class="participant-header-left">
@@ -112,37 +129,11 @@
                 no suma pts
             </div>
         </div>
+        </section>
 
         <!-- SECCIÓN DEL TORNEO (OCULTA INICIALMENTE) -->
         <div id="tournamentSection" style="display: none;">
-
-            <!-- GESTIÓN PRINCIPAL DE RONDAS -->
-            <div class="card mobile-round-actions" aria-label="Gestión rápida de rondas">
-                <div class="mobile-round-actions-title">
-                    <span>🔄 Gestión de rondas</span>
-                    <span class="round-info" id="mobileRoundInfo">Ronda 0</span>
-                </div>
-                <div class="mobile-round-buttons">
-                    <button class="btn btn-success" id="mobileNextRoundBtn">➡️ Siguiente ronda</button>
-                    <button class="btn btn-warning" id="mobileKnockoutBtn">🏁 Eliminatorias</button>
-                </div>
-                <button class="round-options-toggle" id="resetTournamentToggleBtn" type="button"
-                    aria-expanded="false" aria-controls="resetTournamentPanel">
-                    ⚙️ Opciones del torneo
-                </button>
-                <div class="round-reset-panel" id="resetTournamentPanel" hidden>
-                    <button class="btn btn-outline" id="editTournamentNameBtn">✏️ Cambiar nombre del torneo</button>
-                    <div class="tournament-qualified-option">
-                        <label for="qualifiedCountInput">🏆 Cantidad de clasificados</label>
-                        <div>
-                            <input type="number" id="qualifiedCountInput" min="2" max="32" value="8" />
-                            <button class="btn btn-sm btn-success" id="applyQualifiedBtn">Aplicar</button>
-                        </div>
-                    </div>
-                    <button class="btn btn-danger" id="resetAllBtn">🔄 Reiniciar torneo</button>
-                </div>
-            </div>
-
+            <section class="tab-panel" id="matchesTabPanel" data-tab-panel="matches" hidden>
             <!-- ENFRENTAMIENTOS Y CLASIFICACIÓN -->
             <div class="grid-2col">
 
@@ -162,6 +153,33 @@
                                 class="matches-count">(0)</span></button>
                     </div>
 
+                    <!-- GESTIÓN PRINCIPAL DE RONDAS -->
+                    <div class="mobile-round-actions embedded-round-actions" aria-label="Gestión rápida de rondas">
+                        <div class="mobile-round-actions-title">
+                            <span>🔄 Gestión de rondas</span>
+                            <span class="round-info" id="mobileRoundInfo">Ronda 0</span>
+                        </div>
+                        <div class="mobile-round-buttons">
+                            <button class="btn btn-success" id="mobileNextRoundBtn">➡️ Siguiente ronda</button>
+                            <button class="btn btn-warning" id="mobileKnockoutBtn">🏁 Eliminatorias</button>
+                        </div>
+                        <button class="round-options-toggle" id="resetTournamentToggleBtn" type="button"
+                            aria-expanded="false" aria-controls="resetTournamentPanel">
+                            ⚙️ Opciones del torneo
+                        </button>
+                        <div class="round-reset-panel" id="resetTournamentPanel" hidden>
+                            <button class="btn btn-outline" id="editTournamentNameBtn">✏️ Cambiar nombre del torneo</button>
+                            <div class="tournament-qualified-option">
+                                <label for="qualifiedCountInput">🏆 Cantidad de clasificados</label>
+                                <div>
+                                    <input type="number" id="qualifiedCountInput" min="2" max="32" value="8" />
+                                    <button class="btn btn-sm btn-success" id="applyQualifiedBtn">Aplicar</button>
+                                </div>
+                            </div>
+                            <button class="btn btn-danger" id="resetAllBtn">🔄 Reiniciar torneo</button>
+                        </div>
+                    </div>
+
                     <div id="playerFilterBar" class="player-filter-bar" hidden>
                         <div>
                             <span class="player-filter-label">🔎 Jugador</span>
@@ -179,7 +197,8 @@
                 </div>
 
                 <!-- Controles heredados conservados para la lógica interna -->
-                <div class="card classification-card" id="classificationCard">
+                <!-- Clasificación desactivada: la información se presenta en la pestaña Tabla. -->
+                <div class="card classification-card" id="classificationCard" hidden aria-hidden="true">
                     <div class="round-management legacy-round-management" aria-hidden="true">
                         <div class="round-management-header">
                             <h3 class="titulo-moderno">🔄 Gestión de Rondas</h3>
@@ -286,17 +305,14 @@
 
                         <hr />
 
-                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
-                            <button class="btn btn-outline" id="exportDataBtn">📤 Exportar datos</button>
-                            <button class="btn btn-outline" id="importDataBtn">📥 Importar datos</button>
-                        </div>
-                        <input type="file" id="fileInput" accept=".json" style="display:none;">
                     </div>
                 </div>
             </div>
+            </section>
 
             <!-- TABLA DE PUNTUACIÓN TOTAL -->
-            <div class="card" style="margin-top: 1.5rem;">
+            <section class="tab-panel" id="tableTabPanel" data-tab-panel="table" hidden>
+            <div class="card">
                 <h1>
                     <span class="titulo-futurista" id="scoreTournamentName">
                         LaMafia BEYBLADEX
@@ -309,7 +325,13 @@
                         las rondas</div>
                 </div>
                 <div id="totalScoreTableContainer" style="overflow-x: auto;"></div>
+                <div class="table-data-actions">
+                    <button class="btn btn-outline" id="exportDataBtn">📤 Exportar datos</button>
+                    <button class="btn btn-outline" id="importDataBtn">📥 Importar datos</button>
+                </div>
+                <input type="file" id="fileInput" accept=".json" style="display:none;">
             </div>
+            </section>
         </div>
 
         <div

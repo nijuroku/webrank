@@ -88,6 +88,7 @@
     let currentPhaseView = 'groups';
     let selectedRound = 'all';
     let selectedPlayerFilterId = null;
+    let activeTab = 'participants';
 
     // Configuración
     let customQualifiedCount = 8;
@@ -119,6 +120,50 @@
     const headerQualified = document.getElementById('headerQualified');
     const storageStatusEl = document.getElementById('storageStatus');
     const themeToggleBtn = document.getElementById('themeToggleBtn');
+    const tabNavigationButtons = document.querySelectorAll('.tab-navigation-btn');
+    const tabPanels = document.querySelectorAll('[data-tab-panel]');
+    const mainTabNavigation = document.getElementById('mainTabNavigation');
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    const mobileNavBackdrop = document.getElementById('mobileNavBackdrop');
+
+    function setMobileMenuOpen(open) {
+        mainTabNavigation?.classList.toggle('mobile-open', open);
+        if (mobileNavBackdrop) mobileNavBackdrop.hidden = !open;
+        mobileMenuToggle?.setAttribute('aria-expanded', String(open));
+        if (mobileMenuToggle) {
+            mobileMenuToggle.textContent = open ? '✕' : '☰';
+            mobileMenuToggle.setAttribute('aria-label', open ? 'Cerrar navegación' : 'Abrir navegación');
+        }
+    }
+
+    function activateTab(tabName, scrollToContent = false) {
+        if (tabName !== 'participants' && !tournamentVisible) return;
+        activeTab = tabName;
+        tabNavigationButtons.forEach(button => {
+            const isActive = button.dataset.tab === tabName;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-selected', String(isActive));
+        });
+        tabPanels.forEach(panel => {
+            const isActive = panel.dataset.tabPanel === tabName;
+            panel.hidden = !isActive;
+            panel.classList.toggle('active', isActive);
+        });
+        const tournamentSection = document.getElementById('tournamentSection');
+        if (tournamentSection) {
+            tournamentSection.style.display = tabName === 'participants' || !tournamentVisible ? 'none' : 'block';
+        }
+        if (scrollToContent) {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }
+
+    function updateTabAvailability() {
+        tabNavigationButtons.forEach(button => {
+            button.disabled = button.dataset.tab !== 'participants' && !tournamentVisible;
+        });
+        if (!tournamentVisible && activeTab !== 'participants') activateTab('participants');
+    }
 
     // Tema
     function applyTheme(theme) {
@@ -757,12 +802,13 @@
             if ((hasData || tournamentVisible) && participants.length > 0) {
                 tournamentVisible = true;
                 const section = document.getElementById('tournamentSection');
-                if (section) section.style.display = 'block';
+                if (section) section.style.display = activeTab === 'participants' ? 'none' : 'block';
             } else {
                 tournamentVisible = false;
                 const section = document.getElementById('tournamentSection');
                 if (section) section.style.display = 'none';
             }
+            updateTabAvailability();
 
             renderTournamentName();
             renderParticipants();
@@ -1952,13 +1998,7 @@
         tournamentVisible = true;
         document.getElementById('tournamentSection').style.display = 'block';
         setParticipantsCollapsed(true);
-
-        setTimeout(() => {
-            const section = document.getElementById('tournamentSection');
-            if (section) {
-                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }, 100);
+        activateTab('matches', true);
 
         renderAll();
         saveToLocalStorage();
@@ -1998,6 +2038,7 @@
 
         participants.forEach(p => accumulatedPoints[p.id] = 0);
         setParticipantsCollapsed(false);
+        activateTab('participants');
         if (resetTournamentPanel && resetTournamentToggleBtn) {
             resetTournamentPanel.hidden = true;
             resetTournamentToggleBtn.setAttribute('aria-expanded', 'false');
@@ -2466,6 +2507,25 @@
     });
 
     // --- Participantes ---
+    tabNavigationButtons.forEach(button => {
+        button.addEventListener('click', function () {
+            activateTab(this.dataset.tab, true);
+            setMobileMenuOpen(false);
+        });
+    });
+
+    mobileMenuToggle?.addEventListener('click', function () {
+        setMobileMenuOpen(!mainTabNavigation.classList.contains('mobile-open'));
+    });
+
+    mobileNavBackdrop?.addEventListener('click', function () {
+        setMobileMenuOpen(false);
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') setMobileMenuOpen(false);
+    });
+
     addBtn.addEventListener('click', function () {
         const name = newParticipantInput.value.trim();
         if (!name) {
