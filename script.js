@@ -5,9 +5,12 @@
     // 1. CONSTANTES
     // ============================================================
 
-    const STORAGE_KEY = 'torneoData_v18';
-    const TORNEO_LIST_KEY = 'torneoList_v1';
+    let STORAGE_KEY = 'torneoData_v18';
+    let TORNEO_LIST_KEY = 'torneoList_v1';
     const THEME_STORAGE_KEY = 'beybladex_theme';
+    // Sustituye este valor por el App ID de tu aplicación en Userbase.
+    const USERBASE_APP_ID = '1e4ffa36-6d4f-41c6-8b04-3d30835ddfac';
+    const SUPER_ADMIN_USERNAME = 'twenty6';
 
     // ============================================================
     // 2. ESTADO GLOBAL
@@ -89,6 +92,7 @@
     let selectedRound = 'all';
     let selectedPlayerFilterId = null;
     let activeTab = 'participants';
+    let authenticatedUsername = null;
 
     // Configuración
     let customQualifiedCount = 8;
@@ -120,6 +124,16 @@
     const headerQualified = document.getElementById('headerQualified');
     const storageStatusEl = document.getElementById('storageStatus');
     const themeToggleBtn = document.getElementById('themeToggleBtn');
+    const authLoadingView = document.getElementById('authLoadingView');
+    const authView = document.getElementById('authView');
+    const loginForm = document.getElementById('loginForm');
+    const loginError = document.getElementById('loginError');
+    const authUserName = document.getElementById('authUserName');
+    const signOutBtn = document.getElementById('signOutBtn');
+    const superAdminPanel = document.getElementById('superAdminPanel');
+    const adminTabButton = document.getElementById('adminTabButton');
+    const createUserForm = document.getElementById('createUserForm');
+    const createUserStatus = document.getElementById('createUserStatus');
     const tabNavigationButtons = document.querySelectorAll('.tab-navigation-btn');
     const tabPanels = document.querySelectorAll('[data-tab-panel]');
     const mainTabNavigation = document.getElementById('mainTabNavigation');
@@ -137,7 +151,8 @@
     }
 
     function activateTab(tabName, scrollToContent = false) {
-        if (tabName !== 'participants' && !tournamentVisible) return;
+        if (tabName !== 'participants' && tabName !== 'admin' && !tournamentVisible) return;
+        if (tabName === 'admin' && !isSuperAdmin()) return;
         activeTab = tabName;
         tabNavigationButtons.forEach(button => {
             const isActive = button.dataset.tab === tabName;
@@ -151,7 +166,7 @@
         });
         const tournamentSection = document.getElementById('tournamentSection');
         if (tournamentSection) {
-            tournamentSection.style.display = tabName === 'participants' || !tournamentVisible ? 'none' : 'block';
+            tournamentSection.style.display = tabName === 'participants' || tabName === 'admin' || !tournamentVisible ? 'none' : 'block';
         }
         if (scrollToContent) {
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -160,9 +175,79 @@
 
     function updateTabAvailability() {
         tabNavigationButtons.forEach(button => {
-            button.disabled = button.dataset.tab !== 'participants' && !tournamentVisible;
+            const isAdmin = button.dataset.tab === 'admin';
+            button.disabled = !isAdmin && button.dataset.tab !== 'participants' && !tournamentVisible;
         });
-        if (!tournamentVisible && activeTab !== 'participants') activateTab('participants');
+        if ((!tournamentVisible && activeTab !== 'participants' && activeTab !== 'admin') || (activeTab === 'admin' && !isSuperAdmin())) {
+            activateTab('participants');
+        }
+    }
+
+    function configureUserStorage(username) {
+        const safeUsername = encodeURIComponent(String(username).trim().toLocaleLowerCase());
+        const userStorageKey = `torneoData_v18_${safeUsername}`;
+        const userTournamentListKey = `torneoList_v1_${safeUsername}`;
+        // Conserva los datos anónimos existentes al vincular por primera vez
+        // la cuenta del propietario actual.
+        if (!localStorage.getItem(userStorageKey) && localStorage.getItem('torneoData_v18')) {
+            localStorage.setItem(userStorageKey, localStorage.getItem('torneoData_v18'));
+        }
+        if (!localStorage.getItem(userTournamentListKey) && localStorage.getItem('torneoList_v1')) {
+            localStorage.setItem(userTournamentListKey, localStorage.getItem('torneoList_v1'));
+        }
+        STORAGE_KEY = userStorageKey;
+        TORNEO_LIST_KEY = userTournamentListKey;
+    }
+
+    function isSuperAdmin(username = authenticatedUsername) {
+        return String(username || '').trim().toLocaleLowerCase() === SUPER_ADMIN_USERNAME;
+    }
+
+    function updateSuperAdminPanel() {
+        const visible = isSuperAdmin();
+        if (adminTabButton) adminTabButton.hidden = !visible;
+        if (superAdminPanel && !visible) superAdminPanel.hidden = true;
+        document.body.classList.toggle('super-admin-session', visible);
+        if (!visible && activeTab === 'admin') activateTab('participants');
+        updateTabAvailability();
+    }
+
+    function showAuthError(element, error) {
+        if (!element) return;
+        element.textContent = error?.message || String(error || 'No se pudo completar la operación.');
+    }
+
+    function showAuthScreen(message = '') {
+        document.body.classList.add('auth-locked');
+        if (authLoadingView) authLoadingView.hidden = true;
+        if (authView) authView.hidden = false;
+        if (message && loginError) loginError.textContent = message;
+    }
+
+    function enterAuthenticatedApp(user) {
+        authenticatedUsername = user.username;
+        configureUserStorage(authenticatedUsername);
+        if (authUserName) authUserName.textContent = `👤 ${authenticatedUsername}`;
+        updateSuperAdminPanel();
+        if (authLoadingView) authLoadingView.hidden = true;
+        if (authView) authView.hidden = true;
+        document.body.classList.remove('auth-locked');
+        initializeApp();
+    }
+
+    function initializeUserbaseAuth() {
+        if (!window.userbase) {
+            showAuthScreen('No se pudo cargar Userbase. Revisa la conexión.');
+            return;
+        }
+        if (!USERBASE_APP_ID || USERBASE_APP_ID.length < 10) {
+            showAuthScreen('Configura el App ID de Userbase en script.js para activar el acceso.');
+            return;
+        }
+
+        userbase.init({ appId: USERBASE_APP_ID, sessionLength: 168 })
+            .then(session => session?.user ? enterAuthenticatedApp(session.user) : showAuthScreen())
+            .catch(error => showAuthScreen(error));
     }
 
     // Tema
@@ -3128,15 +3213,61 @@
         }
     });
 
+    loginForm?.addEventListener('submit', function (event) {
+        event.preventDefault();
+        loginError.textContent = '';
+        userbase.signIn({
+            username: document.getElementById('loginUsername').value.trim(),
+            password: document.getElementById('loginPassword').value,
+            rememberMe: 'local'
+        }).then(enterAuthenticatedApp).catch(error => showAuthError(loginError, error));
+    });
+
+    createUserForm?.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (!isSuperAdmin()) return;
+
+        const username = document.getElementById('newUserUsername').value.trim();
+        const password = document.getElementById('newUserPassword').value;
+        if (!username || password.length < 8) {
+            if (createUserStatus) createUserStatus.textContent = 'Usa un usuario y una contraseña de al menos 8 caracteres.';
+            return;
+        }
+        if (username.toLocaleLowerCase() === SUPER_ADMIN_USERNAME) {
+            if (createUserStatus) createUserStatus.textContent = 'Ese usuario está reservado para el SuperAdmin.';
+            return;
+        }
+        if (!window.confirm(`Se creará el usuario "${username}". Userbase cerrará tu sesión actual y deberás volver a entrar como ${SUPER_ADMIN_USERNAME}. ¿Continuar?`)) return;
+
+        if (createUserStatus) createUserStatus.textContent = 'Creando usuario…';
+        try {
+            // Userbase no permite signUp mientras existe una sesión activa.
+            await userbase.signOut();
+            await userbase.signUp({ username, password, rememberMe: 'local' });
+            await userbase.signOut();
+            window.location.reload();
+        } catch (error) {
+            if (createUserStatus) {
+                createUserStatus.textContent = `No se pudo crear la cuenta: ${error?.message || error}`;
+            }
+            // La sesión del SuperAdmin puede haberse cerrado antes del error.
+            setTimeout(() => window.location.reload(), 1800);
+        }
+    });
+
+    signOutBtn?.addEventListener('click', function () {
+        userbase.signOut().then(() => window.location.reload()).catch(error => alert(error.message));
+    });
+
 
     // ============================================================
     // 17. INICIALIZACIÓN
     // ============================================================
 
-    initializeApp();
+    initializeUserbaseAuth();
 
     setInterval(() => {
-        saveToLocalStorage();
+        if (authenticatedUsername) saveToLocalStorage();
     }, 30000);
 
     // Exponer estado para debugging

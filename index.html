@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Solo XLSX para exportar -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script type="text/javascript" src="https://sdk.userbase.com/2/userbase.js"></script>
 
     <title>LaMafia BEYBLADEX</title>
     <link
@@ -14,7 +15,26 @@
     <link rel="stylesheet" href="style.css">
 </head>
 
-<body>
+<body class="auth-locked">
+
+    <div id="authLoadingView" class="auth-loading-view">🔐 Comprobando sesión…</div>
+    <section id="authView" class="auth-view" hidden aria-label="Acceso a la aplicación">
+        <div class="auth-card">
+            <div class="auth-brand">⚔️</div>
+            <h1>LaMafia BEYBLADEX</h1>
+            <p class="auth-subtitle">Inicia sesión para administrar tus torneos</p>
+
+            <form id="loginForm" class="auth-form">
+                <label for="loginUsername">Usuario</label>
+                <input id="loginUsername" type="text" autocomplete="username" required placeholder="Tu usuario">
+                <label for="loginPassword">Contraseña</label>
+                <input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Tu contraseña">
+                <button class="btn btn-primary" type="submit">🔓 Iniciar sesión</button>
+                <p id="loginError" class="auth-error" role="alert"></p>
+            </form>
+
+        </div>
+    </section>
 
     <!-- HEADER STICKY -->
     <header class="header-sticky">
@@ -56,10 +76,41 @@
         <button class="tab-navigation-btn" data-tab="table" type="button" title="Tabla de puntuación">
             <span class="tab-icon" aria-hidden="true">📊</span><span class="tab-label">Tabla</span>
         </button>
+        <button class="tab-navigation-btn admin-tab-navigation-btn" id="adminTabButton" data-tab="admin"
+            type="button" title="Administración de usuarios" hidden>
+            <span class="tab-icon" aria-hidden="true">🛡️</span><span class="tab-label">Usuarios</span>
+        </button>
+        <div class="nav-account" aria-label="Cuenta activa">
+            <span class="auth-user" id="authUserName"></span>
+            <button class="btn btn-sm btn-outline nav-signout-btn" id="signOutBtn" type="button">🚪 Salir</button>
+        </div>
     </nav>
 
     <!-- CONTENIDO PRINCIPAL -->
     <div class="app-container">
+
+        <!-- ADMINISTRACIÓN DE USUARIOS: solo visible para el SuperAdmin -->
+        <section class="tab-panel card super-admin-panel" id="superAdminPanel" data-tab-panel="admin" hidden
+            aria-labelledby="superAdminTitle">
+            <div class="super-admin-panel-header">
+                <div>
+                    <h2 class="titulo-moderno" id="superAdminTitle">🛡️ Administración de usuarios</h2>
+                    <p class="super-admin-help">Solo el SuperAdmin puede crear cuentas de acceso.</p>
+                </div>
+                <span class="super-admin-badge">SuperAdmin</span>
+            </div>
+            <form id="createUserForm" class="create-user-form">
+                <label for="newUserUsername">Usuario</label>
+                <input id="newUserUsername" type="text" autocomplete="off" required minlength="3"
+                    placeholder="Usuario del cliente">
+                <label for="newUserPassword">Contraseña</label>
+                <input id="newUserPassword" type="password" autocomplete="new-password" required minlength="8"
+                    placeholder="Mínimo 8 caracteres">
+                <button class="btn btn-success" type="submit">➕ Crear usuario</button>
+                <p id="createUserStatus" class="auth-error" role="status" aria-live="polite"></p>
+            </form>
+            <p class="super-admin-warning">Para crear la cuenta Userbase cerrará esta sesión momentáneamente. Después deberás volver a iniciar sesión como <strong>twenty6</strong>.</p>
+        </section>
 
         <!-- GESTIÓN DE PARTICIPANTES -->
         <section class="tab-panel active" id="participantsTabPanel" data-tab-panel="participants">
