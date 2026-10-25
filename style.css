@@ -1012,10 +1012,11 @@ hr {
 }
 
 .total-score-table .name-cell {
-    text-align: left;
+    text-align: center;
     font-weight: 500;
     color: #E8E8F0;
-    padding-left: 1rem;
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
 }
 
 .total-score-table .points-cell {
@@ -2476,6 +2477,116 @@ body {
 
 .modal-overlay.active {
     display: flex;
+}
+
+.tournament-format-overlay {
+    background: rgba(13, 13, 26, 0.84);
+    backdrop-filter: blur(5px);
+}
+
+.tournament-format-modal {
+    background: rgba(26, 26, 46, 0.97);
+    border: 2px solid #00FF88;
+    box-shadow: 0 0 28px rgba(0, 255, 136, 0.18), 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.tournament-format-modal .modal-header h3 {
+    color: #00FF88;
+}
+
+.tournament-format-modal .modal-body .btn {
+    min-height: 48px;
+    border-radius: 12px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.tournament-format-modal #startSwissTournamentBtn {
+    border-color: rgba(0, 255, 136, 0.55);
+    color: #00FF88;
+    background: rgba(0, 255, 136, 0.06);
+}
+
+.tournament-format-modal #startSwissTournamentBtn:hover {
+    border-color: #00FF88;
+    background: rgba(0, 255, 136, 0.14);
+}
+
+.tournament-format-question {
+    margin: 0 0 0.4rem;
+    color: #E8E8F0;
+    text-align: center;
+}
+
+body.light-theme .tournament-format-modal {
+    background: #f6f8fb;
+}
+
+body.light-theme .tournament-format-question {
+    color: #1e293b;
+}
+
+.modal.player-history-modal {
+    width: min(760px, calc(100vw - 24px));
+    max-width: 760px;
+    background: rgba(26, 26, 46, 0.98);
+    border: 2px solid #00FF88;
+    box-shadow: 0 0 28px rgba(0, 255, 136, 0.18), 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.player-history-modal .modal-header h3 {
+    color: #00FF88;
+}
+
+.player-history-content {
+    max-height: min(62vh, 520px);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.player-history-modal .total-score-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: auto;
+}
+
+.player-history-modal .total-score-table td,
+.player-history-modal .total-score-table th {
+    white-space: nowrap;
+    padding: 0.55rem 0.65rem;
+}
+
+.player-history-modal .total-score-table td.history-result-win {
+    background: linear-gradient(to left, rgba(0, 255, 136, 0.3), rgba(0, 255, 136, 0.02));
+}
+
+.player-history-modal .total-score-table td.history-result-loss {
+    background: linear-gradient(to left, rgba(255, 45, 85, 0.3), rgba(255, 45, 85, 0.02));
+}
+
+.player-history-modal .total-score-table td.history-result-draw {
+    background: linear-gradient(to left, rgba(180, 190, 205, 0.28), rgba(180, 190, 205, 0.02));
+}
+
+.score-player-history {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: underline dotted rgba(0, 255, 136, 0.65);
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.score-player-history:hover,
+.score-player-history:focus-visible {
+    color: #00FF88;
+}
+
+body.light-theme .player-history-modal {
+    background: #f6f8fb;
 }
 
 .modal {
