@@ -21,6 +21,8 @@
     let tournamentFinished = false;
     let tournamentWinner = null;
     let tournamentId = null; // ID único para el torneo actual
+    let tournamentFormat = 'random';
+    let swissByes = [];
 
     // Participantes
     let participants = [];
@@ -38,6 +40,12 @@
     function getParticipantById(id) {
         if (!id) return null;
         return participants.find(p => p && (p.id === id || p.id === String(id))) || null;
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
     }
 
     function getParticipantNameById(id) {
@@ -346,7 +354,9 @@
                 finalMatch,
                 finalPlayed,
                 podium,
-                tournamentVisible
+                tournamentVisible,
+                tournamentFormat,
+                swissByes
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
@@ -395,6 +405,8 @@
             finalPlayed = data.finalPlayed || false;
             podium = data.podium || { first: null, second: null, third: null, fourth: null };
             tournamentVisible = data.tournamentVisible || false;
+            tournamentFormat = data.tournamentFormat || 'random';
+            swissByes = data.swissByes || [];
 
             ensureParticipantsObjects();
             participants.forEach(p => {
@@ -512,6 +524,8 @@
             finalPlayed = data.finalPlayed || false;
             podium = data.podium || { first: null, second: null, third: null, fourth: null };
             tournamentVisible = data.tournamentVisible || false;
+            tournamentFormat = data.tournamentFormat || 'random';
+            swissByes = data.swissByes || [];
 
             ensureParticipantsObjects();
             participants.forEach(p => {
@@ -653,7 +667,8 @@
             if (p && p.id) accumulatedPoints[p.id] = 0;
         });
 
-        const POINTS_PER_WIN = 3;
+        const POINTS_PER_WIN = tournamentFormat === 'swiss' ? 1 : 3;
+        const POINTS_PER_DRAW = tournamentFormat === 'swiss' ? 0.5 : 0;
 
         for (let v of matchHistory) {
             if (v.round && v.round > 0) {
@@ -663,6 +678,9 @@
                     if (aId) accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_WIN;
                 } else if (v.scoreB > v.scoreA) {
                     if (bId) accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_WIN;
+                } else if (POINTS_PER_DRAW && aId && bId && ((v.scoreA !== 0 || v.scoreB !== 0) || v.drawResult)) {
+                    accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_DRAW;
+                    accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_DRAW;
                 }
             }
         }
@@ -681,9 +699,17 @@
                         if (aId) accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_WIN;
                     } else if (v.scoreB > v.scoreA) {
                         if (bId) accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_WIN;
+                    } else if (POINTS_PER_DRAW && aId && bId && ((v.scoreA !== 0 || v.scoreB !== 0) || v.drawResult)) {
+                        accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_DRAW;
+                        accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_DRAW;
                     }
                 }
             }
+        }
+        if (tournamentFormat === 'swiss') {
+            // Un bye equivale a una victoria para la puntuación del torneo.
+            const playedByes = swissByes.slice(0, getTotalRounds());
+            playedByes.forEach(id => { accumulatedPoints[id] = (accumulatedPoints[id] || 0) + POINTS_PER_WIN; });
         }
     }
 
@@ -721,13 +747,22 @@
             });
             const pointDifference = pointsFor - pointsAgainst;
 
-            return { id: pid, name: p.name, points, wins, pointDifference };
+            const opponents = playerMatches.map(v => {
+                const a = v.playerAId || getParticipantIdByName(v.playerA);
+                const b = v.playerBId || getParticipantIdByName(v.playerB);
+                return a === pid ? b : a;
+            }).filter(Boolean);
+            const buchholz = opponents.reduce((sum, id) => sum + getAccumulatedScore(id), 0);
+            const byes = tournamentFormat === 'swiss' ? swissByes.filter(id => String(id) === String(pid)).length : 0;
+            return { id: pid, name: p.name, points, wins: wins + byes, pointDifference, buchholz };
         });
 
         ranking.sort((a, b) => {
             if (b.points !== a.points) return b.points - a.points;
+            if (tournamentFormat === 'swiss' && b.buchholz !== a.buchholz) return b.buchholz - a.buchholz;
+            if (b.wins !== a.wins) return b.wins - a.wins;
             if (b.pointDifference !== a.pointDifference) return b.pointDifference - a.pointDifference;
-            return (b.wins || 0) - (a.wins || 0);
+            return 0;
         });
         return ranking;
     }
@@ -817,6 +852,32 @@
 
         search(normalized.sort(() => Math.random() - 0.5), []);
         return best;
+    }
+
+    function generateSwissPairings() {
+        const ranking = getGroupRanking();
+        const previous = getPreviousGroupPairKeys();
+        const byeIds = new Set(swissByes);
+        let bye = null;
+        if (participants.length % 2) {
+            bye = [...ranking].reverse().find(p => !byeIds.has(String(p.id))) || ranking[ranking.length - 1];
+            if (bye) byeIds.add(String(bye.id));
+        }
+        const players = ranking.filter(p => !bye || p.id !== bye.id).map(p => ({ id: p.id, name: p.name, points: p.points }));
+        let best = null;
+        function search(rest, pairs, gap) {
+            if (!rest.length) {
+                if (!best || gap < best.gap) best = { pairs: [...pairs], gap };
+                return;
+            }
+            if (best && gap >= best.gap) return;
+            const first = rest[0];
+            const opponents = rest.slice(1).filter(p => !previous.has(getPairKey(first.id, p.id)));
+            opponents.sort((a, b) => Math.abs(first.points-b.points)-Math.abs(first.points-a.points) || Math.random()-.5);
+            opponents.forEach(opponent => search(rest.filter(p => p !== first && p !== opponent), pairs.concat([{ playerA:first.name, playerB:opponent.name, playerAId:first.id, playerBId:opponent.id }]), gap + Math.abs(first.points-opponent.points)));
+        }
+        search(players, [], 0);
+        return { pairings: best?.pairs || [], bye };
     }
 
     function getKnockoutRoundName(round) {
@@ -912,9 +973,6 @@
     }
 
     function renderTournamentName() {
-        document.title = `${tournamentName} · BeybladeX`;
-        const titleEl = document.getElementById('siteTitle');
-        if (titleEl) titleEl.textContent = tournamentName;
         const scoreTitle = document.getElementById('scoreTournamentName');
         if (scoreTitle) scoreTitle.textContent = tournamentName;
     }
@@ -1030,6 +1088,24 @@
         `;
     }
 
+    function renderSwissFinalStandings() {
+        const ranking = getGroupRanking();
+        const matches = [...matchHistory, ...versus].filter(match => match.round > 0);
+        const rows = ranking.map((player, index) => {
+            const played = matches.filter(match => (match.playerAId || getParticipantIdByName(match.playerA)) === player.id || (match.playerBId || getParticipantIdByName(match.playerB)) === player.id);
+            const wins = played.filter(match => player.id === (match.playerAId || getParticipantIdByName(match.playerA)) ? match.scoreA > match.scoreB : match.scoreB > match.scoreA).length;
+            const draws = played.filter(match => match.drawResult || (match.scoreA === match.scoreB && (match.scoreA !== 0 || match.scoreB !== 0))).length;
+            const losses = played.filter(match => match.scoreA !== match.scoreB && (player.id === (match.playerAId || getParticipantIdByName(match.playerA)) ? match.scoreA < match.scoreB : match.scoreB < match.scoreA)).length;
+            const byes = swissByes.filter(id => String(id) === String(player.id)).length;
+            return `<tr><td>${index + 1}</td><td class="name-cell"><button type="button" class="score-player-history" data-player-id="${escapeHtml(player.id)}">${escapeHtml(player.name)}</button></td><td>${wins + byes} - ${losses} - ${draws}</td><td class="points-cell">${player.points.toFixed(1)}</td><td>${player.buchholz.toFixed(1)}</td><td>${player.pointDifference > 0 ? '+' : ''}${player.pointDifference}</td></tr>`;
+        }).join('');
+        return `<div class="podium-container swiss-final-standings">
+            <div class="podium-title">🏆 ${tournamentName} · Clasificación final</div>
+            <div class="table-scroll"><table class="total-score-table"><thead><tr><th>Rango</th><th>Participante</th><th>Partido G-P-E</th><th>1. Puntuación</th><th>2. Buchholz</th><th>3. Dif. de ptos.</th></tr></thead><tbody>${rows}</tbody></table></div>
+            <div class="podium-footer">Formato suizo · ${groupRound} rondas · ${participants.length} participantes · desempate Buchholz</div>
+        </div>`;
+    }
+
     function renderVersus() {
         const roundTitle = getRoundTitle();
         const titleEl = document.querySelector('.phase-indicator h2');
@@ -1043,14 +1119,14 @@
         if (!selectedPlayerFilterId && playerFilterBar) playerFilterBar.hidden = true;
 
         if (tournamentFinished && tournamentWinner && !selectedPlayerFilterId) {
-            versusListEl.innerHTML = renderPodium();
+            versusListEl.innerHTML = tournamentFormat === 'swiss' ? renderSwissFinalStandings() : renderPodium();
             winnerMessageEl.innerHTML = '';
             thirdPlaceMessageEl.innerHTML = '';
 
             phaseDisplayEl.textContent = `🏆 Torneo Finalizado`;
             phaseDisplayEl.style.background = 'rgba(0, 255, 136, 0.2)';
             phaseDisplayEl.style.color = '#00FF88';
-            roundDisplayEl.textContent = `Campeón: ${tournamentWinner}`;
+            roundDisplayEl.textContent = tournamentFormat === 'swiss' ? `1.º lugar: ${tournamentWinner}` : `Campeón: ${tournamentWinner}`;
 
             updateStats();
             return;
@@ -1091,11 +1167,12 @@
             const sortedMatches = matchesToShow;
 
             sortedMatches.forEach((v, index) => {
-                const isPlayed = (v.scoreA !== 0 || v.scoreB !== 0);
+                const isPlayed = (v.scoreA !== 0 || v.scoreB !== 0 || v.drawResult);
                 const statusClass = isPlayed ? 'played' : 'unplayed';
                 const isPreFinal = v === preFinalMatch;
                 const isFinal = v === finalMatch;
                 const isArchived = matchHistory.includes(v);
+                const lockedSwissHistory = tournamentFormat === 'swiss' && isArchived;
                 const playerAId = v.playerAId || getParticipantIdByName(v.playerA);
                 const playerBId = v.playerBId || getParticipantIdByName(v.playerB);
 
@@ -1129,18 +1206,22 @@
                     `;
                 }
 
+                if (tournamentFormat === 'swiss' && v.round > 0 && !isArchived && !isPlayed) {
+                    controlButtons += `<div class="match-controls"><button class="btn-sm play-btn" data-action="mark-swiss-draw" data-vsid="${v.id}">🤝 Registrar empate</button></div>`;
+                }
+
                 html += `
                     <div class="versus-item ${extraClass} ${statusClass} ${isArchived ? 'archived-match' : ''}" data-vsindex="${index}">
-                        ${isArchived ? `<div class="archived-match-label">📅 ${v.round ? `Ronda ${v.round}` : 'Eliminatorias'} · editable</div>` : ''}
+                        ${isArchived ? `<div class="archived-match-label">📅 ${v.round ? `Ronda ${v.round}` : 'Eliminatorias'}${lockedSwissHistory ? ' · historial bloqueado' : ' · editable'}</div>` : ''}
                         ${isPreFinal ? `<div class="prefinal-badge">🥉 PRE-FINAL</div>` : ''}
                         ${isFinal ? `<div class="final-badge">🏆 FINAL</div>` : ''}
                         <div class="match-content">
                             <div class="match-players">
                                 <div class="player-score-block">
                                     <div class="score-control">
-                                        <button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerA}" data-vsid="${v.id}" data-dir="-1">−</button>
+                                        ${lockedSwissHistory ? '' : `<button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerA}" data-vsid="${v.id}" data-dir="-1">−</button>`}
                                         <div class="score-display">${v.scoreA}</div>
-                                        <button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>
+                                        ${lockedSwissHistory ? '' : `<button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>`}
                                     </div>
                                     <button class="player-name player-filter-trigger" data-player-filter-id="${playerAId}" type="button" title="Ver partidos de ${v.playerA}">${v.playerA}</button>
                                 </div>
@@ -1149,9 +1230,9 @@
 
                                 <div class="player-score-block">
                                     <div class="score-control">
-                                        <button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>
+                                        ${lockedSwissHistory ? '' : `<button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>`}
                                         <div class="score-display">${v.scoreB}</div>
-                                        <button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>
+                                        ${lockedSwissHistory ? '' : `<button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>`}
                                     </div>
                                     <button class="player-name player-filter-trigger" data-player-filter-id="${playerBId}" type="button" title="Ver partidos de ${v.playerB}">${v.playerB}</button>
                                 </div>
@@ -1200,6 +1281,9 @@
                     if (preFinalPlayed) autoFinishFinal();
                 });
             });
+            document.querySelectorAll('[data-action="mark-swiss-draw"]').forEach(btn => {
+                btn.addEventListener('click', () => markSwissDraw(btn.dataset.vsid));
+            });
 
         } else if (!selectedPlayerFilterId && matchHistory.length > 0 && selectedRound !== 'all') {
             const filteredMatches = matchHistory.filter(v => v.round === selectedRound);
@@ -1209,23 +1293,23 @@
                     const roundLabel = v.round ? `R${v.round}` : 'KO';
                     html += `
                     <div class="versus-item archived-match" style="opacity:0.9;">
-                        <div style="font-size:.7rem;color:#00D4FF;margin-bottom:.35rem;">📅 Ronda anterior · editable</div>
+                        <div style="font-size:.7rem;color:#00D4FF;margin-bottom:.35rem;">📅 Ronda anterior${tournamentFormat === 'swiss' ? ' · historial bloqueado' : ' · editable'}</div>
                         <div class="match-content">
                             <div class="match-players">
                             <div class="player-score-block">
                                 <div class="score-control">
-                                    <button class="dec-score" data-archived="true" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="-1">−</button>
+                                    ${tournamentFormat === 'swiss' ? '' : `<button class="dec-score" data-archived="true" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="-1">−</button>`}
                                     <div class="score-display">${v.scoreA}</div>
-                                    <button class="inc-score" data-archived="true" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>
+                                    ${tournamentFormat === 'swiss' ? '' : `<button class="inc-score" data-archived="true" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>`}
                                 </div>
                                 <button class="player-name player-filter-trigger" data-player-filter-id="${v.playerAId || getParticipantIdByName(v.playerA)}" type="button" title="Ver partidos de ${v.playerA}">${v.playerA}</button>
                             </div>
                             <span class="vs-badge" style="color:#4A4A6A;">✅ VS <span class="round-tag">${roundLabel}</span></span>
                             <div class="player-score-block">
                                 <div class="score-control">
-                                    <button class="dec-score" data-archived="true" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>
+                                    ${tournamentFormat === 'swiss' ? '' : `<button class="dec-score" data-archived="true" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>`}
                                     <div class="score-display">${v.scoreB}</div>
-                                    <button class="inc-score" data-archived="true" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>
+                                    ${tournamentFormat === 'swiss' ? '' : `<button class="inc-score" data-archived="true" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>`}
                                 </div>
                                 <button class="player-name player-filter-trigger" data-player-filter-id="${v.playerBId || getParticipantIdByName(v.playerB)}" type="button" title="Ver partidos de ${v.playerB}">${v.playerB}</button>
                             </div>
@@ -1257,7 +1341,7 @@
         thirdPlaceMessageEl.innerHTML = '';
 
         if (currentPhase === 1) {
-            phaseDisplayEl.textContent = 'Fase 1 · Grupos';
+            phaseDisplayEl.textContent = tournamentFormat === 'swiss' ? 'Rondas Suizas' : 'Fase 1 · Grupos';
             phaseDisplayEl.style.background = 'rgba(234, 241, 250, 0.9)';
             phaseDisplayEl.style.color = '#000704';
             roundDisplayEl.textContent = `Ronda ${groupRound}`;
@@ -1299,7 +1383,7 @@
         const qualifiedCount = getQualifiedCount();
 
         let html = `<div style="display: flex; flex-direction: column; gap: 0.3rem;">`;
-        html += `<div style="font-size:0.75rem; color:#4A4A6A; margin-bottom:0.3rem;">📊 Puntos de Fase de Grupos</div>`;
+        html += `<div style="font-size:0.75rem; color:#4A4A6A; margin-bottom:0.3rem;">📊 ${tournamentFormat === 'swiss' && tournamentFinished ? 'Standing final suizo' : 'Puntos de Fase de Grupos'}</div>`;
         ranking.forEach((item, idx) => {
             const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
             const pts = item.points;
@@ -1327,18 +1411,15 @@
         const groupMatches = [...matchHistory, ...versus].filter(v => v.round && v.round > 0);
 
         let html = `
-            <div style="font-size:0.75rem; color:#4A4A6A; margin-bottom:0.5rem;">📊 Estadísticas de Fase de Grupos</div>
+            <div style="font-size:0.75rem; color:#4A4A6A; margin-bottom:0.5rem;">📊 ${tournamentFormat === 'swiss' ? (tournamentFinished ? 'Standing final suizo' : 'Standing suizo · victoria +1.0 / empate +0.5') : 'Estadísticas de Fase de Grupos'}</div>
             <table class="total-score-table">
                 <thead>
                     <tr>
-                        <th>Pos.</th>
+                        <th>${tournamentFormat === 'swiss' ? 'Rango' : 'Pos.'}</th>
                         <th>Participante</th>
-                        <th>Puntos</th>
-                        <th>Dif. Pts</th>
-                        <th>Partidos</th>
-                        <th>Victorias</th>
-                        <th>Derrotas</th>
-                        <th>Rondas</th>
+                        ${tournamentFormat === 'swiss'
+                            ? '<th>Partido G-P-E</th><th>1. Puntuación</th><th>2. Buchholz</th><th>3. Dif. de ptos.</th>'
+                            : '<th>Puntos</th><th>Dif. Pts</th><th>Partidos</th><th>Victorias</th><th>Derrotas</th><th>Rondas</th>'}
                     </tr>
                 </thead>
                 <tbody>
@@ -1349,17 +1430,20 @@
             const cls = idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : idx === 2 ? 'rank-3' : '';
 
             const playerMatches = groupMatches.filter(v => v.playerA === item.name || v.playerB === item.name);
-            const wins = playerMatches.filter(v =>
+            const completedPlayerMatches = playerMatches.filter(v => v.drawResult || v.jugado || v.scoreA !== 0 || v.scoreB !== 0);
+            const wins = completedPlayerMatches.filter(v =>
                 (v.playerA === item.name && v.scoreA > v.scoreB) ||
                 (v.playerB === item.name && v.scoreB > v.scoreA)
             ).length;
-            const losses = playerMatches.filter(v =>
+            const losses = completedPlayerMatches.filter(v =>
                 (v.playerA === item.name && v.scoreA < v.scoreB) ||
                 (v.playerB === item.name && v.scoreB < v.scoreA)
             ).length;
+            const draws = completedPlayerMatches.filter(v => v.drawResult || v.scoreA === v.scoreB).length;
+            const byes = tournamentFormat === 'swiss' ? swissByes.filter(id => String(id) === String(item.id)).length : 0;
 
             const roundsPlayed = new Set();
-            playerMatches.forEach(v => {
+            completedPlayerMatches.forEach(v => {
                 if (v.round && v.round > 0) roundsPlayed.add(v.round);
             });
 
@@ -1369,13 +1453,10 @@
             html += `
                 <tr class="${cls}">
                     <td><span class="medal-icon">${medal}</span></td>
-                    <td class="name-cell">${item.name}</td>
-                    <td class="points-cell ${ptsClass}">${pts}</td>
-                    <td class="matches-cell" style="color:#0099FF;">${item.pointDifference > 0 ? '+' : ''}${item.pointDifference}</td>
-                    <td class="matches-cell">${playerMatches.length}</td>
-                    <td class="matches-cell" style="color:#00FF88;">${wins}</td>
-                    <td class="matches-cell" style="color:#FF1744;">${losses}</td>
-                    <td class="matches-cell">${roundsPlayed.size}</td>
+                    <td class="name-cell"><button type="button" class="score-player-history" data-player-id="${escapeHtml(item.id)}">${escapeHtml(item.name)}</button></td>
+                    ${tournamentFormat === 'swiss'
+                        ? `<td class="matches-cell">${wins + byes} - ${losses} - ${draws}</td><td class="points-cell ${ptsClass}">${item.points.toFixed(1)}</td><td class="matches-cell">${item.buchholz.toFixed(1)}</td><td class="matches-cell" style="color:#0099FF;">${item.pointDifference > 0 ? '+' : ''}${item.pointDifference}</td>`
+                        : `<td class="points-cell ${ptsClass}">${item.points}</td><td class="matches-cell" style="color:#0099FF;">${item.pointDifference > 0 ? '+' : ''}${item.pointDifference}</td><td class="matches-cell">${completedPlayerMatches.length}</td><td class="matches-cell" style="color:#00FF88;">${wins}</td><td class="matches-cell" style="color:#FF1744;">${losses}</td><td class="matches-cell">${roundsPlayed.size}</td>`}
                 </tr>
             `;
         });
@@ -1393,6 +1474,47 @@
             totalScoreTableEl.appendChild(btn);
             btn.addEventListener('click', exportScoreTableXlsx);
         }
+    }
+
+    function showPlayerHistory(playerId) {
+        const player = getParticipantById(playerId);
+        if (!player) return;
+        const playerKey = String(player.id || playerId);
+        const matches = [...matchHistory, ...versus]
+            .filter(match => {
+                const aId = String(match.playerAId || getParticipantIdByName(match.playerA) || '');
+                const bId = String(match.playerBId || getParticipantIdByName(match.playerB) || '');
+                return aId === playerKey || bId === playerKey || match.playerA === player.name || match.playerB === player.name;
+            })
+            .sort((a, b) => (a.round || Number.MAX_SAFE_INTEGER) - (b.round || Number.MAX_SAFE_INTEGER));
+
+        const historyRows = matches.map(match => {
+            const isA = match.playerA === player.name || String(match.playerAId || getParticipantIdByName(match.playerA)) === playerKey;
+            const opponent = isA ? match.playerB : match.playerA;
+            const scoreFor = isA ? match.scoreA : match.scoreB;
+            const scoreAgainst = isA ? match.scoreB : match.scoreA;
+            const played = match.drawResult || match.jugado || scoreFor !== 0 || scoreAgainst !== 0;
+            const result = !played ? 'Pendiente' : match.drawResult || scoreFor === scoreAgainst ? 'Empate' : scoreFor > scoreAgainst ? 'Victoria' : 'Derrota';
+            const resultClass = result === 'Victoria' ? 'history-result-win' : result === 'Derrota' ? 'history-result-loss' : result === 'Empate' ? 'history-result-draw' : '';
+            return `<tr><td>${match.round > 0 ? `Ronda ${match.round}` : 'Eliminatorias'}</td><td>${escapeHtml(opponent || '—')}</td><td>${played ? `${Number(scoreFor) || 0}–${Number(scoreAgainst) || 0}` : '—'}</td><td class="${resultClass}">${result}</td></tr>`;
+        });
+
+        if (tournamentFormat === 'swiss') {
+            let byeNumber = 0;
+            swissByes.forEach((id, index) => {
+                if (String(id) === playerKey) {
+                    byeNumber++;
+                    historyRows.push(`<tr><td>Ronda ${index + 1}</td><td>Bye (descanso)</td><td>—</td><td class="history-result-win">Victoria · 1 pt</td></tr>`);
+                }
+            });
+        }
+
+        const content = document.getElementById('playerHistoryContent');
+        document.getElementById('playerHistoryTitle').textContent = `📜 Historial · ${player.name}`;
+        content.innerHTML = historyRows.length
+            ? `<div class="player-history-content"><table class="total-score-table"><thead><tr><th>Ronda</th><th>Rival</th><th>Marcador</th><th>Resultado</th></tr></thead><tbody>${historyRows.join('')}</tbody></table></div>`
+            : '<div class="empty-message">Este participante todavía no tiene enfrentamientos registrados.</div>';
+        document.getElementById('playerHistoryModal').classList.add('active');
     }
 
     function getScoreTableRows() {
@@ -1415,11 +1537,21 @@
                 Posicion: idx + 1,
                 Participante: item.name,
                 Puntos: item.points,
-                'Diferencia de puntos': item.pointDifference,
-                Partidos: playerMatches.length,
-                Victorias: wins,
-                Derrotas: losses,
-                Rondas: rounds.size
+                ...(tournamentFormat === 'swiss' ? {
+                    'Partido G-P-E': `${wins + swissByes.filter(id => String(id) === String(item.id)).length} - ${losses} - ${playerMatches.filter(v => v.drawResult || (v.scoreA === v.scoreB && (v.scoreA !== 0 || v.scoreB !== 0))).length}`,
+                    '2. Buchholz': item.buchholz,
+                    '3. Diferencia de puntos': item.pointDifference
+                } : {
+                    'Diferencia de puntos': item.pointDifference,
+                    Partidos: playerMatches.length,
+                    Victorias: wins,
+                    Derrotas: losses,
+                    Rondas: rounds.size
+                }),
+                ...(tournamentFormat === 'swiss' ? {
+                    Empates: playerMatches.filter(v => v.drawResult || (v.scoreA === v.scoreB && (v.scoreA !== 0 || v.scoreB !== 0))).length,
+                    Buchholz: item.buchholz
+                } : {})
             };
         });
     }
@@ -1465,6 +1597,36 @@
         const eliminatoriaLabel = document.querySelector('.phase-label.fase-eliminatorias');
         const knockoutSpecial = document.getElementById('knockoutSpecialMatches');
         const specialStatus = document.getElementById('specialMatchesStatus');
+        const finishSwissBtn = document.getElementById('finishSwissTournamentBtn');
+        const isSwiss = tournamentFormat === 'swiss';
+        const plannedSwissRounds = participants.length >= 2 ? Math.ceil(Math.log2(participants.length)) : 0;
+        const swissPending = versus.some(match => !match.drawResult && match.scoreA === 0 && match.scoreB === 0);
+        const swissRoundsComplete = groupRound >= plannedSwissRounds;
+
+        document.querySelector('.phase-switch-container').style.display = isSwiss ? 'none' : '';
+        if (isSwiss) currentPhaseView = 'groups';
+        if (finishSwissBtn) {
+            finishSwissBtn.hidden = !isSwiss;
+            finishSwissBtn.disabled = tournamentFinished || groupRound < plannedSwissRounds || swissPending;
+            finishSwissBtn.title = swissPending ? 'Registra el resultado de todos los partidos de la ronda actual.' : `Finaliza al completar ${plannedSwissRounds} rondas.`;
+        }
+        const qualificationOption = document.querySelector('.tournament-qualified-option');
+        if (qualificationOption) qualificationOption.style.display = isSwiss ? 'none' : '';
+        const newRoundBtn = document.getElementById('nextGroupRoundBtn');
+        if (isSwiss && (tournamentFinished || swissRoundsComplete)) {
+            generateGroupBtn.disabled = true;
+            if (newRoundBtn) newRoundBtn.disabled = true;
+        } else if (isSwiss) {
+            generateGroupBtn.disabled = false;
+            if (newRoundBtn) newRoundBtn.disabled = false;
+        }
+        if (isSwiss) {
+            knockoutPanel.style.display = 'none';
+            groupPanel.style.display = '';
+        } else {
+            knockoutPanel.style.display = '';
+            groupPanel.style.display = '';
+        }
 
         if (currentPhaseView === 'groups') {
             switchInput.checked = false;
@@ -1485,6 +1647,8 @@
         }
 
         document.getElementById('groupRoundInfo').textContent = `Ronda ${groupRound}`;
+        const groupBadge = document.querySelector('#groupPhasePanel .phase-badge');
+        if (groupBadge) groupBadge.textContent = isSwiss ? 'Rondas Suizas' : 'Fase de Grupos';
 
         if (currentPhase === 2 && !tournamentFinished) {
             const activePlayers = new Set();
@@ -1570,7 +1734,14 @@
             nextBtn.style.opacity = '0.5';
         }
 
-        if (currentPhase === 1 && versus.length === 0 && matchHistory.length === 0) {
+        if (isSwiss) {
+            startBtn.textContent = tournamentFinished ? '🏆 Torneo finalizado' : '🏁 Finalizar torneo';
+            startBtn.disabled = true;
+            startBtn.style.opacity = '0.5';
+            startBtn.style.display = 'none';
+            nextBtn.style.display = 'none';
+        } else if (currentPhase === 1 && versus.length === 0 && matchHistory.length === 0) {
+            startBtn.style.display = '';
             startBtn.textContent = '🏁 Iniciar eliminatorias';
             startBtn.style.opacity = '0.5';
             startBtn.disabled = true;
@@ -1593,8 +1764,13 @@
             mobileNextBtn.disabled = tournamentFinished;
         }
         if (mobileKnockoutBtn) {
-            mobileKnockoutBtn.disabled = currentPhase === 2 || tournamentFinished || (versus.length === 0 && matchHistory.length === 0);
-            mobileKnockoutBtn.textContent = tournamentFinished ? '🏆 Finalizado' : (currentPhase === 2 ? '⏳ Eliminatorias' : '🏁 Eliminatorias');
+            if (isSwiss) {
+                mobileKnockoutBtn.textContent = tournamentFinished ? '🏆 Finalizado' : '🏁 Finalizar torneo';
+                mobileKnockoutBtn.disabled = finishSwissBtn?.disabled ?? true;
+            } else {
+                mobileKnockoutBtn.disabled = currentPhase === 2 || tournamentFinished || (versus.length === 0 && matchHistory.length === 0);
+                mobileKnockoutBtn.textContent = tournamentFinished ? '🏆 Finalizado' : (currentPhase === 2 ? '⏳ Eliminatorias' : '🏁 Eliminatorias');
+            }
         }
     }
 
@@ -1627,6 +1803,7 @@
     function updateScore(vsId, player, direction) {
         const vs = versus.find(v => String(v.id) === String(vsId));
         if (!vs) return;
+        vs.drawResult = false;
 
         if (vs.playerA === player) {
             const newVal = vs.scoreA + direction;
@@ -1646,7 +1823,22 @@
         saveToLocalStorage();
     }
 
+    function markSwissDraw(matchId) {
+        const match = versus.find(v => String(v.id) === String(matchId));
+        if (!match || tournamentFormat !== 'swiss') return;
+        match.scoreA = 0;
+        match.scoreB = 0;
+        match.drawResult = true;
+        recalculateAccumulatedPoints();
+        renderAll();
+        saveToLocalStorage();
+    }
+
     function updateArchivedScore(matchId, player, dir) {
+        if (tournamentFormat === 'swiss') {
+            alert('Los resultados de rondas suizas anteriores están bloqueados para conservar la validez de los emparejamientos.');
+            return;
+        }
         const idx = matchHistory.findIndex(h => String(h.id) === String(matchId));
         if (idx === -1) return;
         const match = matchHistory[idx];
@@ -1705,6 +1897,11 @@
             return;
         }
 
+        if (tournamentFormat === 'swiss' && groupRound >= Math.ceil(Math.log2(participants.length))) {
+            alert(`El torneo suizo ya completó sus ${groupRound} rondas previstas para ${participants.length} participantes.`);
+            return;
+        }
+
         if (currentPhase === 2) {
             if (!confirm('Estás en fase eliminatoria. ¿Quieres volver a fase de grupos? Se archivarán los enfrentamientos actuales.')) {
                 return;
@@ -1723,6 +1920,10 @@
             podium = { first: null, second: null, third: null, fourth: null };
         } else {
             if (versus.length > 0) {
+                if (tournamentFormat === 'swiss' && versus.some(match => match.scoreA === 0 && match.scoreB === 0)) {
+                    alert('Completa todos los partidos de esta ronda antes de generar la siguiente. Un empate 0-0 debe registrarse con algún punto para distinguirlo de un partido pendiente.');
+                    return;
+                }
                 if (!confirm('Hay enfrentamientos actuales. ¿Archivarlos y generar una nueva ronda?')) {
                     return;
                 }
@@ -1730,7 +1931,8 @@
             }
         }
 
-        const pairings = generatePairings(participants, getPreviousGroupPairKeys());
+        const swissResult = tournamentFormat === 'swiss' ? generateSwissPairings() : null;
+        const pairings = swissResult ? swissResult.pairings : generatePairings(participants, getPreviousGroupPairKeys());
 
         if (pairings.length === 0) {
             alert('Todos los participantes ya se han enfrentado entre sí. No quedan cruces nuevos disponibles.');
@@ -1738,6 +1940,7 @@
         }
 
         groupRound++;
+        if (swissResult?.bye) swissByes.push(String(swissResult.bye.id));
 
         const newVersus = pairings.map(p => ({
             playerA: p.playerA,
@@ -1754,7 +1957,9 @@
 
         const restantes = participants.length - (pairings.length * 2);
         if (restantes > 0) {
-            alert(`⚠️ ${restantes} participante(s) descansan esta ronda (número impar de jugadores).`);
+            alert(swissResult?.bye
+                ? `⚠️ ${swissResult.bye.name} recibe bye (descanso con 3 puntos).`
+                : `⚠️ ${restantes} participante(s) descansan esta ronda (número impar de jugadores).`);
         }
 
         selectedRound = groupRound;
@@ -1840,6 +2045,31 @@
         saveToLocalStorage();
 
         alert(`✅ Eliminatorias iniciadas con ${versus.length} enfrentamientos.\n\n📊 ${qualified.length} jugadores clasificados.`);
+    }
+
+    function finishSwissTournament() {
+        if (tournamentFormat !== 'swiss' || tournamentFinished) return;
+        const plannedRounds = Math.ceil(Math.log2(participants.length));
+        if (participants.length < 2 || groupRound < plannedRounds) {
+            alert(`Completa las ${plannedRounds} rondas suizas previstas antes de finalizar.`);
+            return;
+        }
+        const pending = versus.filter(match => !match.drawResult && match.scoreA === 0 && match.scoreB === 0);
+        if (pending.length) {
+            alert(`Quedan ${pending.length} partido(s) sin resultado. Registra el marcador o marca el empate para poder finalizar.`);
+            return;
+        }
+        if (!confirm('¿Finalizar el torneo suizo y publicar la clasificación final?')) return;
+        archiveAndClearVersus();
+        recalculateAccumulatedPoints();
+        const ranking = getGroupRanking();
+        tournamentFinished = true;
+        tournamentWinner = ranking[0]?.name || null;
+        currentPhase = 1;
+        currentPhaseView = 'groups';
+        selectedRound = 'all';
+        renderAll();
+        saveToLocalStorage();
     }
 
     function nextKnockoutRound() {
@@ -2070,11 +2300,17 @@
     // 13. FUNCIONES DE UTILIDAD
     // ============================================================
 
-    function startTournament() {
+    function startTournament(selectedFormat = null) {
         if (participants.length < 2) {
             alert('❌ Necesitas al menos 2 participantes para iniciar el torneo.');
             return;
         }
+
+        if (!tournamentVisible && getTotalRounds() === 0 && !selectedFormat) {
+            document.getElementById('tournamentFormatModal')?.classList.add('active');
+            return;
+        }
+        if (selectedFormat) tournamentFormat = selectedFormat;
 
         if (!tournamentId) {
             tournamentId = generateTournamentId();
@@ -2110,6 +2346,7 @@
         tournamentFinished = false;
         knockoutRound = 0;
         groupRound = 0;
+        swissByes = [];
         selectedRound = 'all';
         selectedPlayerFilterId = null;
         preFinalMatch = null;
@@ -2656,7 +2893,33 @@
         clearAllParticipants();
     });
 
-    document.getElementById('startTournamentBtn')?.addEventListener('click', startTournament);
+    // No pasar el MouseEvent como selectedFormat: el modal solo se abre sin formato explícito.
+    document.getElementById('startTournamentBtn')?.addEventListener('click', () => startTournament());
+    totalScoreTableEl?.addEventListener('click', event => {
+        const trigger = event.target.closest('.score-player-history');
+        if (trigger) showPlayerHistory(trigger.dataset.playerId);
+    });
+    const playerHistoryModal = document.getElementById('playerHistoryModal');
+    document.getElementById('closePlayerHistoryModal')?.addEventListener('click', () => playerHistoryModal?.classList.remove('active'));
+    playerHistoryModal?.addEventListener('click', event => {
+        if (event.target === playerHistoryModal) playerHistoryModal.classList.remove('active');
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') playerHistoryModal?.classList.remove('active');
+    });
+    const tournamentFormatModal = document.getElementById('tournamentFormatModal');
+    document.getElementById('closeTournamentFormatModal')?.addEventListener('click', () => tournamentFormatModal?.classList.remove('active'));
+    tournamentFormatModal?.addEventListener('click', event => {
+        if (event.target === tournamentFormatModal) tournamentFormatModal.classList.remove('active');
+    });
+    document.getElementById('startRandomTournamentBtn')?.addEventListener('click', () => {
+        tournamentFormatModal?.classList.remove('active');
+        startTournament('random');
+    });
+    document.getElementById('startSwissTournamentBtn')?.addEventListener('click', () => {
+        tournamentFormatModal?.classList.remove('active');
+        startTournament('swiss');
+    });
 
     function setParticipantsCollapsed(collapsed) {
         if (!participantCard || !participantToggleBtn) return;
@@ -2711,7 +2974,11 @@
         else generateGroupRound();
     });
 
-    document.getElementById('mobileKnockoutBtn')?.addEventListener('click', startKnockout);
+    document.getElementById('mobileKnockoutBtn')?.addEventListener('click', () => {
+        if (tournamentFormat === 'swiss') finishSwissTournament();
+        else startKnockout();
+    });
+    document.getElementById('finishSwissTournamentBtn')?.addEventListener('click', finishSwissTournament);
 
     document.getElementById('reshuffleGroupsBtn').addEventListener('click', function () {
         if (currentPhase !== 1) {
@@ -2774,13 +3041,17 @@
 
     // --- Eliminatorias ---
     startKnockoutBtn.addEventListener('click', function () {
+        if (tournamentFormat === 'swiss') {
+            finishSwissTournament();
+            return;
+        }
         if (participants.length < 2) {
             alert('❌ Necesitas al menos 2 participantes.');
             return;
         }
 
         if (currentPhase === 1 && versus.length > 0) {
-            const allPlayed = versus.every(v => v.scoreA !== 0 || v.scoreB !== 0);
+            const allPlayed = versus.every(v => v.scoreA !== 0 || v.scoreB !== 0 || v.drawResult);
             if (!allPlayed) {
                 if (!confirm('⚠️ Hay enfrentamientos sin jugar en la ronda actual.\n\n¿Quieres iniciar eliminatorias de todas formas? Los enfrentamientos sin jugar se archivarán.')) {
                     return;
@@ -2821,7 +3092,7 @@
             return;
         }
 
-        const allPlayed = versus.every(v => v.scoreA !== 0 || v.scoreB !== 0);
+        const allPlayed = versus.every(v => v.scoreA !== 0 || v.scoreB !== 0 || v.drawResult);
         if (!allPlayed) {
             alert('⚠️ Hay enfrentamientos sin jugar (0-0). Asigna puntos primero.');
             return;
@@ -2891,7 +3162,9 @@
             finalMatch,
             finalPlayed,
             podium,
-            tournamentVisible
+            tournamentVisible,
+            tournamentFormat,
+            swissByes
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -2995,6 +3268,8 @@
             groupRound = jsonData.groupRound || 0;
             knockoutRound = jsonData.knockoutRound || 0;
             tournamentFinished = jsonData.tournamentFinished || false;
+            tournamentFormat = jsonData.tournamentFormat || 'random';
+            swissByes = jsonData.swissByes || [];
             customQualifiedCount = jsonData.customQualifiedCount || 8;
             tournamentWinner = jsonData.tournamentWinner || null;
             nextVersusId = jsonData.nextVersusId || 1;

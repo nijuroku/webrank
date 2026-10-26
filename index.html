@@ -8,7 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script type="text/javascript" src="https://sdk.userbase.com/2/userbase.js"></script>
 
-    <title>LaMafia BEYBLADEX</title>
+    <title>LaMafia</title>
     <link
         href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&family=Teko:wght@300;400;600;700&display=swap"
         rel="stylesheet">
@@ -45,7 +45,7 @@
                 </a>
             </div>
             <div class="header-title">
-                <h1> <span id="siteTitle" class="titulo-futurista">LaMafia BEYBLADEX</span></h1>
+                <h1> <span id="siteTitle" class="titulo-futurista">LaMafia</span></h1>
                 <div class="subhead">Fase 1: grupos · Fase 2: eliminatorias</div>
             </div>
         </div>
@@ -176,8 +176,7 @@
             </div>
 
             <div class="info-note">
-                ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma 3pts · Derrota
-                no suma pts
+                ⚡ Aleatorio: victoria 3 pts · Suizo: victoria +1.0, empate +0.5, derrota 0 · Bye +1.0
             </div>
         </div>
         </section>
@@ -275,13 +274,13 @@
                                     ronda</button>
                                 <button class="btn btn-outline btn-full" id="nextGroupRoundBtn">➡️ Siguiente
                                     ronda</button>
+                            <button class="btn btn-warning btn-full" id="finishSwissTournamentBtn" type="button" hidden>🏁 Finalizar torneo</button>
                                 <button class="btn btn-outline btn-full" id="reshuffleGroupsBtn">🔀 Cambiar cruces
                                     0-0</button>
                             </div>
 
                             <div class="info-note-small">
-                                ⚡ Cada ronda: cada participante juega 1 partido · Victoria suma 3pts · Derrota
-                                no suma pts
+                                ⚡ Aleatorio: victoria 3 pts · Suizo: victoria +1.0, empate +0.5, derrota 0 · Bye +1.0
                             </div>
                         </div>
 
@@ -451,6 +450,31 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE FORMATO DEL TORNEO -->
+    <div class="modal-overlay tournament-format-overlay" id="tournamentFormatModal" role="dialog" aria-modal="true" aria-labelledby="tournamentFormatTitle">
+        <div class="modal tournament-format-modal">
+            <div class="modal-header">
+                <h3 id="tournamentFormatTitle">🚀 Iniciar torneo</h3>
+                <button class="modal-close" id="closeTournamentFormatModal" type="button" aria-label="Cerrar">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="tournament-format-question">¿Qué tipo de formato quieres usar?</p>
+                <button class="btn btn-success" id="startRandomTournamentBtn" type="button">🎲 Rondas aleatorias</button>
+                <button class="btn btn-outline" id="startSwissTournamentBtn" type="button">🏆 Rondas suizas</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay player-history-overlay" id="playerHistoryModal" role="dialog" aria-modal="true" aria-labelledby="playerHistoryTitle">
+        <div class="modal player-history-modal">
+            <div class="modal-header">
+                <h3 id="playerHistoryTitle">📜 Historial del participante</h3>
+                <button class="modal-close" id="closePlayerHistoryModal" type="button" aria-label="Cerrar">✕</button>
+            </div>
+            <div class="modal-body" id="playerHistoryContent"></div>
         </div>
     </div>
 
