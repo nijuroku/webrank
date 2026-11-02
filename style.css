@@ -3984,3 +3984,40 @@ body.light-theme #loadUrlModal code {
 body.light-theme #loadUrlModal .card h3 {
     color: #0066AA !important;
 }
+
+.saved-score-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    padding: 0.8rem;
+    border: 1px solid rgba(0, 212, 255, 0.16);
+    border-radius: 12px;
+    background: rgba(13, 13, 26, 0.35);
+}
+
+.saved-score-selector label {
+    color: #00D4FF;
+    font-weight: 700;
+}
+
+.saved-score-selector select {
+    flex: 1;
+    min-width: 180px;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    border-radius: 8px;
+    background: #151527;
+    color: #E8E8F0;
+    font: inherit;
+}
+
+body.light-theme .saved-score-selector {
+    background: rgba(230, 240, 248, 0.75);
+}
+
+body.light-theme .saved-score-selector select {
+    background: #fff;
+    color: #26384a;
+}
