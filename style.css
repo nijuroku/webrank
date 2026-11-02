@@ -4021,3 +4021,67 @@ body.light-theme .saved-score-selector select {
     background: #fff;
     color: #26384a;
 }
+
+.player-name-autocomplete {
+    position: relative;
+    flex: 1;
+    min-width: 180px;
+}
+
+.player-name-autocomplete input {
+    width: 100%;
+    min-width: 0;
+}
+
+.player-suggestions {
+    position: absolute;
+    z-index: 50;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    left: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 0.35rem;
+    border: 1px solid rgba(0, 212, 255, 0.35);
+    border-radius: 12px;
+    background: #151527;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.player-suggestions[hidden] {
+    display: none;
+}
+
+.player-suggestion-option {
+    display: block;
+    width: 100%;
+    padding: 0.65rem 0.8rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #E8E8F0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.player-suggestion-option:hover,
+.player-suggestion-option.active {
+    background: rgba(0, 212, 255, 0.16);
+    color: #00D4FF;
+}
+
+body.light-theme .player-suggestions {
+    background: #fff;
+    box-shadow: 0 12px 30px rgba(38, 56, 74, 0.2);
+}
+
+body.light-theme .player-suggestion-option {
+    color: #26384a;
+}
+
+body.light-theme .player-suggestion-option:hover,
+body.light-theme .player-suggestion-option.active {
+    background: rgba(0, 102, 170, 0.12);
+    color: #0066AA;
+}

@@ -103,6 +103,9 @@
     let supabaseInitialization = null;
     let savedScoreTables = [];
     let activeSavedScoreTable = null;
+    let playerSuggestionTimer = null;
+    let playerSuggestionRequestId = 0;
+    let activePlayerSuggestionIndex = -1;
 
     // Configuración
     let customQualifiedCount = 8;
@@ -204,8 +207,8 @@
     const totalParticipantsDisplay = document.getElementById('totalParticipantsDisplay');
     const participantCountBadge = document.getElementById('participantCountBadge');
     const newParticipantInput = document.getElementById('newParticipantInput');
+    const playerSuggestionsEl = document.getElementById('playerSuggestions');
     const addBtn = document.getElementById('addParticipantBtn');
-    const addMultipleBtn = document.getElementById('addMultipleBtn');
     const participantCard = document.getElementById('participantCard');
     const participantToggleBtn = document.getElementById('participantToggleBtn');
     const classificationContent = document.getElementById('classificationContent');
@@ -312,6 +315,124 @@
             console.error('No se pudieron cargar las tablas guardadas:', error);
             savedScoreTableSelect.innerHTML = '<option value="">No se pudieron cargar las tablas</option>';
             savedScoreTableSelect.disabled = false;
+        }
+    }
+
+    function hidePlayerSuggestions() {
+        if (!playerSuggestionsEl) return;
+        playerSuggestionsEl.hidden = true;
+        playerSuggestionsEl.replaceChildren();
+        newParticipantInput?.setAttribute('aria-expanded', 'false');
+        newParticipantInput?.removeAttribute('aria-activedescendant');
+        activePlayerSuggestionIndex = -1;
+    }
+
+    function selectPlayerSuggestion(name) {
+        if (!name || !newParticipantInput) return;
+        const currentValue = newParticipantInput.value;
+        const lastComma = currentValue.lastIndexOf(',');
+        const prefix = lastComma >= 0 ? `${currentValue.slice(0, lastComma + 1).trimEnd()} ` : '';
+        newParticipantInput.value = `${prefix}${name}`;
+        newParticipantInput.focus();
+        hidePlayerSuggestions();
+    }
+
+    function setActivePlayerSuggestion(index) {
+        const options = [...(playerSuggestionsEl?.querySelectorAll('[role="option"]') || [])];
+        if (!options.length) return;
+        activePlayerSuggestionIndex = (index + options.length) % options.length;
+        options.forEach((option, optionIndex) => {
+            const active = optionIndex === activePlayerSuggestionIndex;
+            option.setAttribute('aria-selected', String(active));
+            option.classList.toggle('active', active);
+        });
+        const activeOption = options[activePlayerSuggestionIndex];
+        newParticipantInput?.setAttribute('aria-activedescendant', activeOption.id);
+        activeOption.scrollIntoView({ block: 'nearest' });
+    }
+
+    function renderPlayerSuggestions(rows, query) {
+        if (!playerSuggestionsEl || !newParticipantInput) return;
+        const seen = new Set();
+        const currentNames = new Set(participants.map(player => String(player.name || '').trim().toLocaleLowerCase()));
+        const matches = (Array.isArray(rows) ? rows : [])
+            .filter(row => row?.name)
+            .filter(row => {
+                const normalized = String(row.name).trim().toLocaleLowerCase();
+                if (!normalized || seen.has(normalized) || currentNames.has(normalized)) return false;
+                seen.add(normalized);
+                return true;
+            })
+            .sort((a, b) => {
+                const aStarts = a.name.toLocaleLowerCase().startsWith(query.toLocaleLowerCase());
+                const bStarts = b.name.toLocaleLowerCase().startsWith(query.toLocaleLowerCase());
+                return Number(bStarts) - Number(aStarts) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+            });
+
+        playerSuggestionsEl.replaceChildren();
+        activePlayerSuggestionIndex = -1;
+        if (!matches.length) {
+            hidePlayerSuggestions();
+            return;
+        }
+
+        matches.forEach((player, index) => {
+            const option = document.createElement('button');
+            option.type = 'button';
+            option.id = `player-suggestion-${index}`;
+            option.className = 'player-suggestion-option';
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', 'false');
+            option.dataset.playerName = player.name;
+            option.textContent = player.name;
+            playerSuggestionsEl.appendChild(option);
+        });
+        playerSuggestionsEl.hidden = false;
+        newParticipantInput.setAttribute('aria-expanded', 'true');
+    }
+
+    async function searchSavedPlayers(query, requestId) {
+        if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
+        if (!supabaseConfig || requestId !== playerSuggestionRequestId || !query) return;
+        const params = new URLSearchParams({
+            select: 'id,name',
+            name: `ilike.*${query}*`,
+            order: 'name.asc',
+            limit: '12'
+        });
+        try {
+            const players = await supabaseRequest(`/rest/v1/players?${params.toString()}`);
+            if (requestId !== playerSuggestionRequestId) return;
+            renderPlayerSuggestions(players, query);
+        } catch (error) {
+            console.warn('No se pudieron buscar jugadores guardados:', error.message);
+            if (requestId === playerSuggestionRequestId) hidePlayerSuggestions();
+        }
+    }
+
+    async function getSavedPlayerName(name) {
+        const typedName = String(name || '').trim();
+        if (!typedName) return typedName;
+        if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
+        if (!supabaseConfig) return typedName;
+
+        try {
+            const escapedName = typedName.replace(/[\\%_*]/g, '\\$&');
+            const params = new URLSearchParams({
+                select: 'name',
+                name: `ilike.${escapedName}`,
+                order: 'created_at.asc',
+                limit: '100'
+            });
+            const rows = await supabaseRequest(`/rest/v1/players?${params.toString()}`);
+            const typedNameKey = typedName.toLocaleLowerCase();
+            const savedPlayer = (Array.isArray(rows) ? rows : []).find(player =>
+                String(player.name || '').trim().toLocaleLowerCase() === typedNameKey
+            );
+            return savedPlayer?.name?.trim() || typedName;
+        } catch (error) {
+            console.warn('No se pudo normalizar el nombre con Supabase:', error.message);
+            return typedName;
         }
     }
 
@@ -2917,44 +3038,77 @@
         if (event.key === 'Escape') setMobileMenuOpen(false);
     });
 
-    addBtn.addEventListener('click', function () {
-        const name = newParticipantInput.value.trim();
-        if (!name) {
+    addBtn.addEventListener('click', async function () {
+        const typedNames = newParticipantInput.value.split(',').map(name => name.trim()).filter(Boolean);
+        if (typedNames.length === 0) {
             alert('Escribe un nombre.');
             return;
         }
-        if (participantExistsByName(name)) {
-            alert(`"${name}" ya está en la lista.`);
-            return;
-        }
-        addParticipant(name);
+        const savedNames = await Promise.all(typedNames.map(getSavedPlayerName));
+        const seenNames = new Set();
+        let addedCount = 0;
+        savedNames.forEach(name => {
+            const normalized = name.trim().toLocaleLowerCase();
+            if (!normalized || seenNames.has(normalized) || participantExistsByName(name)) return;
+            seenNames.add(normalized);
+            if (addParticipant(name)) addedCount++;
+        });
+
         newParticipantInput.value = '';
+        hidePlayerSuggestions();
         renderAll();
         saveToLocalStorage();
-    });
-
-    newParticipantInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') addBtn.click();
-    });
-
-    addMultipleBtn.addEventListener('click', function () {
-        const names = prompt('Ingresa los nombres separados por comas (ej: Juan, María, Pedro, Ana):');
-        if (!names) return;
-        const nameList = names.split(',').map(n => n.trim()).filter(n => n);
-        let added = 0;
-        nameList.forEach(name => {
-            if (!participantExistsByName(name) && name) {
-                addParticipant(name);
-                added++;
-            }
-        });
-        if (added > 0) {
-            renderAll();
-            saveToLocalStorage();
-            alert(`✅ Se agregaron ${added} participantes.`);
-        } else {
-            alert('No se agregaron nuevos participantes.');
+        if (addedCount === 0) {
+            alert(typedNames.length === 1
+                ? `"${savedNames[0]}" ya está en la lista.`
+                : 'Todos esos nombres ya están en la lista.');
+        } else if (addedCount < typedNames.length) {
+            alert(`✅ Se agregaron ${addedCount} participantes. Se omitieron ${typedNames.length - addedCount} repetidos.`);
         }
+    });
+
+    newParticipantInput.addEventListener('input', function () {
+        clearTimeout(playerSuggestionTimer);
+        const query = this.value.slice(this.value.lastIndexOf(',') + 1).trim();
+        const requestId = ++playerSuggestionRequestId;
+        if (query.length < 2) {
+            hidePlayerSuggestions();
+            return;
+        }
+        playerSuggestionTimer = setTimeout(() => searchSavedPlayers(query, requestId), 220);
+    });
+
+    newParticipantInput.addEventListener('keydown', function (event) {
+        const options = playerSuggestionsEl?.querySelectorAll('[role="option"]') || [];
+        if (event.key === 'ArrowDown' && options.length) {
+            event.preventDefault();
+            setActivePlayerSuggestion(activePlayerSuggestionIndex + 1);
+        } else if (event.key === 'ArrowUp' && options.length) {
+            event.preventDefault();
+            setActivePlayerSuggestion(activePlayerSuggestionIndex < 0 ? options.length - 1 : activePlayerSuggestionIndex - 1);
+        } else if (event.key === 'Enter') {
+            if (activePlayerSuggestionIndex >= 0 && options[activePlayerSuggestionIndex]) {
+                event.preventDefault();
+                selectPlayerSuggestion(options[activePlayerSuggestionIndex].dataset.playerName);
+            } else {
+                addBtn.click();
+            }
+        } else if (event.key === 'Escape') {
+            hidePlayerSuggestions();
+        }
+    });
+
+    playerSuggestionsEl?.addEventListener('pointerdown', event => {
+        if (event.target.closest('[role="option"]')) event.preventDefault();
+    });
+
+    playerSuggestionsEl?.addEventListener('click', event => {
+        const option = event.target.closest('[role="option"]');
+        if (option) selectPlayerSuggestion(option.dataset.playerName);
+    });
+
+    newParticipantInput.addEventListener('blur', () => {
+        setTimeout(hidePlayerSuggestions, 140);
     });
 
     document.getElementById('clearAllParticipantsBtn')?.addEventListener('click', function (e) {
