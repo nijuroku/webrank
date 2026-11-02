@@ -1,6 +1,6 @@
 # LaMafia BEYBLADEX para Android
 
-Aplicación Android nativa que muestra el sitio de producción dentro de una WebView, conserva la sesión de Userbase y permite importar torneos JSON desde el almacenamiento del teléfono.
+Aplicación Android nativa que muestra el sitio de producción dentro de una WebView y permite importar torneos JSON desde el almacenamiento del teléfono. El acceso ya no requiere login; las tablas finalizadas se consultan y guardan en Supabase cuando está configurado.
 
 La app abre `https://www.lamafia.site/`. Si ese dominio falla al cargar o responde con un error HTTP, cambia automáticamente al respaldo `https://lamafia-kappa.vercel.app/`. Ambos dominios permanecen dentro de la app.
 

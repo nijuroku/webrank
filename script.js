@@ -8,9 +8,8 @@
     let STORAGE_KEY = 'torneoData_v18';
     let TORNEO_LIST_KEY = 'torneoList_v1';
     const THEME_STORAGE_KEY = 'beybladex_theme';
-    // Sustituye este valor por el App ID de tu aplicación en Userbase.
-    const USERBASE_APP_ID = '1e4ffa36-6d4f-41c6-8b04-3d30835ddfac';
-    const SUPER_ADMIN_USERNAME = 'twenty6';
+    const SUPABASE_CONFIG_ENDPOINT = '/api/supabase-config';
+    const SUPABASE_TABLES_ENDPOINT = '/rest/v1/finished_tournaments';
 
     // ============================================================
     // 2. ESTADO GLOBAL
@@ -100,7 +99,10 @@
     let selectedRound = 'all';
     let selectedPlayerFilterId = null;
     let activeTab = 'participants';
-    let authenticatedUsername = null;
+    let supabaseConfig = null;
+    let supabaseInitialization = null;
+    let savedScoreTables = [];
+    let activeSavedScoreTable = null;
 
     // Configuración
     let customQualifiedCount = 8;
@@ -132,16 +134,6 @@
     const headerQualified = document.getElementById('headerQualified');
     const storageStatusEl = document.getElementById('storageStatus');
     const themeToggleBtn = document.getElementById('themeToggleBtn');
-    const authLoadingView = document.getElementById('authLoadingView');
-    const authView = document.getElementById('authView');
-    const loginForm = document.getElementById('loginForm');
-    const loginError = document.getElementById('loginError');
-    const authUserName = document.getElementById('authUserName');
-    const signOutBtn = document.getElementById('signOutBtn');
-    const superAdminPanel = document.getElementById('superAdminPanel');
-    const adminTabButton = document.getElementById('adminTabButton');
-    const createUserForm = document.getElementById('createUserForm');
-    const createUserStatus = document.getElementById('createUserStatus');
     const tabNavigationButtons = document.querySelectorAll('.tab-navigation-btn');
     const tabPanels = document.querySelectorAll('[data-tab-panel]');
     const mainTabNavigation = document.getElementById('mainTabNavigation');
@@ -159,8 +151,7 @@
     }
 
     function activateTab(tabName, scrollToContent = false) {
-        if (tabName !== 'participants' && tabName !== 'admin' && !tournamentVisible) return;
-        if (tabName === 'admin' && !isSuperAdmin()) return;
+        if (tabName !== 'participants' && tabName !== 'table' && !tournamentVisible) return;
         activeTab = tabName;
         tabNavigationButtons.forEach(button => {
             const isActive = button.dataset.tab === tabName;
@@ -174,7 +165,7 @@
         });
         const tournamentSection = document.getElementById('tournamentSection');
         if (tournamentSection) {
-            tournamentSection.style.display = tabName === 'participants' || tabName === 'admin' || !tournamentVisible ? 'none' : 'block';
+            tournamentSection.style.display = tabName === 'participants' || (tabName !== 'table' && !tournamentVisible) ? 'none' : 'block';
         }
         if (scrollToContent) {
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -183,79 +174,11 @@
 
     function updateTabAvailability() {
         tabNavigationButtons.forEach(button => {
-            const isAdmin = button.dataset.tab === 'admin';
-            button.disabled = !isAdmin && button.dataset.tab !== 'participants' && !tournamentVisible;
+            button.disabled = button.dataset.tab !== 'participants' && button.dataset.tab !== 'table' && !tournamentVisible;
         });
-        if ((!tournamentVisible && activeTab !== 'participants' && activeTab !== 'admin') || (activeTab === 'admin' && !isSuperAdmin())) {
+        if (!tournamentVisible && activeTab !== 'participants' && activeTab !== 'table') {
             activateTab('participants');
         }
-    }
-
-    function configureUserStorage(username) {
-        const safeUsername = encodeURIComponent(String(username).trim().toLocaleLowerCase());
-        const userStorageKey = `torneoData_v18_${safeUsername}`;
-        const userTournamentListKey = `torneoList_v1_${safeUsername}`;
-        // Conserva los datos anónimos existentes al vincular por primera vez
-        // la cuenta del propietario actual.
-        if (!localStorage.getItem(userStorageKey) && localStorage.getItem('torneoData_v18')) {
-            localStorage.setItem(userStorageKey, localStorage.getItem('torneoData_v18'));
-        }
-        if (!localStorage.getItem(userTournamentListKey) && localStorage.getItem('torneoList_v1')) {
-            localStorage.setItem(userTournamentListKey, localStorage.getItem('torneoList_v1'));
-        }
-        STORAGE_KEY = userStorageKey;
-        TORNEO_LIST_KEY = userTournamentListKey;
-    }
-
-    function isSuperAdmin(username = authenticatedUsername) {
-        return String(username || '').trim().toLocaleLowerCase() === SUPER_ADMIN_USERNAME;
-    }
-
-    function updateSuperAdminPanel() {
-        const visible = isSuperAdmin();
-        if (adminTabButton) adminTabButton.hidden = !visible;
-        if (superAdminPanel && !visible) superAdminPanel.hidden = true;
-        document.body.classList.toggle('super-admin-session', visible);
-        if (!visible && activeTab === 'admin') activateTab('participants');
-        updateTabAvailability();
-    }
-
-    function showAuthError(element, error) {
-        if (!element) return;
-        element.textContent = error?.message || String(error || 'No se pudo completar la operación.');
-    }
-
-    function showAuthScreen(message = '') {
-        document.body.classList.add('auth-locked');
-        if (authLoadingView) authLoadingView.hidden = true;
-        if (authView) authView.hidden = false;
-        if (message && loginError) loginError.textContent = message;
-    }
-
-    function enterAuthenticatedApp(user) {
-        authenticatedUsername = user.username;
-        configureUserStorage(authenticatedUsername);
-        if (authUserName) authUserName.textContent = `👤 ${authenticatedUsername}`;
-        updateSuperAdminPanel();
-        if (authLoadingView) authLoadingView.hidden = true;
-        if (authView) authView.hidden = true;
-        document.body.classList.remove('auth-locked');
-        initializeApp();
-    }
-
-    function initializeUserbaseAuth() {
-        if (!window.userbase) {
-            showAuthScreen('No se pudo cargar Userbase. Revisa la conexión.');
-            return;
-        }
-        if (!USERBASE_APP_ID || USERBASE_APP_ID.length < 10) {
-            showAuthScreen('Configura el App ID de Userbase en script.js para activar el acceso.');
-            return;
-        }
-
-        userbase.init({ appId: USERBASE_APP_ID, sessionLength: 168 })
-            .then(session => session?.user ? enterAuthenticatedApp(session.user) : showAuthScreen())
-            .catch(error => showAuthScreen(error));
     }
 
     // Tema
@@ -314,6 +237,8 @@
     const qualifiedCountDisplay = document.getElementById('qualifiedCountDisplay');
     const qualifiedCountInput = document.getElementById('qualifiedCountInput');
     const applyQualifiedBtn = document.getElementById('applyQualifiedBtn');
+    const savedScoreTableSelect = document.getElementById('savedScoreTableSelect');
+    const refreshSavedScoreTablesBtn = document.getElementById('refreshSavedScoreTablesBtn');
 
     // Gestión de rondas
     const generateGroupBtn = document.getElementById('generateGroupStageBtn');
@@ -325,6 +250,139 @@
     const exportDataBtn = document.getElementById('exportDataBtn');
     const importDataBtn = document.getElementById('importDataBtn');
     const fileInput = document.getElementById('fileInput');
+
+    async function initializeSupabase() {
+        try {
+            const response = await fetch(SUPABASE_CONFIG_ENDPOINT, { cache: 'no-store' });
+            if (!response.ok) throw new Error(`Configuración Supabase no disponible (${response.status})`);
+            const config = await response.json();
+            if (!config.url || !config.anonKey) throw new Error('Faltan variables públicas de Supabase en Vercel.');
+            supabaseConfig = { url: config.url.replace(/\/$/, ''), anonKey: config.anonKey };
+            await loadSavedScoreTables();
+        } catch (error) {
+            console.warn('Supabase no está configurado:', error.message);
+            if (savedScoreTableSelect) {
+                savedScoreTableSelect.innerHTML = '<option value="">Supabase aún no está conectado</option>';
+                savedScoreTableSelect.disabled = true;
+            }
+        }
+    }
+
+    async function supabaseRequest(path, options = {}) {
+        if (!supabaseConfig) throw new Error('Supabase no está conectado. Configura las variables SUPABASE_URL y SUPABASE_ANON_KEY en Vercel.');
+        const response = await fetch(`${supabaseConfig.url}${path}`, {
+            ...options,
+            headers: {
+                apikey: supabaseConfig.anonKey,
+                Authorization: `Bearer ${supabaseConfig.anonKey}`,
+                'Content-Type': 'application/json',
+                ...(options.headers || {})
+            }
+        });
+        if (!response.ok) {
+            const message = await response.text();
+            throw new Error(`Supabase ${response.status}: ${message || response.statusText}`);
+        }
+        if (response.status === 204) return null;
+        const responseBody = await response.text();
+        return responseBody ? JSON.parse(responseBody) : null;
+    }
+
+    async function loadSavedScoreTables() {
+        if (!supabaseConfig || !savedScoreTableSelect) return;
+        savedScoreTableSelect.disabled = true;
+        savedScoreTableSelect.innerHTML = '<option value="">Cargando tablas…</option>';
+        try {
+            const rows = await supabaseRequest(`${SUPABASE_TABLES_ENDPOINT}?select=id,name,finished_at&order=finished_at.desc`);
+            savedScoreTables = Array.isArray(rows) ? rows : [];
+            const selectedId = activeSavedScoreTable?.id || savedScoreTableSelect.value || '';
+            savedScoreTableSelect.innerHTML = '<option value="">Tabla del torneo actual</option>' + savedScoreTables.map(row => {
+                const date = row.finished_at ? new Date(row.finished_at).toLocaleDateString() : '';
+                return `<option value="${escapeHtml(row.id)}">${escapeHtml(row.name)}${date ? ` · ${escapeHtml(date)}` : ''}</option>`;
+            }).join('');
+            savedScoreTableSelect.disabled = false;
+            if (selectedId && savedScoreTables.some(row => row.id === selectedId)) {
+                savedScoreTableSelect.value = selectedId;
+                activeSavedScoreTable = savedScoreTables.find(row => row.id === selectedId);
+            } else {
+                activeSavedScoreTable = null;
+            }
+            renderTotalScoreTable();
+        } catch (error) {
+            console.error('No se pudieron cargar las tablas guardadas:', error);
+            savedScoreTableSelect.innerHTML = '<option value="">No se pudieron cargar las tablas</option>';
+            savedScoreTableSelect.disabled = false;
+        }
+    }
+
+    async function loadSavedScoreTableById(id) {
+        if (!id) {
+            activeSavedScoreTable = null;
+            renderTotalScoreTable();
+            return;
+        }
+        totalScoreTableEl.innerHTML = '<div class="empty-message">Cargando tabla e historial…</div>';
+        try {
+            const rows = await supabaseRequest(`${SUPABASE_TABLES_ENDPOINT}?id=eq.${encodeURIComponent(id)}&select=*`);
+            if (savedScoreTableSelect?.value !== id) return;
+            activeSavedScoreTable = rows[0] || null;
+            renderTotalScoreTable();
+        } catch (error) {
+            console.error('No se pudo cargar la tabla seleccionada:', error);
+            totalScoreTableEl.innerHTML = '<div class="empty-message">No se pudo cargar esta tabla. Intenta actualizar.</div>';
+        }
+    }
+
+    async function saveFinishedTournamentToSupabase() {
+        if (!tournamentFinished || !tournamentId || participants.length === 0) return;
+        const payload = {
+            id: tournamentId,
+            name: tournamentName,
+            finished_at: new Date().toISOString(),
+            participants,
+            standings: getGroupRanking(),
+            matches: [...matchHistory, ...versus],
+            tournament_format: tournamentFormat,
+            swiss_byes: swissByes,
+            winner: tournamentWinner,
+            podium
+        };
+        try {
+            const existing = await supabaseRequest(`${SUPABASE_TABLES_ENDPOINT}?id=eq.${encodeURIComponent(tournamentId)}&select=id`);
+            if (existing.length === 0) await supabaseRequest(SUPABASE_TABLES_ENDPOINT, {
+                method: 'POST',
+                headers: { Prefer: 'return=minimal' },
+                body: JSON.stringify(payload)
+            });
+            if (storageStatusEl) {
+                storageStatusEl.textContent = '☁️ Tabla guardada';
+                storageStatusEl.title = 'La tabla final se guardó en Supabase.';
+            }
+            await loadSavedScoreTables();
+            if (savedScoreTableSelect) savedScoreTableSelect.value = tournamentId;
+            await loadSavedScoreTableById(tournamentId);
+        } catch (error) {
+            console.error('No se pudo guardar la tabla final en Supabase:', error);
+            if (storageStatusEl) {
+                storageStatusEl.textContent = '⚠️ Tabla sin respaldo';
+                storageStatusEl.title = error.message;
+            }
+        }
+    }
+
+    async function savePlayerToSupabase(player) {
+        try {
+            if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
+            if (!supabaseConfig || !player?.id || !player?.name) return;
+            await supabaseRequest('/rest/v1/players?on_conflict=id', {
+                method: 'POST',
+                headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+                body: JSON.stringify({ id: player.id, name: player.name })
+            });
+        } catch (error) {
+            console.warn('No se pudo guardar el participante en Supabase:', error.message);
+        }
+    }
 
     // ============================================================
     // 4. FUNCIONES DE LOCALSTORAGE
@@ -375,6 +433,18 @@
             storageStatusEl.textContent = '❌ Error al guardar';
             storageStatusEl.style.background = 'rgba(252, 233, 236, 0.9)';
             storageStatusEl.style.color = '#a13d4b';
+        }
+    }
+
+    function migrateLegacyUserbaseStorage() {
+        // Conserva en este dispositivo el torneo del antiguo usuario administrador.
+        if (!localStorage.getItem(STORAGE_KEY)) {
+            const legacyTournament = localStorage.getItem(`${STORAGE_KEY}_twenty6`);
+            if (legacyTournament) localStorage.setItem(STORAGE_KEY, legacyTournament);
+        }
+        if (!localStorage.getItem(TORNEO_LIST_KEY)) {
+            const legacyList = localStorage.getItem(`${TORNEO_LIST_KEY}_twenty6`);
+            if (legacyList) localStorage.setItem(TORNEO_LIST_KEY, legacyList);
         }
     }
 
@@ -555,6 +625,7 @@
         const obj = { id, name: trimmed };
         participants.push(obj);
         accumulatedPoints[id] = accumulatedPoints[id] || 0;
+        savePlayerToSupabase(obj);
         saveToLocalStorage();
         return obj;
     }
@@ -588,6 +659,7 @@
         if (!p) return;
         const oldName = p.name;
         p.name = newName;
+        savePlayerToSupabase(p);
 
         versus.forEach(v => {
             if (v.playerAId === id || v.playerA === oldName) {
@@ -952,7 +1024,7 @@
             } else {
                 tournamentVisible = false;
                 const section = document.getElementById('tournamentSection');
-                if (section) section.style.display = 'none';
+                if (section) section.style.display = activeTab === 'table' ? 'block' : 'none';
             }
             updateTabAvailability();
 
@@ -1402,6 +1474,12 @@
     }
 
     function renderTotalScoreTable() {
+        if (activeSavedScoreTable) {
+            renderSavedScoreTable(activeSavedScoreTable);
+            return;
+        }
+        const scoreTitle = document.getElementById('scoreTournamentName');
+        if (scoreTitle) scoreTitle.textContent = tournamentName;
         if (participants.length === 0) {
             totalScoreTableEl.innerHTML = `<div class="empty-message">Sin participantes.</div>`;
             return;
@@ -1476,20 +1554,64 @@
         }
     }
 
+    function renderSavedScoreTable(savedTable) {
+        const scoreTitle = document.getElementById('scoreTournamentName');
+        if (scoreTitle) scoreTitle.textContent = savedTable.name || 'Tabla final';
+        const ranking = Array.isArray(savedTable.standings) ? savedTable.standings : [];
+        const matches = Array.isArray(savedTable.matches) ? savedTable.matches : [];
+        const groupMatches = matches.filter(match => Number(match.round) > 0);
+        const format = savedTable.tournament_format || 'random';
+        if (ranking.length === 0) {
+            totalScoreTableEl.innerHTML = '<div class="empty-message">Esta tabla guardada no contiene una clasificación.</div>';
+            return;
+        }
+        const header = format === 'swiss'
+            ? '<th>Rango</th><th>Participante</th><th>Partido G-P-E</th><th>1. Puntuación</th><th>2. Buchholz</th><th>3. Dif. de ptos.</th>'
+            : '<th>Pos.</th><th>Participante</th><th>Puntos</th><th>Dif. Pts</th><th>Partidos</th><th>Victorias</th><th>Derrotas</th><th>Rondas</th>';
+        const rows = ranking.map((player, index) => {
+            const playerId = String(player.id || '');
+            const playerMatches = groupMatches.filter(match =>
+                String(match.playerAId || '') === playerId || String(match.playerBId || '') === playerId ||
+                match.playerA === player.name || match.playerB === player.name
+            );
+            const completed = playerMatches.filter(match => match.drawResult || match.jugado || match.scoreA !== 0 || match.scoreB !== 0);
+            const wins = completed.filter(match =>
+                (String(match.playerAId || '') === playerId || match.playerA === player.name) ? match.scoreA > match.scoreB : match.scoreB > match.scoreA
+            ).length;
+            const losses = completed.filter(match =>
+                (String(match.playerAId || '') === playerId || match.playerA === player.name) ? match.scoreA < match.scoreB : match.scoreB < match.scoreA
+            ).length;
+            const draws = completed.filter(match => match.drawResult || match.scoreA === match.scoreB).length;
+            const rounds = new Set(completed.map(match => match.round).filter(round => round > 0)).size;
+            const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : String(index + 1);
+            const rowClass = index < 3 ? `rank-${index + 1}` : '';
+            const points = Number(player.points) || 0;
+            const diff = Number(player.pointDifference) || 0;
+            const scoreCells = format === 'swiss'
+                ? `<td>${wins + (savedTable.swiss_byes || []).filter(id => String(id) === playerId).length} - ${losses} - ${draws}</td><td class="points-cell">${points.toFixed(1)}</td><td>${(Number(player.buchholz) || 0).toFixed(1)}</td><td>${diff > 0 ? '+' : ''}${diff}</td>`
+                : `<td class="points-cell">${points}</td><td>${diff > 0 ? '+' : ''}${diff}</td><td>${completed.length}</td><td>${wins}</td><td>${losses}</td><td>${rounds}</td>`;
+            return `<tr class="${rowClass}"><td>${medal}</td><td class="name-cell"><button type="button" class="score-player-history" data-player-id="${escapeHtml(playerId)}">${escapeHtml(player.name)}</button></td>${scoreCells}</tr>`;
+        }).join('');
+        totalScoreTableEl.innerHTML = `<div style="font-size:0.75rem;color:#4A4A6A;margin-bottom:0.5rem;">📊 Tabla final · ${savedTable.finished_at ? new Date(savedTable.finished_at).toLocaleString() : 'fecha no disponible'}</div><div class="table-scroll"><table class="total-score-table"><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
     function showPlayerHistory(playerId) {
-        const player = getParticipantById(playerId);
+        const savedParticipants = activeSavedScoreTable?.participants || participants;
+        const player = savedParticipants.find(item => String(item.id) === String(playerId)) || getParticipantById(playerId);
         if (!player) return;
         const playerKey = String(player.id || playerId);
-        const matches = [...matchHistory, ...versus]
+        const historyMatches = activeSavedScoreTable?.matches || [...matchHistory, ...versus];
+        const findIdByName = name => savedParticipants.find(item => item.name === name)?.id || getParticipantIdByName(name);
+        const matches = historyMatches
             .filter(match => {
-                const aId = String(match.playerAId || getParticipantIdByName(match.playerA) || '');
-                const bId = String(match.playerBId || getParticipantIdByName(match.playerB) || '');
+                const aId = String(match.playerAId || findIdByName(match.playerA) || '');
+                const bId = String(match.playerBId || findIdByName(match.playerB) || '');
                 return aId === playerKey || bId === playerKey || match.playerA === player.name || match.playerB === player.name;
             })
             .sort((a, b) => (a.round || Number.MAX_SAFE_INTEGER) - (b.round || Number.MAX_SAFE_INTEGER));
 
         const historyRows = matches.map(match => {
-            const isA = match.playerA === player.name || String(match.playerAId || getParticipantIdByName(match.playerA)) === playerKey;
+            const isA = match.playerA === player.name || String(match.playerAId || findIdByName(match.playerA)) === playerKey;
             const opponent = isA ? match.playerB : match.playerA;
             const scoreFor = isA ? match.scoreA : match.scoreB;
             const scoreAgainst = isA ? match.scoreB : match.scoreA;
@@ -1499,9 +1621,9 @@
             return `<tr><td>${match.round > 0 ? `Ronda ${match.round}` : 'Eliminatorias'}</td><td>${escapeHtml(opponent || '—')}</td><td>${played ? `${Number(scoreFor) || 0}–${Number(scoreAgainst) || 0}` : '—'}</td><td class="${resultClass}">${result}</td></tr>`;
         });
 
-        if (tournamentFormat === 'swiss') {
+        if ((activeSavedScoreTable?.tournament_format || tournamentFormat) === 'swiss') {
             let byeNumber = 0;
-            swissByes.forEach((id, index) => {
+            (activeSavedScoreTable?.swiss_byes || swissByes).forEach((id, index) => {
                 if (String(id) === playerKey) {
                     byeNumber++;
                     historyRows.push(`<tr><td>Ronda ${index + 1}</td><td>Bye (descanso)</td><td>—</td><td class="history-result-win">Victoria · 1 pt</td></tr>`);
@@ -2070,6 +2192,7 @@
         selectedRound = 'all';
         renderAll();
         saveToLocalStorage();
+        saveFinishedTournamentToSupabase();
     }
 
     function nextKnockoutRound() {
@@ -2285,6 +2408,7 @@
 
         renderAll();
         saveToLocalStorage();
+        saveFinishedTournamentToSupabase();
 
         let message = `🏆 ¡CAMPEÓN: ${tournamentWinner}! 🏆\n🥈 Subcampeón: ${loser}`;
         if (podium.third) {
@@ -2647,72 +2771,6 @@
     // 15. FUNCIONES DE INICIALIZACIÓN
     // ============================================================
 
-    function initializeWith16Participants() {
-        const nombres = [
-            'Alejandro', 'Beatriz', 'Carlos', 'Daniela',
-            'Eduardo', 'Fernanda', 'Gabriel', 'Helena',
-            'Ignacio', 'Julieta', 'Kevin', 'Laura',
-            'Manuel', 'Natalia', 'Óscar', 'Paula'
-        ];
-
-        if (!tournamentId) {
-            tournamentId = generateTournamentId();
-        }
-
-        participants = nombres.map(n => ({ id: generateParticipantId(), name: n }));
-        participants.forEach(p => { if (p && p.id) accumulatedPoints[p.id] = accumulatedPoints[p.id] || 0; });
-
-        groupRound = 1;
-        const pairings = generatePairings(participants);
-
-        const newVersus = pairings.map(p => ({
-            playerA: p.playerA,
-            playerB: p.playerB,
-            playerAId: p.playerAId || getParticipantIdByName(p.playerA),
-            playerBId: p.playerBId || getParticipantIdByName(p.playerB),
-            scoreA: 0,
-            scoreB: 0,
-            id: nextVersusId++,
-            round: groupRound
-        }));
-
-        versus = newVersus;
-
-        const ejemplo = [
-            { a: 'Alejandro', b: 'Beatriz', sa: 3, sb: 2 },
-            { a: 'Carlos', b: 'Daniela', sa: 4, sb: 1 },
-            { a: 'Eduardo', b: 'Fernanda', sa: 2, sb: 3 },
-            { a: 'Gabriel', b: 'Helena', sa: 5, sb: 0 },
-            { a: 'Ignacio', b: 'Julieta', sa: 1, sb: 4 },
-            { a: 'Kevin', b: 'Laura', sa: 3, sb: 3 },
-            { a: 'Manuel', b: 'Natalia', sa: 2, sb: 2 },
-            { a: 'Óscar', b: 'Paula', sa: 4, sb: 2 },
-        ];
-
-        ejemplo.forEach(e => {
-            const v = versus.find(v =>
-                (v.playerA === e.a && v.playerB === e.b) ||
-                (v.playerA === e.b && v.playerB === e.a)
-            );
-            if (v) {
-                if (v.playerA === e.a) {
-                    v.scoreA = e.sa;
-                    v.scoreB = e.sb;
-                } else {
-                    v.scoreA = e.sb;
-                    v.scoreB = e.sa;
-                }
-            }
-        });
-
-        customQualifiedCount = 8;
-        qualifiedCountInput.value = 8;
-        selectedRound = 1;
-        recalculateAccumulatedPoints();
-        tournamentVisible = true;
-        saveToLocalStorage();
-    }
-
     function initializeApp() {
         console.log('🚀 Iniciando aplicación...');
 
@@ -2723,8 +2781,7 @@
                 console.log('✅ Datos cargados desde localStorage');
                 renderAll();
             } else {
-                console.log('📋 Inicializando con datos de ejemplo');
-                initializeWith16Participants();
+                console.log('📋 Iniciando torneo vacío');
                 renderAll();
             }
 
@@ -2754,6 +2811,8 @@
         if (!nombre || nombre.trim() === '') return;
 
         // Crear nuevo torneo
+        activeSavedScoreTable = null;
+        if (savedScoreTableSelect) savedScoreTableSelect.value = '';
         tournamentId = generateTournamentId();
         tournamentName = nombre.trim();
         participants = [];
@@ -2831,10 +2890,20 @@
     // --- Participantes ---
     tabNavigationButtons.forEach(button => {
         button.addEventListener('click', function () {
+            if (this.dataset.tab !== 'table' && activeSavedScoreTable) {
+                activeSavedScoreTable = null;
+                if (savedScoreTableSelect) savedScoreTableSelect.value = '';
+                renderTotalScoreTable();
+            }
             activateTab(this.dataset.tab, true);
             setMobileMenuOpen(false);
         });
     });
+
+    savedScoreTableSelect?.addEventListener('change', function () {
+        loadSavedScoreTableById(this.value);
+    });
+    refreshSavedScoreTablesBtn?.addEventListener('click', loadSavedScoreTables);
 
     mobileMenuToggle?.addEventListener('click', function () {
         setMobileMenuOpen(!mainTabNavigation.classList.contains('mobile-open'));
@@ -3285,6 +3354,7 @@
 
             // Asegurar que los participantes tengan IDs
             ensureParticipantsObjects();
+            participants.forEach(savePlayerToSupabase);
 
             // Asegurar que cada participante tenga puntos
             participants.forEach(p => {
@@ -3306,6 +3376,7 @@
 
             renderAll();
             saveToLocalStorage();
+            if (tournamentFinished) saveFinishedTournamentToSupabase();
 
             console.log('✅ Torneo importado correctamente:', tournamentName);
             return true;
@@ -3488,61 +3559,19 @@
         }
     });
 
-    loginForm?.addEventListener('submit', function (event) {
-        event.preventDefault();
-        loginError.textContent = '';
-        userbase.signIn({
-            username: document.getElementById('loginUsername').value.trim(),
-            password: document.getElementById('loginPassword').value,
-            rememberMe: 'local'
-        }).then(enterAuthenticatedApp).catch(error => showAuthError(loginError, error));
-    });
-
-    createUserForm?.addEventListener('submit', async function (event) {
-        event.preventDefault();
-        if (!isSuperAdmin()) return;
-
-        const username = document.getElementById('newUserUsername').value.trim();
-        const password = document.getElementById('newUserPassword').value;
-        if (!username || password.length < 8) {
-            if (createUserStatus) createUserStatus.textContent = 'Usa un usuario y una contraseña de al menos 8 caracteres.';
-            return;
-        }
-        if (username.toLocaleLowerCase() === SUPER_ADMIN_USERNAME) {
-            if (createUserStatus) createUserStatus.textContent = 'Ese usuario está reservado para el SuperAdmin.';
-            return;
-        }
-        if (!window.confirm(`Se creará el usuario "${username}". Userbase cerrará tu sesión actual y deberás volver a entrar como ${SUPER_ADMIN_USERNAME}. ¿Continuar?`)) return;
-
-        if (createUserStatus) createUserStatus.textContent = 'Creando usuario…';
-        try {
-            // Userbase no permite signUp mientras existe una sesión activa.
-            await userbase.signOut();
-            await userbase.signUp({ username, password, rememberMe: 'local' });
-            await userbase.signOut();
-            window.location.reload();
-        } catch (error) {
-            if (createUserStatus) {
-                createUserStatus.textContent = `No se pudo crear la cuenta: ${error?.message || error}`;
-            }
-            // La sesión del SuperAdmin puede haberse cerrado antes del error.
-            setTimeout(() => window.location.reload(), 1800);
-        }
-    });
-
-    signOutBtn?.addEventListener('click', function () {
-        userbase.signOut().then(() => window.location.reload()).catch(error => alert(error.message));
-    });
-
-
     // ============================================================
     // 17. INICIALIZACIÓN
     // ============================================================
 
-    initializeUserbaseAuth();
+    migrateLegacyUserbaseStorage();
+    initializeApp();
+    supabaseInitialization = initializeSupabase().then(async () => {
+        participants.forEach(savePlayerToSupabase);
+        if (tournamentFinished) await saveFinishedTournamentToSupabase();
+    });
 
     setInterval(() => {
-        if (authenticatedUsername) saveToLocalStorage();
+        saveToLocalStorage();
     }, 30000);
 
     // Exponer estado para debugging
