@@ -58,6 +58,13 @@
         return p ? p.id : null;
     }
 
+    function capitalizePlayerName(name) {
+        const trimmed = String(name || '').trim();
+        const characters = Array.from(trimmed);
+        if (!characters.length) return '';
+        return characters[0].toLocaleUpperCase() + characters.slice(1).join('');
+    }
+
     function participantExistsByName(name) {
         const normalized = (name || '').trim().toLocaleLowerCase();
         return participants.some(p => p && (p.name || '').trim().toLocaleLowerCase() === normalized);
@@ -67,11 +74,14 @@
         if (participants.length === 0) return;
         if (participants[0] && typeof participants[0] === 'string') {
             const names = [...participants];
-            participants = names.map(n => ({ id: generateParticipantId(), name: n }));
+            participants = names.map(n => ({ id: generateParticipantId(), name: capitalizePlayerName(n) }));
             const newAccum = {};
-            for (const p of participants) {
-                newAccum[p.id] = (accumulatedPoints && (accumulatedPoints[p.name] || accumulatedPoints[p.id])) || 0;
-            }
+            participants.forEach((player, index) => {
+                const oldName = names[index];
+                newAccum[player.id] = (accumulatedPoints && (
+                    accumulatedPoints[oldName] || accumulatedPoints[player.name] || accumulatedPoints[player.id]
+                )) || 0;
+            });
             accumulatedPoints = newAccum;
             const nameToId = {};
             participants.forEach(p => nameToId[p.name] = p.id);
@@ -84,6 +94,38 @@
                 if (h.playerB && nameToId[h.playerB]) h.playerBId = nameToId[h.playerB];
             });
         }
+
+        participants.forEach(player => {
+            if (player?.name) player.name = capitalizePlayerName(player.name);
+        });
+        const participantById = new Map(participants.filter(player => player?.id).map(player => [String(player.id), player]));
+        const participantByName = new Map(participants.filter(player => player?.name)
+            .map(player => [player.name.toLocaleLowerCase(), player]));
+        const normalizeMatchNames = match => {
+            if (!match) return;
+            ['A', 'B'].forEach(side => {
+                const nameKey = `player${side}`;
+                const idKey = `player${side}Id`;
+                const player = participantById.get(String(match[idKey] || '')) ||
+                    participantByName.get(String(match[nameKey] || '').trim().toLocaleLowerCase());
+                if (player) {
+                    match[nameKey] = player.name;
+                    match[idKey] = player.id;
+                } else if (match[nameKey]) {
+                    match[nameKey] = capitalizePlayerName(match[nameKey]);
+                }
+            });
+        };
+        versus.forEach(normalizeMatchNames);
+        matchHistory.forEach(normalizeMatchNames);
+        normalizeMatchNames(preFinalMatch);
+        normalizeMatchNames(finalMatch);
+        semifinalWinners = semifinalWinners.map(capitalizePlayerName);
+        semifinalLosers = semifinalLosers.map(capitalizePlayerName);
+        tournamentWinner = capitalizePlayerName(tournamentWinner) || null;
+        Object.keys(podium || {}).forEach(place => {
+            if (podium[place]) podium[place] = capitalizePlayerName(podium[place]);
+        });
     }
 
     // Partidos
@@ -456,17 +498,22 @@
 
     async function saveFinishedTournamentToSupabase() {
         if (!tournamentFinished || !tournamentId || participants.length === 0) return;
+        const normalizeMatch = match => ({
+            ...match,
+            playerA: capitalizePlayerName(match.playerA),
+            playerB: capitalizePlayerName(match.playerB)
+        });
         const payload = {
             id: tournamentId,
             name: tournamentName,
             finished_at: new Date().toISOString(),
-            participants,
-            standings: getGroupRanking(),
-            matches: [...matchHistory, ...versus],
+            participants: participants.map(player => ({ ...player, name: capitalizePlayerName(player.name) })),
+            standings: getGroupRanking().map(player => ({ ...player, name: capitalizePlayerName(player.name) })),
+            matches: [...matchHistory, ...versus].map(normalizeMatch),
             tournament_format: tournamentFormat,
             swiss_byes: swissByes,
-            winner: tournamentWinner,
-            podium
+            winner: capitalizePlayerName(tournamentWinner) || null,
+            podium: Object.fromEntries(Object.entries(podium || {}).map(([place, player]) => [place, capitalizePlayerName(player) || null]))
         };
         try {
             const existing = await supabaseRequest(`${SUPABASE_TABLES_ENDPOINT}?id=eq.${encodeURIComponent(tournamentId)}&select=id`);
@@ -498,7 +545,7 @@
             await supabaseRequest('/rest/v1/players?on_conflict=id', {
                 method: 'POST',
                 headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-                body: JSON.stringify({ id: player.id, name: player.name })
+                body: JSON.stringify({ id: player.id, name: capitalizePlayerName(player.name) })
             });
         } catch (error) {
             console.warn('No se pudo guardar el participante en Supabase:', error.message);
@@ -739,7 +786,7 @@
     // ============================================================
 
     function addParticipant(name) {
-        const trimmed = (name || '').trim();
+        const trimmed = capitalizePlayerName(name);
         if (!trimmed) return null;
         if (participantExistsByName(trimmed)) return null;
         const id = generateParticipantId();
@@ -779,6 +826,7 @@
         const p = getParticipantById(id);
         if (!p) return;
         const oldName = p.name;
+        newName = capitalizePlayerName(newName);
         p.name = newName;
         savePlayerToSupabase(p);
 
@@ -2901,6 +2949,7 @@
             if (loaded) {
                 console.log('✅ Datos cargados desde localStorage');
                 renderAll();
+                saveToLocalStorage();
             } else {
                 console.log('📋 Iniciando torneo vacío');
                 renderAll();
@@ -3719,10 +3768,7 @@
 
     migrateLegacyUserbaseStorage();
     initializeApp();
-    supabaseInitialization = initializeSupabase().then(async () => {
-        participants.forEach(savePlayerToSupabase);
-        if (tournamentFinished) await saveFinishedTournamentToSupabase();
-    });
+    supabaseInitialization = initializeSupabase();
 
     setInterval(() => {
         saveToLocalStorage();
