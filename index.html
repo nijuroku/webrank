@@ -92,9 +92,14 @@
 
             <div class="input-group">
                 <label for="newParticipantInput" class="titulo-moderno">👤 Participante</label>
-                <input type="text" id="newParticipantInput" placeholder="Ej: Ana, Carlos, Marta..." />
+                <div class="player-name-autocomplete">
+                    <input type="text" id="newParticipantInput" placeholder="Uno o varios nombres, separados por comas"
+                        autocomplete="off" aria-autocomplete="list" aria-controls="playerSuggestions"
+                        aria-expanded="false" />
+                    <div id="playerSuggestions" class="player-suggestions" role="listbox"
+                        aria-label="Jugadores guardados" hidden></div>
+                </div>
                 <button class="btn btn-primary" id="addParticipantBtn">➕ Agregar</button>
-                <button class="btn btn-outline" id="addMultipleBtn">➕➕ Agregar varios</button>
             </div>
 
             <div class="participant-controls">
