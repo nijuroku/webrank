@@ -10,6 +10,7 @@
     const THEME_STORAGE_KEY = 'beybladex_theme';
     const SUPABASE_CONFIG_ENDPOINT = '/api/supabase-config';
     const SUPABASE_TABLES_ENDPOINT = '/rest/v1/finished_tournaments';
+    const SHARED_TOURNAMENT_VIEWER_PATH = '/url-para-las-rondas/';
 
     // ============================================================
     // 2. ESTADO GLOBAL
@@ -20,6 +21,11 @@
     let tournamentFinished = false;
     let tournamentWinner = null;
     let tournamentId = null; // ID único para el torneo actual
+    let tournamentShareId = null;
+    let tournamentShareWriteToken = null;
+    let tournamentSharingEnabled = false;
+    let sharedTournamentSyncTimer = null;
+    let lastSharedTournamentSnapshot = null;
     let tournamentFormat = 'random';
     let swissByes = [];
 
@@ -181,19 +187,6 @@
     const themeToggleBtn = document.getElementById('themeToggleBtn');
     const tabNavigationButtons = document.querySelectorAll('.tab-navigation-btn');
     const tabPanels = document.querySelectorAll('[data-tab-panel]');
-    const mainTabNavigation = document.getElementById('mainTabNavigation');
-    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
-    const mobileNavBackdrop = document.getElementById('mobileNavBackdrop');
-
-    function setMobileMenuOpen(open) {
-        mainTabNavigation?.classList.toggle('mobile-open', open);
-        if (mobileNavBackdrop) mobileNavBackdrop.hidden = !open;
-        mobileMenuToggle?.setAttribute('aria-expanded', String(open));
-        if (mobileMenuToggle) {
-            mobileMenuToggle.textContent = open ? '✕' : '☰';
-            mobileMenuToggle.setAttribute('aria-label', open ? 'Cerrar navegación' : 'Abrir navegación');
-        }
-    }
 
     function activateTab(tabName, scrollToContent = false) {
         if (tabName !== 'participants' && tabName !== 'table' && !tournamentVisible) return;
@@ -231,9 +224,11 @@
         const isLight = theme === 'light';
         document.body.classList.toggle('light-theme', isLight);
         if (themeToggleBtn) {
-            themeToggleBtn.textContent = isLight ? '🌙 Tema oscuro' : '☀️ Tema claro';
+            const modeLabel = themeToggleBtn.querySelector('.theme-mode-label');
+            if (modeLabel) modeLabel.textContent = isLight ? 'Claro' : 'Oscuro';
             themeToggleBtn.setAttribute('aria-pressed', String(isLight));
-            themeToggleBtn.title = isLight ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro';
+            themeToggleBtn.setAttribute('aria-label', isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro');
+            themeToggleBtn.title = isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro';
         }
     }
 
@@ -289,6 +284,7 @@
     const generateGroupBtn = document.getElementById('generateGroupStageBtn');
     const startKnockoutBtn = document.getElementById('startKnockoutBtn');
     const resetAllBtn = document.getElementById('resetAllBtn');
+    const shareTournamentBtn = document.getElementById('shareTournamentBtn');
     const clearVersusBtn = document.getElementById('clearVersusBtn');
 
     // Import/Export
@@ -552,6 +548,155 @@
         }
     }
 
+    function generateTournamentShareId() {
+        if (!window.crypto?.getRandomValues) throw new Error('Este navegador no permite generar un enlace seguro. Abre la app con HTTPS.');
+        const bytes = new Uint8Array(24);
+        window.crypto.getRandomValues(bytes);
+        return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    function generateTournamentShareWriteToken() {
+        if (!window.crypto?.getRandomValues) throw new Error('Este navegador no permite generar un enlace seguro. Abre la app con HTTPS.');
+        const bytes = new Uint8Array(32);
+        window.crypto.getRandomValues(bytes);
+        return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    function buildSharedTournamentSnapshot() {
+        const rawMatches = [
+            ...matchHistory,
+            ...versus,
+            ...(preFinalMatch ? [{ ...preFinalMatch, stage: 'pre-final' }] : []),
+            ...(finalMatch ? [{ ...finalMatch, stage: 'final' }] : [])
+        ];
+        const matches = rawMatches.map(match => {
+            const round = Number(match.round) || 0;
+            if (round > 0) {
+                return {
+                    ...match,
+                    view_key: `group-${round}`,
+                    view_label: `Ronda ${round}`,
+                    view_order: round
+                };
+            }
+
+            const stage = match.stage || '';
+            if (stage === 'pre-final' || stage === 'final') {
+                return {
+                    ...match,
+                    view_key: `special-${stage}`,
+                    view_label: stage === 'pre-final' ? 'Pre-final · 3.º y 4.º lugar' : 'Final',
+                    view_order: stage === 'pre-final' ? 200 : 201
+                };
+            }
+
+            const bracketRound = Number(match.bracketRound) ||
+                (versus.includes(match) && currentPhase === 2 ? knockoutRound : 1);
+            return {
+                ...match,
+                view_key: `knockout-${bracketRound}`,
+                view_label: `Eliminatorias · Ronda ${bracketRound}`,
+                view_order: 100 + bracketRound
+            };
+        });
+
+        let currentRoundKey = currentPhase === 2
+            ? `knockout-${Math.max(1, knockoutRound)}`
+            : `group-${groupRound}`;
+        if (preFinalMatch && !preFinalPlayed) currentRoundKey = 'special-pre-final';
+        else if (finalMatch && !finalPlayed) currentRoundKey = 'special-final';
+        else if (tournamentFinished && podium?.first) currentRoundKey = 'special-final';
+
+        return {
+            id: tournamentShareId,
+            tournament_id: tournamentId,
+            tournament_name: tournamentName,
+            tournament_format: tournamentFormat,
+            current_phase: currentPhase,
+            phase_label: currentPhase === 2 ? 'Eliminatorias' : 'Fase de grupos',
+            current_round: currentPhase === 2 ? knockoutRound : groupRound,
+            current_round_key: currentRoundKey,
+            tournament_finished: tournamentFinished,
+            winner: capitalizePlayerName(tournamentWinner) || null,
+            podium: Object.fromEntries(Object.entries(podium || {}).map(([place, player]) => [place, capitalizePlayerName(player) || null])),
+            participants: participants.map(player => ({ ...player, name: capitalizePlayerName(player.name) })),
+            matches,
+            standings: getGroupRanking().map(player => ({ ...player, name: capitalizePlayerName(player.name) })),
+            swiss_byes: swissByes
+        };
+    }
+
+    async function syncSharedTournamentSnapshot() {
+        if (!tournamentSharingEnabled || !tournamentShareId || !tournamentShareWriteToken) return false;
+        try {
+            if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
+            if (!supabaseConfig) return false;
+
+            const snapshot = buildSharedTournamentSnapshot();
+            const signature = JSON.stringify(snapshot);
+            if (signature === lastSharedTournamentSnapshot) return true;
+            await supabaseRequest('/rest/v1/rpc/publish_shared_tournament', {
+                method: 'POST',
+                body: JSON.stringify({
+                    p_share_id: tournamentShareId,
+                    p_write_token: tournamentShareWriteToken,
+                    p_snapshot: snapshot
+                })
+            });
+            lastSharedTournamentSnapshot = signature;
+            return true;
+        } catch (error) {
+            console.warn('No se pudo actualizar el torneo compartido:', error.message);
+            return false;
+        }
+    }
+
+    function scheduleSharedTournamentSync() {
+        if (!tournamentSharingEnabled || !tournamentShareId || !tournamentShareWriteToken) return;
+        clearTimeout(sharedTournamentSyncTimer);
+        sharedTournamentSyncTimer = setTimeout(syncSharedTournamentSnapshot, 450);
+    }
+
+    async function shareTournament() {
+        if (participants.length < 2) {
+            alert('Agrega al menos 2 participantes antes de compartir el torneo.');
+            return;
+        }
+        shareTournamentBtn.disabled = true;
+        try {
+            if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
+            if (!supabaseConfig) {
+                alert('Supabase aún no está conectado. No se pudo crear el enlace compartido.');
+                return;
+            }
+            if (!tournamentId) tournamentId = generateTournamentId();
+            if (!tournamentShareId) tournamentShareId = generateTournamentShareId();
+            if (!tournamentShareWriteToken) tournamentShareWriteToken = generateTournamentShareWriteToken();
+            tournamentSharingEnabled = true;
+            lastSharedTournamentSnapshot = null;
+            saveToLocalStorage();
+            clearTimeout(sharedTournamentSyncTimer);
+
+            if (!await syncSharedTournamentSnapshot()) {
+                alert('No se pudo guardar el torneo compartido. Comprueba la conexión e intenta nuevamente.');
+                return;
+            }
+
+            const shareUrl = new URL(SHARED_TOURNAMENT_VIEWER_PATH, window.location.origin);
+            shareUrl.searchParams.set('id', tournamentShareId);
+            try {
+                await navigator.clipboard.writeText(shareUrl.href);
+                alert(`🔗 Enlace copiado. Cualquier persona con el enlace podrá ver el torneo en vivo.\n\n${shareUrl.href}`);
+            } catch {
+                window.prompt('Copia este enlace para compartir el torneo:', shareUrl.href);
+            }
+        } catch (error) {
+            alert(error.message || 'No se pudo preparar el enlace compartido.');
+        } finally {
+            shareTournamentBtn.disabled = false;
+        }
+    }
+
     // ============================================================
     // 4. FUNCIONES DE LOCALSTORAGE
     // ============================================================
@@ -561,6 +706,9 @@
             // Guardar torneo actual
             const data = {
                 tournamentId,
+                tournamentShareId,
+                tournamentShareWriteToken,
+                tournamentSharingEnabled,
                 tournamentName,
                 participants,
                 versus,
@@ -588,6 +736,7 @@
 
             // Guardar en la lista de torneos
             saveTournamentToList();
+            scheduleSharedTournamentSync();
 
             storageStatusEl.textContent = '💾 Datos guardados';
             storageStatusEl.style.background = 'rgba(223, 240, 230, 0.9)';
@@ -623,6 +772,10 @@
 
             const data = JSON.parse(stored);
             tournamentId = data.tournamentId || null;
+            tournamentShareId = data.tournamentShareId || null;
+            tournamentShareWriteToken = data.tournamentShareWriteToken || null;
+            tournamentSharingEnabled = Boolean(data.tournamentSharingEnabled && tournamentShareId);
+            lastSharedTournamentSnapshot = null;
             tournamentName = data.tournamentName || 'LaMafia BEYBLADEX';
             participants = data.participants || [];
             versus = data.versus || [];
@@ -742,6 +895,10 @@
 
             // Aplicar datos
             tournamentId = data.tournamentId;
+            tournamentShareId = data.tournamentShareId || null;
+            tournamentShareWriteToken = data.tournamentShareWriteToken || null;
+            tournamentSharingEnabled = Boolean(data.tournamentSharingEnabled && tournamentShareId);
+            lastSharedTournamentSnapshot = null;
             tournamentName = data.tournamentName || 'LaMafia BEYBLADEX';
             participants = data.participants || [];
             versus = data.versus || [];
@@ -1164,6 +1321,7 @@
             if (!exists) {
                 matchHistory.push({
                     ...v,
+                    ...(currentPhase === 2 ? { bracketRound: v.bracketRound || knockoutRound } : {}),
                     archivedAt: Date.now()
                 });
             }
@@ -2316,7 +2474,8 @@
                     scoreA: 0,
                     scoreB: 0,
                     id: nextVersusId++,
-                    round: 0
+                    round: 0,
+                    bracketRound: knockoutRound
                 });
             }
         }
@@ -2418,7 +2577,8 @@
                     playerB: semifinalLosers[1],
                     scoreA: 0,
                     scoreB: 0,
-                    id: nextVersusId++
+                    id: nextVersusId++,
+                    stage: 'pre-final'
                 };
                 preFinalPlayed = false;
 
@@ -2427,7 +2587,8 @@
                     playerB: semifinalWinners[1],
                     scoreA: 0,
                     scoreB: 0,
-                    id: nextVersusId++
+                    id: nextVersusId++,
+                    stage: 'final'
                 };
                 finalPlayed = false;
 
@@ -2458,7 +2619,8 @@
                     scoreA: 0,
                     scoreB: 0,
                     id: nextVersusId++,
-                    round: 0
+                    round: 0,
+                    bracketRound: knockoutRound + 1
                 });
             }
         }
@@ -2516,6 +2678,7 @@
             ...preFinalMatch,
             id: preFinalMatch.id,
             round: 0,
+            stage: 'pre-final',
             archivedAt: Date.now()
         };
         matchHistory.push(preFinalCopy);
@@ -2570,6 +2733,7 @@
             ...finalMatch,
             id: finalMatch.id,
             round: 0,
+            stage: 'final',
             archivedAt: Date.now()
         };
         matchHistory.push(finalCopy);
@@ -2984,6 +3148,10 @@
         activeSavedScoreTable = null;
         if (savedScoreTableSelect) savedScoreTableSelect.value = '';
         tournamentId = generateTournamentId();
+        tournamentShareId = null;
+        tournamentShareWriteToken = null;
+        tournamentSharingEnabled = false;
+        lastSharedTournamentSnapshot = null;
         tournamentName = nombre.trim();
         participants = [];
         versus = [];
@@ -3066,7 +3234,6 @@
                 renderTotalScoreTable();
             }
             activateTab(this.dataset.tab, true);
-            setMobileMenuOpen(false);
         });
     });
 
@@ -3074,18 +3241,6 @@
         loadSavedScoreTableById(this.value);
     });
     refreshSavedScoreTablesBtn?.addEventListener('click', loadSavedScoreTables);
-
-    mobileMenuToggle?.addEventListener('click', function () {
-        setMobileMenuOpen(!mainTabNavigation.classList.contains('mobile-open'));
-    });
-
-    mobileNavBackdrop?.addEventListener('click', function () {
-        setMobileMenuOpen(false);
-    });
-
-    document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape') setMobileMenuOpen(false);
-    });
 
     addBtn.addEventListener('click', async function () {
         const typedNames = newParticipantInput.value.split(',').map(name => name.trim()).filter(Boolean);
@@ -3233,6 +3388,7 @@
     });
 
     document.getElementById('editTournamentNameBtn')?.addEventListener('click', editTournamentName);
+    shareTournamentBtn?.addEventListener('click', shareTournament);
 
     // --- Gestión de rondas ---
     generateGroupBtn.addEventListener('click', generateGroupRound);
@@ -3462,6 +3618,10 @@
                         return;
                     }
                     tournamentId = data.tournamentId || generateTournamentId();
+                    tournamentShareId = null;
+                    tournamentShareWriteToken = null;
+                    tournamentSharingEnabled = false;
+                    lastSharedTournamentSnapshot = null;
                     tournamentName = data.tournamentName || 'Torneo Importado';
                     participants = data.participants || [];
                     versus = data.versus || [];
@@ -3531,6 +3691,10 @@
 
             // Cargar datos del JSON
             tournamentId = jsonData.tournamentId || generateTournamentId();
+            tournamentShareId = null;
+            tournamentShareWriteToken = null;
+            tournamentSharingEnabled = false;
+            lastSharedTournamentSnapshot = null;
             tournamentName = jsonData.tournamentName || 'Torneo Importado';
             participants = jsonData.participants || [];
             accumulatedPoints = jsonData.accumulatedPoints || {};

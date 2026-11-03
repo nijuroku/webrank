@@ -37,16 +37,15 @@
                 <span>🏅 <strong id="headerQualified">0</strong></span>
             </div>
             <span class="storage-status" id="storageStatus">💾 Guardado</span>
-            <button class="btn btn-sm btn-outline" id="themeToggleBtn" type="button" aria-pressed="false"
-                title="Cambiar a tema claro">☀️ Tema claro</button>
+            <button class="theme-mode-toggle" id="themeToggleBtn" type="button" aria-pressed="false"
+                aria-label="Cambiar al modo claro" title="Cambiar al modo claro">
+                <span class="theme-mode-track" aria-hidden="true"><span class="theme-mode-thumb"></span></span>
+                <span class="theme-mode-label">Oscuro</span>
+            </button>
         </div>
     </header>
 
-    <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-expanded="false"
-        aria-controls="mainTabNavigation" aria-label="Abrir navegación">☰</button>
-    <div class="mobile-nav-backdrop" id="mobileNavBackdrop" hidden></div>
-
-    <nav class="tab-navigation" id="mainTabNavigation" aria-label="Secciones del torneo">
+    <nav class="tab-navigation" aria-label="Secciones del torneo">
         <button class="tab-navigation-btn active" data-tab="participants" type="button" title="Participantes">
             <span class="tab-icon" aria-hidden="true">👥</span><span class="tab-label">Participantes</span>
         </button>
@@ -180,6 +179,7 @@
                                     <button class="btn btn-sm btn-success" id="applyQualifiedBtn">Aplicar</button>
                                 </div>
                             </div>
+                            <button class="btn btn-outline" id="shareTournamentBtn" type="button">🔗 Compartir torneo</button>
                             <button class="btn btn-danger" id="resetAllBtn">🔄 Reiniciar torneo</button>
                         </div>
                     </div>
