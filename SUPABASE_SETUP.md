@@ -13,3 +13,5 @@ No uses la clave `service_role` en la web ni en estas variables. La app no pide 
 Los participantes se registran en `players` al agregarlos a un torneo. La tabla de puntuación completa (clasificación, participantes, partidos e historial) se guarda automáticamente en `finished_tournaments` al finalizar el torneo. La pestaña **Tabla** permite seleccionar y consultar tablas finalizadas.
 
 Mientras falte la configuración de Vercel, la app abre normalmente y sigue guardando el torneo activo en el almacenamiento local del dispositivo; el selector de tablas guardadas indicará que Supabase aún no está conectado.
+
+La página `/url-para-las-rondas/` muestra una copia pública de solo lectura del torneo. En una base ya creada, aplica también `supabase/migrations/20261103_shared_tournaments.sql` y `supabase/migrations/20261103_restrict_shared_tournament_writer.sql`. Los visitantes solo pueden leer la tabla compartida; las actualizaciones pasan por una función con un token de escritura aleatorio que se conserva en el almacenamiento local del organizador y no se incluye en el enlace.
