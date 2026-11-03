@@ -4803,43 +4803,43 @@ body {
 
 body.light-theme {
     color-scheme: light;
-    --glass-ink: #493545;
-    --glass-muted: #785f72;
-    --glass-green: #ad5b86;
+    --glass-ink: #2e4438;
+    --glass-muted: #587064;
+    --glass-green: #347d55;
     --glass-line: rgba(255, 255, 255, 0.84);
-    --glass-surface: rgba(255, 250, 253, 0.62);
-    --glass-shadow: 0 14px 36px rgba(133, 81, 112, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.86);
-    background-color: #f8edf4 !important;
+    --glass-surface: rgba(249, 255, 250, 0.64);
+    --glass-shadow: 0 14px 36px rgba(63, 112, 78, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    background-color: #eaf5ed !important;
     background-image:
         radial-gradient(ellipse at 12% 8%, rgba(255, 255, 255, 0.98), transparent 36rem),
-        radial-gradient(ellipse at 91% 18%, rgba(250, 211, 230, 0.86), transparent 35rem),
-        radial-gradient(ellipse at 82% 78%, rgba(239, 211, 240, 0.64), transparent 32rem),
-        radial-gradient(ellipse at 15% 88%, rgba(255, 224, 226, 0.7), transparent 34rem),
-        linear-gradient(145deg, #fff7fb 0%, #f7eaf2 48%, #f4eafa 100%) !important;
+        radial-gradient(ellipse at 91% 18%, rgba(152, 209, 166, 0.62), transparent 35rem),
+        radial-gradient(ellipse at 82% 78%, rgba(202, 232, 207, 0.7), transparent 32rem),
+        radial-gradient(ellipse at 15% 88%, rgba(176, 226, 223, 0.68), transparent 34rem),
+        linear-gradient(145deg, #f8fbef 0%, #eaf5ed 48%, #e5f4f2 100%) !important;
 }
 
 body.light-theme::before {
     background-image:
-        radial-gradient(ellipse at 8% 26%, rgba(244, 191, 217, 0.42), transparent 28rem),
-        radial-gradient(ellipse at 95% 74%, rgba(216, 194, 240, 0.34), transparent 30rem) !important;
+        radial-gradient(ellipse at 8% 26%, rgba(133, 209, 208, 0.38), transparent 28rem),
+        radial-gradient(ellipse at 95% 74%, rgba(151, 203, 160, 0.34), transparent 30rem) !important;
 }
 
 body.light-theme::after {
     background-image:
         radial-gradient(ellipse at 80% 6%, rgba(255, 255, 255, 0.66), transparent 23rem),
-        radial-gradient(ellipse at 22% 96%, rgba(250, 211, 228, 0.45), transparent 25rem) !important;
+        radial-gradient(ellipse at 22% 96%, rgba(173, 221, 204, 0.44), transparent 25rem) !important;
 }
 
 body.light-theme .app-container {
-    background: rgba(255, 247, 251, 0.36) !important;
+    background: rgba(247, 255, 248, 0.42) !important;
     border-color: rgba(255, 255, 255, 0.86) !important;
-    box-shadow: 0 24px 70px rgba(135, 79, 111, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+    box-shadow: 0 24px 70px rgba(63, 112, 78, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
 }
 
 body.light-theme .header-sticky {
-    background: rgba(255, 245, 250, 0.82) !important;
+    background: rgba(246, 253, 246, 0.82) !important;
     border-bottom-color: rgba(255, 255, 255, 0.94) !important;
-    box-shadow: 0 8px 30px rgba(135, 79, 111, 0.12) !important;
+    box-shadow: 0 8px 30px rgba(63, 112, 78, 0.12) !important;
 }
 
 body.light-theme .card,
@@ -4857,7 +4857,7 @@ body.light-theme .player-filter-bar,
 body.light-theme .tournament-list-item,
 body.light-theme .score-dropdown-item {
     color: var(--glass-ink) !important;
-    background: rgba(255, 249, 252, 0.68) !important;
+    background: rgba(249, 255, 250, 0.7) !important;
     border-color: rgba(255, 255, 255, 0.88) !important;
     box-shadow: var(--glass-shadow) !important;
 }
@@ -4874,7 +4874,7 @@ body.light-theme .mobile-round-actions-title,
 body.light-theme .saved-score-selector label,
 body.light-theme .header-stats strong,
 body.light-theme .stat-item strong {
-    color: #a94f7e !important;
+    color: #347d55 !important;
 }
 
 body.light-theme .participant-count,
@@ -4882,14 +4882,14 @@ body.light-theme .phase-badge,
 body.light-theme .grupo-badge,
 body.light-theme .round-info,
 body.light-theme .matches-count {
-    background: rgba(250, 224, 237, 0.78) !important;
-    border-color: rgba(214, 151, 185, 0.5) !important;
+    background: rgba(218, 241, 221, 0.82) !important;
+    border-color: rgba(128, 184, 142, 0.5) !important;
 }
 
 body.light-theme .eliminatoria-badge {
-    color: #76588f !important;
-    background: rgba(237, 225, 246, 0.82) !important;
-    border-color: rgba(188, 158, 212, 0.58) !important;
+    color: #36777a !important;
+    background: rgba(219, 241, 236, 0.86) !important;
+    border-color: rgba(123, 186, 174, 0.58) !important;
 }
 
 body.light-theme .participant-tag,
@@ -4901,7 +4901,7 @@ body.light-theme .total-score-table td,
 body.light-theme .total-score-table th,
 body.light-theme .score-table td,
 body.light-theme .score-table th {
-    color: #493545 !important;
+    color: #2e4438 !important;
 }
 
 body.light-theme .btn-primary,
@@ -4911,9 +4911,9 @@ body.light-theme .tab-navigation-btn.active,
 body.light-theme .app-container .btn-primary,
 body.light-theme .app-container .btn-success,
 body.light-theme .app-container .btn-round-selector.active {
-    color: #713d5a !important;
-    background: linear-gradient(145deg, #ffe6f1, #f2c9dd) !important;
-    border-color: rgba(201, 121, 162, 0.62) !important;
+    color: #235b39 !important;
+    background: linear-gradient(145deg, #e0f4df, #bfe6c7) !important;
+    border-color: rgba(116, 177, 129, 0.68) !important;
 }
 
 body.light-theme .btn-warning {
@@ -4933,72 +4933,72 @@ body.light-theme .versus-item .score-display,
 body.light-theme .score-display,
 body.light-theme .versus-item.unplayed .score-display,
 body.light-theme .versus-item.played .score-display {
-    color: #8b456d !important;
-    background: rgba(250, 226, 239, 0.9) !important;
-    border-color: rgba(205, 133, 171, 0.58) !important;
+    color: #347d55 !important;
+    background: rgba(220, 242, 224, 0.92) !important;
+    border-color: rgba(124, 183, 139, 0.62) !important;
 }
 
 body.light-theme .versus-item .vs-badge,
 body.light-theme .versus-item.unplayed .vs-badge,
 body.light-theme .versus-item.archived-match .vs-badge {
-    color: #76536b !important;
-    background: rgba(248, 226, 238, 0.84) !important;
+    color: #3f6e56 !important;
+    background: rgba(224, 242, 227, 0.88) !important;
 }
 
 body.light-theme .total-score-table th,
 body.light-theme .score-table th {
-    color: #75435e !important;
-    background: rgba(248, 224, 237, 0.88) !important;
-    border-color: rgba(191, 129, 160, 0.26) !important;
+    color: #315d41 !important;
+    background: rgba(220, 240, 222, 0.9) !important;
+    border-color: rgba(115, 163, 122, 0.3) !important;
 }
 
 body.light-theme .total-score-table td,
 body.light-theme .score-table td {
-    border-color: rgba(191, 129, 160, 0.2) !important;
+    border-color: rgba(115, 163, 122, 0.22) !important;
 }
 
 body.light-theme .info-note,
 body.light-theme .info-note-small {
-    color: #765d70 !important;
-    background: rgba(250, 230, 240, 0.75) !important;
-    border-color: #d6a1bd !important;
+    color: #526d5d !important;
+    background: rgba(224, 242, 226, 0.78) !important;
+    border-color: #9bc7a2 !important;
 }
 
 body.light-theme .tab-navigation {
-    background: rgba(255, 241, 249, 0.9) !important;
+    background: rgba(240, 251, 242, 0.92) !important;
     border-color: rgba(255, 255, 255, 0.94) !important;
-    box-shadow: 0 12px 34px rgba(132, 75, 107, 0.2), inset 0 1px 0 #fff !important;
+    box-shadow: 0 12px 34px rgba(62, 113, 78, 0.18), inset 0 1px 0 #fff !important;
 }
 
 body.light-theme .tab-navigation-btn:not(.active) {
-    color: #765d70 !important;
+    color: #587064 !important;
 }
 
 body.light-theme .tab-navigation-btn.active {
-    color: #713d5a !important;
-    background: linear-gradient(145deg, #ffe6f1, #f2c9dd) !important;
-    border-color: rgba(201, 121, 162, 0.5) !important;
+    color: #235b39 !important;
+    background: linear-gradient(145deg, #e0f4df, #bfe6c7) !important;
+    border-color: rgba(116, 177, 129, 0.58) !important;
 }
 
 body.light-theme #themeToggleBtn.theme-mode-toggle {
-    color: #74435f !important;
-    background: linear-gradient(135deg, rgba(255, 237, 246, 0.96), rgba(244, 211, 230, 0.9)) !important;
+    color: #315d41 !important;
+    background: linear-gradient(135deg, rgba(238, 250, 238, 0.96), rgba(205, 235, 210, 0.9)) !important;
     border-color: rgba(255, 255, 255, 0.94) !important;
-    box-shadow: 0 5px 16px rgba(153, 91, 127, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+    box-shadow: 0 5px 16px rgba(74, 126, 85, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
 }
 
 body.light-theme .theme-mode-track {
-    background: linear-gradient(135deg, rgba(203, 138, 175, 0.42), rgba(239, 186, 214, 0.72));
-    border-color: rgba(176, 111, 150, 0.34);
+    background: linear-gradient(135deg, rgba(118, 182, 136, 0.42), rgba(190, 229, 194, 0.74));
+    border-color: rgba(105, 161, 118, 0.38);
 }
 
 body.light-theme .theme-mode-thumb {
-    background: linear-gradient(145deg, #fff, #ffeaf4);
-    box-shadow: 0 2px 7px rgba(132, 66, 108, 0.22);
+    background: linear-gradient(145deg, #fff, #e9f7e9);
+    box-shadow: 0 2px 7px rgba(63, 112, 78, 0.22);
 }
 
 body.light-theme .theme-mode-thumb::before {
-    color: #b56b91;
+    color: #4e9764;
 }
 
 body:not(.light-theme) {
