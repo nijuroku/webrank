@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/p/:player",
+      "destination": "/p/index.html?player=:player"
+    },
+    {
+      "source": "/p/:player/",
+      "destination": "/p/index.html?player=:player"
+    }
+  ]
+}

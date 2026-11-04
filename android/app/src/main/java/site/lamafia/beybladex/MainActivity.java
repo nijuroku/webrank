@@ -80,8 +80,10 @@ public class MainActivity extends Activity {
         root.addView(progressBar, progressParams);
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
             Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
-            webView.setPadding(0, bars.top, 0, bars.bottom);
-            progressBar.setTranslationY(bars.top);
+            // Inset the WebView's viewport at the root. Padding the WebView
+            // itself leaves fixed-position web elements anchored under the
+            // Android status bar, which clips the sticky page header.
+            view.setPadding(0, bars.top, 0, bars.bottom);
             return windowInsets;
         });
         WindowCompat.getInsetsController(window, root).setAppearanceLightStatusBars(false);

@@ -12,6 +12,15 @@
     const SUPABASE_TABLES_ENDPOINT = '/rest/v1/finished_tournaments';
     const SHARED_TOURNAMENT_VIEWER_PATH = '/view/';
 
+    function getPlayerProfilePath(playerName) {
+        return `/p/${encodeURIComponent(String(playerName || '').trim())}`;
+    }
+
+    function playerProfileLinkMarkup(playerName) {
+        if (!playerName) return '—';
+        return `<a class="score-player-profile" href="${escapeHtml(getPlayerProfilePath(playerName))}">${escapeHtml(playerName)}</a>`;
+    }
+
     // ============================================================
     // 2. ESTADO GLOBAL
     // ============================================================
@@ -285,6 +294,7 @@
     const startKnockoutBtn = document.getElementById('startKnockoutBtn');
     const resetAllBtn = document.getElementById('resetAllBtn');
     const shareTournamentBtn = document.getElementById('shareTournamentBtn');
+    const shareTournamentWhatsAppBtn = document.getElementById('shareTournamentWhatsAppBtn');
     const clearVersusBtn = document.getElementById('clearVersusBtn');
 
     // Import/Export
@@ -657,43 +667,64 @@
         sharedTournamentSyncTimer = setTimeout(syncSharedTournamentSnapshot, 450);
     }
 
-    async function shareTournament() {
+    async function getOrCreateSharedTournamentUrl() {
         if (participants.length < 2) {
-            alert('Agrega al menos 2 participantes antes de compartir el torneo.');
-            return;
+            throw new Error('Agrega al menos 2 participantes antes de compartir el torneo.');
         }
+        if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
+        if (!supabaseConfig) {
+            throw new Error('Supabase aún no está conectado. No se pudo crear el enlace compartido.');
+        }
+        if (!tournamentId) tournamentId = generateTournamentId();
+        if (!tournamentShareId) tournamentShareId = generateTournamentShareId();
+        if (!tournamentShareWriteToken) tournamentShareWriteToken = generateTournamentShareWriteToken();
+        tournamentSharingEnabled = true;
+        lastSharedTournamentSnapshot = null;
+        saveToLocalStorage();
+        clearTimeout(sharedTournamentSyncTimer);
+
+        if (!await syncSharedTournamentSnapshot()) {
+            throw new Error('No se pudo guardar el torneo compartido. Comprueba la conexión e intenta nuevamente.');
+        }
+
+        const shareUrl = new URL(SHARED_TOURNAMENT_VIEWER_PATH, window.location.origin);
+        shareUrl.searchParams.set('id', tournamentShareId);
+        return shareUrl.href;
+    }
+
+    async function shareTournament() {
         shareTournamentBtn.disabled = true;
         try {
-            if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
-            if (!supabaseConfig) {
-                alert('Supabase aún no está conectado. No se pudo crear el enlace compartido.');
-                return;
-            }
-            if (!tournamentId) tournamentId = generateTournamentId();
-            if (!tournamentShareId) tournamentShareId = generateTournamentShareId();
-            if (!tournamentShareWriteToken) tournamentShareWriteToken = generateTournamentShareWriteToken();
-            tournamentSharingEnabled = true;
-            lastSharedTournamentSnapshot = null;
-            saveToLocalStorage();
-            clearTimeout(sharedTournamentSyncTimer);
-
-            if (!await syncSharedTournamentSnapshot()) {
-                alert('No se pudo guardar el torneo compartido. Comprueba la conexión e intenta nuevamente.');
-                return;
-            }
-
-            const shareUrl = new URL(SHARED_TOURNAMENT_VIEWER_PATH, window.location.origin);
-            shareUrl.searchParams.set('id', tournamentShareId);
+            const shareUrl = await getOrCreateSharedTournamentUrl();
             try {
-                await navigator.clipboard.writeText(shareUrl.href);
-                alert(`🔗 Enlace copiado. Cualquier persona con el enlace podrá ver el torneo en vivo.\n\n${shareUrl.href}`);
+                await navigator.clipboard.writeText(shareUrl);
+                alert(`🔗 Enlace copiado. Cualquier persona con el enlace podrá ver el torneo en vivo.\n\n${shareUrl}`);
             } catch {
-                window.prompt('Copia este enlace para compartir el torneo:', shareUrl.href);
+                window.prompt('Copia este enlace para compartir el torneo:', shareUrl);
             }
         } catch (error) {
             alert(error.message || 'No se pudo preparar el enlace compartido.');
         } finally {
             shareTournamentBtn.disabled = false;
+        }
+    }
+
+    async function shareTournamentViaWhatsApp() {
+        shareTournamentWhatsAppBtn.disabled = true;
+        try {
+            const shareUrl = await getOrCreateSharedTournamentUrl();
+            const message = `te invitamos a seguir el torneo ${tournamentName} en ${shareUrl} - LaMafia.site`;
+
+            try {
+                await navigator.clipboard.writeText(message);
+            } catch {
+                // WhatsApp recibe el mensaje precargado aunque el portapapeles no esté disponible.
+            }
+
+            window.location.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
+        } catch (error) {
+            alert(error.message || 'No se pudo preparar el mensaje de WhatsApp.');
+            shareTournamentWhatsAppBtn.disabled = false;
         }
     }
 
@@ -1385,7 +1416,7 @@
         const sorted = [...participants].slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         sorted.forEach(p => {
             const pts = getAccumulatedScore(p.id || p.name);
-            html += `<span class="participant-tag">${p.name} (${pts} pts) <button class="edit-name-btn" data-id="${p.id}" title="Editar nombre">✎</button> <button class="remove-btn" data-id="${p.id}" title="Eliminar">✕</button></span>`;
+            html += `<span class="participant-tag"><a class="participant-profile-link" href="${escapeHtml(getPlayerProfilePath(p.name))}" title="Ver perfil de ${escapeHtml(p.name)}">${escapeHtml(p.name)}</a> (${pts} pts) <button class="edit-name-btn" data-id="${escapeHtml(p.id)}" title="Editar nombre">✎</button> <button class="remove-btn" data-id="${escapeHtml(p.id)}" title="Eliminar">✕</button></span>`;
         });
         participantListEl.innerHTML = html;
 
@@ -1455,33 +1486,33 @@
                 <div class="podium-grid">
                     <div class="podium-place place-2">
                         <div class="medal">🥈</div>
-                        <div class="place-name">${podium.second || '—'}</div>
+                        <div class="place-name">${playerProfileLinkMarkup(podium.second)}</div>
                         <div class="place-points">Subcampeón</div>
                         <div class="podium-base silver"></div>
                     </div>
                     <div class="podium-place place-1">
                         <div class="medal">🥇</div>
-                        <div class="place-name">${podium.first || '—'}</div>
+                        <div class="place-name">${playerProfileLinkMarkup(podium.first)}</div>
                         <div class="place-points">🏆 Campeón</div>
                         <div class="podium-base gold"></div>
                     </div>
                     <div class="podium-place place-3">
                         <div class="medal">🥉</div>
-                        <div class="place-name">${podium.third || '—'}</div>
+                        <div class="place-name">${playerProfileLinkMarkup(podium.third)}</div>
                         <div class="place-points">3er Lugar</div>
                         <div class="podium-base bronze"></div>
                     </div>
                     <div class="podium-place place-4">
                         <div class="medal">4️⃣</div>
-                        <div class="place-name">${podium.fourth || '—'}</div>
+                        <div class="place-name">${playerProfileLinkMarkup(podium.fourth)}</div>
                         <div class="place-points">4to Lugar</div>
                         <div class="podium-base fourth"></div>
                     </div>
                 </div>
                 <div class="podium-footer">
                     <span class="tourney-name">🏆 ${tournamentName}</span>
-                    ${podium.third ? `<span style="color:#00FF88;"> · 🥉 3er Lugar: ${podium.third}</span>` : ''}
-                    ${podium.fourth ? `<span style="color:#4A4A6A;"> · 4️⃣ 4to Lugar: ${podium.fourth}</span>` : ''}
+                    ${podium.third ? `<span style="color:#00FF88;"> · 🥉 3er Lugar: ${playerProfileLinkMarkup(podium.third)}</span>` : ''}
+                    ${podium.fourth ? `<span style="color:#4A4A6A;"> · 4️⃣ 4to Lugar: ${playerProfileLinkMarkup(podium.fourth)}</span>` : ''}
                 </div>
             </div>
         `;
@@ -1496,7 +1527,7 @@
             const draws = played.filter(match => match.drawResult || (match.scoreA === match.scoreB && (match.scoreA !== 0 || match.scoreB !== 0))).length;
             const losses = played.filter(match => match.scoreA !== match.scoreB && (player.id === (match.playerAId || getParticipantIdByName(match.playerA)) ? match.scoreA < match.scoreB : match.scoreB < match.scoreA)).length;
             const byes = swissByes.filter(id => String(id) === String(player.id)).length;
-            return `<tr><td>${index + 1}</td><td class="name-cell"><button type="button" class="score-player-history" data-player-id="${escapeHtml(player.id)}">${escapeHtml(player.name)}</button></td><td>${wins + byes} - ${losses} - ${draws}</td><td class="points-cell">${player.points.toFixed(1)}</td><td>${player.buchholz.toFixed(1)}</td><td>${player.pointDifference > 0 ? '+' : ''}${player.pointDifference}</td></tr>`;
+            return `<tr><td>${index + 1}</td><td class="name-cell"><a class="score-player-profile" href="${escapeHtml(getPlayerProfilePath(player.name))}">${escapeHtml(player.name)}</a></td><td>${wins + byes} - ${losses} - ${draws}</td><td class="points-cell">${player.points.toFixed(1)}</td><td>${player.buchholz.toFixed(1)}</td><td>${player.pointDifference > 0 ? '+' : ''}${player.pointDifference}</td></tr>`;
         }).join('');
         return `<div class="podium-container swiss-final-standings">
             <div class="podium-title">🏆 ${tournamentName} · Clasificación final</div>
@@ -1858,7 +1889,7 @@
             html += `
                 <tr class="${cls}">
                     <td><span class="medal-icon">${medal}</span></td>
-                    <td class="name-cell"><button type="button" class="score-player-history" data-player-id="${escapeHtml(item.id)}">${escapeHtml(item.name)}</button></td>
+                    <td class="name-cell"><a class="score-player-profile" href="${escapeHtml(getPlayerProfilePath(item.name))}">${escapeHtml(item.name)}</a></td>
                     ${tournamentFormat === 'swiss'
                         ? `<td class="matches-cell">${wins + byes} - ${losses} - ${draws}</td><td class="points-cell ${ptsClass}">${item.points.toFixed(1)}</td><td class="matches-cell">${item.buchholz.toFixed(1)}</td><td class="matches-cell" style="color:#0099FF;">${item.pointDifference > 0 ? '+' : ''}${item.pointDifference}</td>`
                         : `<td class="points-cell ${ptsClass}">${item.points}</td><td class="matches-cell" style="color:#0099FF;">${item.pointDifference > 0 ? '+' : ''}${item.pointDifference}</td><td class="matches-cell">${completedPlayerMatches.length}</td><td class="matches-cell" style="color:#00FF88;">${wins}</td><td class="matches-cell" style="color:#FF1744;">${losses}</td><td class="matches-cell">${roundsPlayed.size}</td>`}
@@ -1917,7 +1948,7 @@
             const scoreCells = format === 'swiss'
                 ? `<td>${wins + (savedTable.swiss_byes || []).filter(id => String(id) === playerId).length} - ${losses} - ${draws}</td><td class="points-cell">${points.toFixed(1)}</td><td>${(Number(player.buchholz) || 0).toFixed(1)}</td><td>${diff > 0 ? '+' : ''}${diff}</td>`
                 : `<td class="points-cell">${points}</td><td>${diff > 0 ? '+' : ''}${diff}</td><td>${completed.length}</td><td>${wins}</td><td>${losses}</td><td>${rounds}</td>`;
-            return `<tr class="${rowClass}"><td>${medal}</td><td class="name-cell"><button type="button" class="score-player-history" data-player-id="${escapeHtml(playerId)}">${escapeHtml(player.name)}</button></td>${scoreCells}</tr>`;
+            return `<tr class="${rowClass}"><td>${medal}</td><td class="name-cell"><a class="score-player-profile" href="${escapeHtml(getPlayerProfilePath(player.name))}">${escapeHtml(player.name)}</a></td>${scoreCells}</tr>`;
         }).join('');
         totalScoreTableEl.innerHTML = `<div style="font-size:0.75rem;color:#4A4A6A;margin-bottom:0.5rem;">📊 Tabla final · ${savedTable.finished_at ? new Date(savedTable.finished_at).toLocaleString() : 'fecha no disponible'}</div><div class="table-scroll"><table class="total-score-table"><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table></div>`;
     }
@@ -3389,6 +3420,7 @@
 
     document.getElementById('editTournamentNameBtn')?.addEventListener('click', editTournamentName);
     shareTournamentBtn?.addEventListener('click', shareTournament);
+    shareTournamentWhatsAppBtn?.addEventListener('click', shareTournamentViaWhatsApp);
 
     // --- Gestión de rondas ---
     generateGroupBtn.addEventListener('click', generateGroupRound);
