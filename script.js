@@ -10,7 +10,7 @@
     const THEME_STORAGE_KEY = 'beybladex_theme';
     const SUPABASE_CONFIG_ENDPOINT = '/api/supabase-config';
     const SUPABASE_TABLES_ENDPOINT = '/rest/v1/finished_tournaments';
-    const SHARED_TOURNAMENT_VIEWER_PATH = '/url-para-las-rondas/';
+    const SHARED_TOURNAMENT_VIEWER_PATH = '/view/';
 
     // ============================================================
     // 2. ESTADO GLOBAL
