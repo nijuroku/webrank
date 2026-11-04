@@ -1,6 +1,5 @@
--- La app no usa autenticación: el sitio es público y las tablas se acceden con la clave anon.
--- Cualquier visitante puede consultar las tablas y registrar participantes y resultados.
--- Los resultados finalizados no tienen políticas públicas de edición ni eliminación.
+-- El sitio de torneos es público y usa la clave anon. /admin usa Supabase Auth;
+-- las operaciones sensibles exigen app_metadata.role = 'admin' mediante RLS.
 -- No uses una clave service_role en el navegador ni en las variables expuestas.
 
 create table if not exists public.players (
@@ -31,13 +30,106 @@ drop policy if exists "Public can add players" on public.players;
 create policy "Public can add players" on public.players for insert to anon with check (true);
 drop policy if exists "Public can update players" on public.players;
 create policy "Public can update players" on public.players for update to anon using (true) with check (true);
+drop policy if exists "Admins can read players" on public.players;
+create policy "Admins can read players" on public.players for select to authenticated
+    using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'admin');
 
 drop policy if exists "Public can read finished tournaments" on public.finished_tournaments;
 create policy "Public can read finished tournaments" on public.finished_tournaments for select to anon using (true);
 drop policy if exists "Public can save finished tournaments" on public.finished_tournaments;
 create policy "Public can save finished tournaments" on public.finished_tournaments for insert to anon with check (true);
+drop policy if exists "Admins can read finished tournaments" on public.finished_tournaments;
+create policy "Admins can read finished tournaments" on public.finished_tournaments for select to authenticated
+    using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'admin');
+drop policy if exists "Admins can delete finished tournaments" on public.finished_tournaments;
+create policy "Admins can delete finished tournaments" on public.finished_tournaments for delete to authenticated
+    using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'admin');
+revoke all on public.players from public, anon, authenticated;
+revoke all on public.finished_tournaments from public, anon, authenticated;
 grant select, insert, update on public.players to anon;
+grant select on public.players to authenticated;
 grant select, insert on public.finished_tournaments to anon;
+grant select, delete on public.finished_tournaments to authenticated;
+
+create table if not exists public.player_aliases (
+    alias_key text primary key,
+    alias_name text not null,
+    canonical_key text not null,
+    canonical_name text not null,
+    created_at timestamptz not null default now(),
+    constraint player_aliases_not_self check (alias_key <> canonical_key)
+);
+create index if not exists player_aliases_canonical_key_idx
+    on public.player_aliases (canonical_key);
+alter table public.player_aliases enable row level security;
+drop policy if exists "Public can read player aliases" on public.player_aliases;
+create policy "Public can read player aliases" on public.player_aliases for select to anon, authenticated using (true);
+drop policy if exists "Admins can add player aliases" on public.player_aliases;
+create policy "Admins can add player aliases" on public.player_aliases for insert to authenticated
+    with check (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'admin');
+drop policy if exists "Admins can update player aliases" on public.player_aliases;
+create policy "Admins can update player aliases" on public.player_aliases for update to authenticated
+    using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'admin')
+    with check (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'admin');
+drop policy if exists "Admins can delete player aliases" on public.player_aliases;
+create policy "Admins can delete player aliases" on public.player_aliases for delete to authenticated
+    using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'admin');
+revoke all on public.player_aliases from public, anon, authenticated;
+grant select on public.player_aliases to anon, authenticated;
+grant insert, update, delete on public.player_aliases to authenticated;
+insert into public.player_aliases (alias_key, alias_name, canonical_key, canonical_name)
+values ('gabo', 'Gabo', 'gabriel boric', 'Gabriel Boric')
+on conflict (alias_key) do nothing;
+
+create or replace function public.admin_promote_player_alias(p_alias_key text)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+    selected_alias public.player_aliases%rowtype;
+begin
+    if (((select auth.jwt()) -> 'app_metadata' ->> 'role') is distinct from 'admin') then
+        raise exception 'Admin role required' using errcode = '42501';
+    end if;
+    select * into selected_alias
+    from public.player_aliases
+    where alias_key = p_alias_key
+    for update;
+    if not found then
+        raise exception 'Alias not found' using errcode = 'P0002';
+    end if;
+    if exists (
+        select 1 from public.player_aliases
+        where canonical_key = selected_alias.alias_key
+          and alias_key <> selected_alias.alias_key
+    ) then
+        raise exception 'Alias already has linked names; resolve that group first' using errcode = '22023';
+    end if;
+    if exists (
+        select 1 from public.player_aliases
+        where alias_key = selected_alias.canonical_key
+          and alias_key <> selected_alias.alias_key
+    ) then
+        raise exception 'The current primary name is already linked to another player' using errcode = '22023';
+    end if;
+    delete from public.player_aliases where alias_key = selected_alias.alias_key;
+    update public.player_aliases
+    set canonical_key = selected_alias.alias_key,
+        canonical_name = selected_alias.alias_name
+    where canonical_key = selected_alias.canonical_key;
+    insert into public.player_aliases (alias_key, alias_name, canonical_key, canonical_name)
+    values (
+        selected_alias.canonical_key,
+        selected_alias.canonical_name,
+        selected_alias.alias_key,
+        selected_alias.alias_name
+    );
+end;
+$$;
+revoke all on function public.admin_promote_player_alias(text) from public, anon, authenticated;
+grant execute on function public.admin_promote_player_alias(text) to authenticated;
 
 create table if not exists public.shared_tournaments (
     id text primary key,
