@@ -3,67 +3,13 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#10111c">
-    <meta name="description" content="Consulta en vivo las rondas y la tabla de un torneo LaMafia BEYBLADEX.">
-    <title>Torneo en vivo · LaMafia BEYBLADEX</title>
-    <link rel="stylesheet" href="/url-para-las-rondas/viewer.css">
-    <script type="module" src="/url-para-las-rondas/viewer.js"></script>
+    <meta http-equiv="refresh" content="0;url=/view/">
+    <title>Redirigiendo al torneo · LaMafia BEYBLADEX</title>
 </head>
 <body>
-    <header class="viewer-header">
-        <a class="brand" href="/">⚔️ LaMafia <span>BEYBLADEX</span></a>
-        <span class="readonly-label">Solo lectura</span>
-    </header>
-
-    <main class="viewer-main">
-        <div class="live-status" aria-live="polite">
-            <span class="live-dot" id="liveDot"></span>
-            <span id="connectionStatus">Conectando al torneo…</span>
-            <span class="updated-at" id="updatedAt"></span>
-        </div>
-
-        <section class="message-card" id="loadingState">Cargando torneo…</section>
-        <section class="message-card error-card" id="errorState" hidden></section>
-
-        <div id="tournamentView" hidden>
-            <section class="tournament-heading">
-                <p class="eyebrow" id="phaseLabel">Torneo en vivo</p>
-                <h1 id="tournamentName">Torneo</h1>
-                <div class="tournament-meta" id="tournamentMeta"></div>
-                <p class="readonly-note">Los resultados se actualizan automáticamente. Esta página no permite editar el torneo.</p>
-            </section>
-
-            <section class="rounds-card">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">Enfrentamientos</p>
-                        <h2>Rondas</h2>
-                    </div>
-                    <span class="round-count" id="roundCount"></span>
-                </div>
-                <nav class="round-navigation" id="roundNavigation" aria-label="Seleccionar ronda"></nav>
-                <div class="matches-grid" id="matchesList"></div>
-            </section>
-
-            <section class="standings-card">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">Puntaje acumulado</p>
-                        <h2>Tabla</h2>
-                    </div>
-                    <span class="player-count" id="playerCount"></span>
-                </div>
-                <div class="table-scroll">
-                    <table>
-                        <thead>
-                            <tr><th>#</th><th>Jugador</th><th>Puntos</th><th>Dif.</th><th>G-P-E</th></tr>
-                        </thead>
-                        <tbody id="standingsBody"></tbody>
-                    </table>
-                </div>
-            </section>
-        </div>
-    </main>
-    <footer>LaMafia BEYBLADEX · Torneo compartido en vivo</footer>
+    <p>Redirigiendo al torneo…</p>
+    <script>
+        window.location.replace(`/view/${window.location.search}${window.location.hash}`);
+    </script>
 </body>
 </html>
