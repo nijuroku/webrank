@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10111c">
+    <meta name="description" content="Perfil de jugador LaMafia BEYBLADEX: historial de partidas y torneos.">
+    <title>Perfil de jugador · LaMafia BEYBLADEX</title>
+    <link rel="stylesheet" href="/view/viewer.css">
+    <link rel="stylesheet" href="/p/profile.css">
+    <script type="module" src="/p/profile.js"></script>
+</head>
+<body>
+    <header class="viewer-header">
+        <a class="brand" href="/">⚔️ LaMafia <span>BEYBLADEX</span></a>
+        <span class="readonly-label">Perfil público</span>
+    </header>
+
+    <main class="viewer-main profile-main">
+        <section class="profile-card" id="profileCard" hidden aria-labelledby="playerName">
+            <div class="profile-banner" role="img" aria-label="Banner decorativo del perfil"></div>
+            <div class="profile-content">
+                <div class="profile-identity">
+                    <img class="profile-avatar" id="playerAvatar" alt="Imagen de perfil">
+                    <div class="profile-name-wrap">
+                        <p class="eyebrow">Perfil de jugador</p>
+                        <h1 id="playerName">Jugador</h1>
+                    </div>
+                </div>
+                <div class="profile-stats" id="playerSummary" aria-label="Estadísticas del jugador"></div>
+                <section class="best-tournament" id="bestTournament" aria-label="Mejor torneo"></section>
+            </div>
+        </section>
+
+        <section class="message-card" id="loadingState" aria-live="polite">Buscando torneos y partidas…</section>
+        <section class="message-card error-card" id="errorState" hidden></section>
+
+        <section class="result-filter-panel" id="resultFilterPanel" hidden aria-live="polite">
+            <div class="result-filter-heading">
+                <h2 id="resultFilterTitle">Partidas</h2>
+                <button class="result-filter-close" id="closeResultFilter" type="button" aria-label="Cerrar lista">✕</button>
+            </div>
+            <div class="result-filter-list" id="resultFilterList"></div>
+        </section>
+
+        <section class="profile-tournaments" id="tournamentList" hidden aria-label="Historial de torneos"></section>
+    </main>
+
+    <footer>LaMafia BEYBLADEX · Perfiles de jugadores</footer>
+</body>
+</html>

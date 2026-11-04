@@ -5253,3 +5253,22 @@ body:not(.light-theme) .theme-mode-thumb::before {
         margin-right: auto;
     }
 }
+
+.participant-profile-link,
+.score-player-profile {
+    color: inherit;
+    text-decoration: none;
+    text-underline-offset: 0.18em;
+    cursor: pointer;
+}
+
+.participant-profile-link:hover,
+.score-player-profile:hover {
+    color: #16814a !important;
+    text-decoration: underline;
+}
+
+body:not(.light-theme) .participant-profile-link:hover,
+body:not(.light-theme) .score-player-profile:hover {
+    color: #8ec5ff !important;
+}
