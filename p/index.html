@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#10111c">
+    <meta name="theme-color" content="#0b1727">
     <meta name="description" content="Perfil de jugador LaMafia BEYBLADEX: historial de partidas y torneos.">
     <title>Perfil de jugador · LaMafia BEYBLADEX</title>
     <link rel="stylesheet" href="/view/viewer.css">
@@ -12,7 +12,10 @@
 </head>
 <body>
     <header class="viewer-header">
-        <a class="brand" href="/">⚔️ LaMafia <span>BEYBLADEX</span></a>
+        <div class="viewer-header-start">
+            <button class="profile-back-button" id="backButton" type="button" aria-label="Volver a la página anterior">← <span>Atrás</span></button>
+            <a class="brand" href="/">⚔️ LaMafia <span>BEYBLADEX</span></a>
+        </div>
         <span class="readonly-label">Perfil público</span>
     </header>
 
@@ -24,7 +27,8 @@
                     <img class="profile-avatar" id="playerAvatar" alt="Imagen de perfil">
                     <div class="profile-name-wrap">
                         <p class="eyebrow">Perfil de jugador</p>
-                        <h1 id="playerName">Jugador</h1>
+                        <h1 id="playerName"><button id="playerNameToggle" class="profile-name-toggle" type="button" aria-expanded="false" aria-controls="playerAliasList"><span id="playerNameLabel">Jugador</span><span class="profile-name-chevron" aria-hidden="true">⌄</span></button></h1>
+                        <div class="profile-alias-list" id="playerAliasList" hidden aria-live="polite"></div>
                     </div>
                 </div>
                 <div class="profile-stats" id="playerSummary" aria-label="Estadísticas del jugador"></div>

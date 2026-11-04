@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b1726">
+    <title>Administración · LaMafia</title>
+    <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+    <main class="admin-shell">
+        <header class="admin-header">
+            <div>
+                <a class="back-link" href="/">← Volver a LaMafia</a>
+                <h1>Administración</h1>
+                <p>Alias de jugadores y torneos guardados</p>
+            </div>
+            <button id="logoutButton" class="button secondary" type="button" hidden>Cerrar sesión</button>
+        </header>
+
+        <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+        <section id="loginPanel" class="panel login-panel">
+            <h2>Acceso de administrador</h2>
+            <p>Inicia sesión con la cuenta autorizada en Supabase.</p>
+            <form id="loginForm">
+                <label for="loginEmail">Correo</label>
+                <input id="loginEmail" type="email" autocomplete="username" required>
+                <label for="loginPassword">Contraseña</label>
+                <input id="loginPassword" type="password" autocomplete="current-password" required>
+                <button class="button primary" type="submit">Entrar</button>
+            </form>
+        </section>
+
+        <section id="adminPanel" hidden>
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>Vincular nombres</h2>
+                        <p>El alias llevará al perfil y al historial del jugador principal.</p>
+                    </div>
+                </div>
+                <form id="aliasForm" class="alias-form">
+                    <div class="field">
+                        <label for="aliasName">Nombre alternativo</label>
+                        <input id="aliasName" maxlength="100" placeholder="Gabo" required>
+                    </div>
+                    <div class="field">
+                        <label for="canonicalName">Jugador principal</label>
+                        <select id="canonicalName" required></select>
+                    </div>
+                    <button class="button primary" type="submit">Vincular</button>
+                </form>
+                <div id="aliasList" class="list" aria-live="polite"></div>
+            </section>
+
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>Torneos guardados</h2>
+                        <p>Eliminar un torneo borra su tabla final e historial guardado.</p>
+                    </div>
+                    <button id="refreshButton" class="button secondary" type="button">Actualizar</button>
+                </div>
+                <div id="tournamentList" class="list" aria-live="polite"></div>
+            </section>
+        </section>
+    </main>
+    <script src="/admin/admin.js" defer></script>
+</body>
+</html>

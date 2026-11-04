@@ -450,8 +450,25 @@
         });
         try {
             const players = await supabaseRequest(`/rest/v1/players?${params.toString()}`);
+            const aliasParams = new URLSearchParams({
+                select: 'alias_key,alias_name,canonical_name',
+                alias_name: `ilike.*${query}*`,
+                order: 'alias_name.asc',
+                limit: '12'
+            });
+            const aliases = await supabaseRequest(`/rest/v1/player_aliases?${aliasParams.toString()}`);
             if (requestId !== playerSuggestionRequestId) return;
-            renderPlayerSuggestions(players, query);
+            const aliasNames = new Map((Array.isArray(aliases) ? aliases : []).map(alias => [
+                String(alias.alias_name || '').normalize('NFKC').toLocaleLowerCase(), alias.canonical_name
+            ]));
+            const suggestions = [
+                ...(Array.isArray(players) ? players.map(player => ({
+                    ...player,
+                    name: aliasNames.get(String(player.name || '').normalize('NFKC').toLocaleLowerCase()) || player.name
+                })) : []),
+                ...(Array.isArray(aliases) ? aliases.map(alias => ({ name: alias.canonical_name })) : [])
+            ];
+            renderPlayerSuggestions(suggestions, query);
         } catch (error) {
             console.warn('No se pudieron buscar jugadores guardados:', error.message);
             if (requestId === playerSuggestionRequestId) hidePlayerSuggestions();
@@ -465,6 +482,9 @@
         if (!supabaseConfig) return typedName;
 
         try {
+            const aliasKey = typedName.normalize('NFKC').toLocaleLowerCase();
+            const aliasRows = await supabaseRequest(`/rest/v1/player_aliases?select=canonical_name&alias_key=eq.${encodeURIComponent(aliasKey)}&limit=1`);
+            if (Array.isArray(aliasRows) && aliasRows[0]?.canonical_name) return aliasRows[0].canonical_name.trim();
             const escapedName = typedName.replace(/[\\%_*]/g, '\\$&');
             const params = new URLSearchParams({
                 select: 'name',

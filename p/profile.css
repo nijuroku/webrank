@@ -95,6 +95,54 @@
     font-size: clamp(1.45rem, 5vw, 2rem);
 }
 
+.profile-name-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.profile-name-chevron {
+    flex: 0 0 auto;
+    color: #b6a8ed;
+    font-size: 0.8em;
+    transition: transform 0.18s ease;
+}
+
+.profile-name-toggle[aria-expanded="true"] .profile-name-chevron {
+    transform: rotate(180deg);
+}
+
+.profile-alias-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+}
+
+.profile-alias-chip,
+.profile-alias-empty {
+    padding: 0.32rem 0.65rem;
+    border: 1px solid rgba(204, 213, 239, 0.18);
+    border-radius: 999px;
+    color: #d5d1ef;
+    background: rgba(28, 31, 49, 0.65);
+    font-size: 0.82rem;
+}
+
+.profile-alias-empty {
+    color: #aeb1c7;
+    font-style: italic;
+}
+
 .profile-stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -393,4 +441,167 @@
     .profile-match-opponent { grid-column: 1; grid-row: 2; }
     .profile-match-score { grid-column: 2; grid-row: 1; }
     .profile-match-result { grid-column: 2; grid-row: 2; justify-self: end; }
+}
+
+/* Perfil con el mismo vidrio líquido azul de la app principal */
+body {
+    background:
+        radial-gradient(ellipse at 8% 8%, rgba(87, 157, 214, 0.22), transparent 35rem),
+        radial-gradient(ellipse at 95% 42%, rgba(42, 113, 172, 0.18), transparent 34rem),
+        radial-gradient(ellipse at 55% 100%, rgba(77, 134, 181, 0.15), transparent 32rem),
+        linear-gradient(145deg, #0b1727, #12243b 56%, #0d1d31);
+}
+
+.viewer-header {
+    border-bottom: 1px solid rgba(160, 202, 237, 0.18);
+    background: rgba(13, 28, 46, 0.78);
+    box-shadow: 0 10px 30px rgba(3, 12, 24, 0.2);
+    backdrop-filter: blur(22px) saturate(145%);
+    -webkit-backdrop-filter: blur(22px) saturate(145%);
+}
+
+.viewer-header-start {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.profile-back-button {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid rgba(160, 202, 237, 0.24);
+    border-radius: 999px;
+    color: #cfe7fc;
+    background: rgba(111, 168, 211, 0.1);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    backdrop-filter: blur(14px);
+}
+
+.profile-back-button:hover {
+    border-color: rgba(160, 202, 237, 0.48);
+    background: rgba(111, 168, 211, 0.2);
+}
+
+.brand { color: #eaf4ff; }
+.brand span { color: #9bd0ff; }
+
+.readonly-label {
+    border-color: rgba(151, 199, 237, 0.35);
+    color: #c9e5ff;
+    background: rgba(111, 168, 211, 0.12);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(14px);
+}
+
+.profile-card,
+.result-filter-panel,
+.tournament-entry {
+    border-color: rgba(164, 203, 236, 0.24);
+    background: rgba(31, 55, 81, 0.66);
+    box-shadow: 0 22px 54px rgba(2, 13, 26, 0.28), inset 0 1px rgba(255, 255, 255, 0.09);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+}
+
+.profile-banner {
+    background:
+        radial-gradient(ellipse at 16% 112%, rgba(192, 224, 249, 0.74) 0 8%, transparent 42%),
+        radial-gradient(ellipse at 86% -10%, rgba(140, 194, 233, 0.62) 0 11%, transparent 45%),
+        radial-gradient(ellipse at 56% 82%, rgba(65, 132, 187, 0.58) 0 14%, transparent 48%),
+        linear-gradient(118deg, rgba(78, 137, 188, 0.84), rgba(59, 105, 151, 0.8) 48%, rgba(154, 196, 226, 0.78));
+}
+
+.profile-banner::before {
+    background: rgba(204, 231, 251, 0.7);
+}
+
+.profile-banner::after {
+    background: rgba(105, 164, 207, 0.76);
+}
+
+.profile-avatar {
+    border-color: rgba(176, 211, 239, 0.92);
+    background: #254766;
+    box-shadow: 0 8px 24px rgba(4, 19, 36, 0.42), 0 0 0 5px rgba(255, 255, 255, 0.07);
+}
+
+.profile-name-wrap .eyebrow { color: #a7d5fc; }
+.profile-name-chevron,
+.tournament-summary-chevron { color: #a9d8ff; }
+
+.profile-alias-chip,
+.profile-alias-empty {
+    border-color: rgba(165, 206, 240, 0.2);
+    color: #d8edff;
+    background: rgba(104, 157, 198, 0.16);
+    backdrop-filter: blur(14px);
+}
+
+.profile-stat {
+    border-color: rgba(167, 204, 235, 0.2);
+    background: linear-gradient(145deg, rgba(61, 94, 128, 0.7), rgba(31, 57, 84, 0.72));
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.profile-stat:hover,
+.profile-stat[aria-expanded="true"] {
+    border-color: rgba(157, 210, 251, 0.58);
+    background: linear-gradient(145deg, rgba(77, 120, 160, 0.82), rgba(38, 72, 105, 0.86));
+}
+
+.profile-stat-label { color: #c5ddf2; }
+.profile-stat-value { color: #f2f8ff; }
+
+.best-tournament {
+    border-color: rgba(170, 207, 237, 0.24);
+    background: linear-gradient(110deg, rgba(80, 117, 151, 0.45), rgba(30, 55, 81, 0.76));
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(18px) saturate(135%);
+}
+
+.best-tournament-icon {
+    border-color: rgba(194, 221, 243, 0.25);
+    background: rgba(161, 202, 235, 0.12);
+}
+
+.best-tournament-label { color: #c5e3fc; }
+.best-tournament-name { color: #f0f7ff; }
+.best-tournament-meta { color: #c0d3e5; }
+
+.result-filter-heading { border-color: rgba(177, 211, 239, 0.13); }
+.result-filter-heading h2,
+.profile-section-title { color: #edf6ff; }
+
+.profile-result-match,
+.profile-match {
+    border-color: rgba(162, 202, 236, 0.16);
+    background: rgba(13, 31, 50, 0.48);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.profile-result-tournament,
+.profile-match-round { color: #b4cbe0; }
+.profile-result-round,
+.profile-result-opponent,
+.profile-match-opponent { color: #e6f2ff; }
+.profile-result-score,
+.profile-match-score { color: #a9d8ff; }
+
+.tournament-entry summary strong { color: #edf6ff; }
+.tournament-summary-meta { color: #bdd1e5; }
+.tournament-match-list { border-top: 1px solid rgba(169, 207, 238, 0.1); }
+
+footer { color: #9bb1c6; }
+
+@media (max-width: 540px) {
+    .viewer-header { min-height: 58px; }
+    .viewer-header-start { gap: 0.55rem; }
+    .profile-back-button { width: 38px; padding: 0; font-size: 1.05rem; }
+    .profile-back-button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 }
