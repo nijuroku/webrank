@@ -12,10 +12,11 @@
         } catch { /* El tema oscuro es el predeterminado si el almacenamiento no está disponible. */ }
     </script>
     <link rel="stylesheet" href="/view/viewer.css">
+    <link rel="stylesheet" href="/navigation.css">
     <link rel="stylesheet" href="/loading.css">
     <script type="module" src="/view/viewer.js"></script>
 </head>
-<body>
+<body class="persistent-nav-page">
     <header class="viewer-header">
         <a class="brand" href="/" aria-label="Volver a LaMafia"><span class="brand-mark" aria-hidden="true">⚔️</span><span>LaMafia <strong>BEYBLADEX</strong></span></a>
         <div class="header-actions">
@@ -65,7 +66,7 @@
                 <p class="readonly-note">Los resultados se actualizan automáticamente. Esta página no permite editar el torneo.</p>
             </section>
 
-            <section class="rounds-card">
+            <section class="rounds-card" id="matchesSection">
                 <div class="section-heading">
                     <div>
                         <p class="eyebrow">Enfrentamientos</p>
@@ -77,7 +78,7 @@
                 <div class="matches-grid" id="matchesList"></div>
             </section>
 
-            <section class="standings-card">
+            <section class="standings-card" id="standingsSection">
                 <div class="section-heading">
                     <div>
                         <p class="eyebrow">Puntaje acumulado</p>
@@ -97,5 +98,11 @@
         </div>
     </main>
     <footer>LaMafia BEYBLADEX · Torneo compartido en vivo</footer>
+    <nav class="persistent-navigation" aria-label="Navegación principal">
+        <a href="/?tab=participants" title="Participantes"><span class="tab-icon" aria-hidden="true">👥</span><span>Participantes</span></a>
+        <a class="active" href="#matchesSection" aria-current="location" title="Enfrentamientos"><span class="tab-icon" aria-hidden="true">⚔️</span><span>VS</span></a>
+        <a href="#standingsSection" title="Tabla de puntuación"><span class="tab-icon" aria-hidden="true">📊</span><span>Tabla</span></a>
+        <a href="/p/" title="Perfil"><span class="tab-icon" aria-hidden="true">👤</span><span>Perfil</span></a>
+    </nav>
 </body>
 </html>

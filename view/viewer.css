@@ -232,6 +232,7 @@ h2 { margin: 0; font-size: 1.14rem; }
 .readonly-note { margin: 0.85rem 0 0; color: var(--subtle); font-size: 0.78rem; }
 
 .rounds-card, .standings-card { padding: 1.05rem; }
+.rounds-card, .standings-card { scroll-margin-top: 86px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.9rem; }
 .round-navigation { display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.1rem 0 0.75rem; scrollbar-width: thin; }
 .round-button { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 999px; padding: 0.48rem 0.8rem; color: var(--muted); background: var(--glass-strong); font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }

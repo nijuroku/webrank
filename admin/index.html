@@ -6,9 +6,10 @@
     <meta name="theme-color" content="#0b1726">
     <title>Administración · LaMafia</title>
     <link rel="stylesheet" href="/admin/admin.css">
+    <link rel="stylesheet" href="/navigation.css">
     <link rel="stylesheet" href="/loading.css">
 </head>
-<body>
+<body class="persistent-nav-page">
     <main class="admin-shell">
         <header class="admin-header">
             <div>
@@ -108,5 +109,11 @@
         </section>
     </main>
     <script src="/admin/admin.js" defer></script>
+    <nav class="persistent-navigation" aria-label="Navegación principal">
+        <a href="/?tab=participants" title="Participantes"><span class="tab-icon" aria-hidden="true">👥</span><span>Participantes</span></a>
+        <a href="/?tab=matches" title="Enfrentamientos"><span class="tab-icon" aria-hidden="true">⚔️</span><span>VS</span></a>
+        <a href="/?tab=table" title="Tabla de puntuación"><span class="tab-icon" aria-hidden="true">📊</span><span>Tabla</span></a>
+        <a href="/p/" title="Perfil"><span class="tab-icon" aria-hidden="true">👤</span><span>Perfil</span></a>
+    </nav>
 </body>
 </html>

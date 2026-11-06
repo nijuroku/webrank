@@ -13,10 +13,11 @@
     </script>
     <link rel="stylesheet" href="/view/viewer.css">
     <link rel="stylesheet" href="/p/profile.css">
+    <link rel="stylesheet" href="/navigation.css">
     <link rel="stylesheet" href="/loading.css">
     <script type="module" src="/p/profile.js"></script>
 </head>
-<body>
+<body class="persistent-nav-page">
     <header class="viewer-header">
         <div class="viewer-header-start">
             <button class="profile-back-button" id="backButton" type="button" aria-label="Volver a la página anterior">← <span>Atrás</span></button>
@@ -33,8 +34,23 @@
     </header>
 
     <main class="viewer-main profile-main">
+        <section class="account-route-panel" id="accountRoutePanel" hidden aria-labelledby="accountRouteTitle">
+            <p class="eyebrow">LaMafia BEYBLADEX</p>
+            <h1 id="accountRouteTitle">Tu perfil</h1>
+            <p id="accountRouteMessage">Crea una cuenta o inicia sesión para vincular tu perfil de jugador.</p>
+            <div class="account-route-actions" id="accountRouteActions">
+                <button class="profile-action-button primary" id="accountRouteRegisterButton" type="button">Crear perfil</button>
+                <button class="profile-action-button secondary" id="accountRouteLoginButton" type="button">Iniciar sesión</button>
+            </div>
+            <button class="profile-action-button secondary" id="accountRouteOwnProfileButton" type="button" hidden>Ir a mi perfil</button>
+        </section>
         <section class="profile-card" id="profileCard" hidden aria-labelledby="playerName">
-            <div class="profile-banner" id="profileBanner" role="img" aria-label="Banner del perfil"><img id="playerBanner" alt="" hidden></div>
+            <div class="profile-banner" id="profileBanner" role="img" aria-label="Banner del perfil">
+                <img id="playerBanner" alt="" hidden>
+                <button class="profile-link-button" id="profileLinkButton" type="button" aria-label="Iniciar sesión o solicitar vinculación del perfil" title="Iniciar sesión o solicitar vinculación">
+                    <span aria-hidden="true">＋</span>
+                </button>
+            </div>
             <div class="profile-content">
                 <div class="profile-identity">
                     <img class="profile-avatar" id="playerAvatar" alt="Imagen de perfil">
@@ -46,6 +62,7 @@
                 </div>
                 <div class="profile-stats" id="playerSummary" aria-label="Estadísticas del jugador"></div>
                 <section class="best-tournament" id="bestTournament" aria-label="Mejor torneo"></section>
+                <p class="profile-link-notice" id="profileLinkNotice" role="status" aria-live="polite" hidden></p>
             </div>
         </section>
 
@@ -114,7 +131,7 @@
             <section id="accountPanel" hidden>
                 <p class="profile-account-summary" id="profileAccountSummary"></p>
                 <p class="profile-account-status" id="profileAccountStatus" aria-live="polite"></p>
-                <button class="profile-action-button primary" id="requestProfileButton" type="button" hidden>Solicitar este perfil</button>
+                <button class="profile-action-button secondary go-to-own-profile-button" id="goToOwnProfileButton" type="button" hidden>Ir a mi perfil</button>
                 <div class="profile-image-controls" id="profileImageControls" hidden>
                     <label for="avatarUrlInput">Enlace de la foto</label>
                     <input id="avatarUrlInput" type="url" inputmode="url" autocomplete="url" placeholder="https://…" aria-describedby="profileImageUrlHelp">
@@ -131,5 +148,11 @@
     </dialog>
 
     <footer>LaMafia BEYBLADEX · Perfiles de jugadores</footer>
+    <nav class="persistent-navigation" aria-label="Navegación principal">
+        <a href="/?tab=participants" title="Participantes"><span class="tab-icon" aria-hidden="true">👥</span><span>Participantes</span></a>
+        <a href="/?tab=matches" title="Enfrentamientos"><span class="tab-icon" aria-hidden="true">⚔️</span><span>VS</span></a>
+        <a href="/?tab=table" title="Tabla de puntuación"><span class="tab-icon" aria-hidden="true">📊</span><span>Tabla</span></a>
+        <a class="active" href="/p/" aria-current="page" title="Perfil"><span class="tab-icon" aria-hidden="true">👤</span><span>Perfil</span></a>
+    </nav>
 </body>
 </html>

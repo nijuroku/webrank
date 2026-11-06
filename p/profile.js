@@ -16,6 +16,10 @@ const resultFilterPanel = document.getElementById('resultFilterPanel');
 const resultFilterTitle = document.getElementById('resultFilterTitle');
 const resultFilterList = document.getElementById('resultFilterList');
 const tournamentList = document.getElementById('tournamentList');
+const accountRoutePanel = document.getElementById('accountRoutePanel');
+const accountRouteMessage = document.getElementById('accountRouteMessage');
+const accountRouteActions = document.getElementById('accountRouteActions');
+const accountRouteOwnProfileButton = document.getElementById('accountRouteOwnProfileButton');
 const profileBanner = document.getElementById('playerBanner');
 const profileDialog = document.getElementById('profileDialog');
 const authPanel = document.getElementById('authPanel');
@@ -23,9 +27,11 @@ const accountPanel = document.getElementById('accountPanel');
 const profileAuthNotice = document.getElementById('profileAuthNotice');
 const profileAccountSummary = document.getElementById('profileAccountSummary');
 const profileAccountStatus = document.getElementById('profileAccountStatus');
-const requestProfileButton = document.getElementById('requestProfileButton');
+const profileLinkButton = document.getElementById('profileLinkButton');
+const profileLinkNotice = document.getElementById('profileLinkNotice');
 const profileImageControls = document.getElementById('profileImageControls');
 let activeResultFilter = null;
+let accountRouteMode = false;
 let supabase = null;
 let currentUser = null;
 let currentProfileKey = null;
@@ -150,13 +156,36 @@ function renderAccountButton() {
     button.setAttribute('aria-label', currentUser ? 'Abrir mi cuenta de perfil' : 'Crear perfil o iniciar sesión');
 }
 
+function openProfileDialog(mode = 'register') {
+    setAuthMode(mode);
+    if (typeof profileDialog.showModal === 'function') profileDialog.showModal();
+    else profileDialog.setAttribute('open', '');
+}
+
+function showProfileLinkNotice(message, kind = '') {
+    if (!profileLinkNotice) return;
+    profileLinkNotice.textContent = message;
+    profileLinkNotice.className = `profile-link-notice ${kind}`.trim();
+    profileLinkNotice.hidden = !message;
+}
+
+function goToOwnProfile() {
+    if (!currentProfileOwner?.player_name) return false;
+    window.location.assign(`/p/${encodeURIComponent(currentProfileOwner.player_name)}`);
+    return true;
+}
+
 async function refreshAccountContext() {
     if (!supabase || !profileDialog) return;
     if (!currentUser) {
         authPanel.hidden = false;
         accountPanel.hidden = true;
-        requestProfileButton.hidden = true;
+        profileLinkButton.hidden = !currentProfileKey;
         profileImageControls.hidden = true;
+        document.getElementById('goToOwnProfileButton').hidden = true;
+        accountRouteActions.hidden = false;
+        accountRouteOwnProfileButton.hidden = true;
+        if (accountRouteMode) accountRouteMessage.textContent = 'Crea una cuenta o inicia sesión para vincular tu perfil de jugador.';
         return;
     }
 
@@ -178,14 +207,23 @@ async function refreshAccountContext() {
     profileAccountSummary.textContent = `${nickname} · ${currentUser.email || ''}`;
     currentProfileRequest = requestResult.data || null;
     currentProfileOwner = ownerResult.data || null;
-    requestProfileButton.hidden = true;
+    profileLinkButton.hidden = true;
     profileImageControls.hidden = true;
+    const hasOwnProfile = Boolean(currentProfileOwner?.player_name);
+    document.getElementById('goToOwnProfileButton').hidden = !hasOwnProfile;
+    accountRouteActions.hidden = Boolean(currentUser);
+    accountRouteOwnProfileButton.hidden = !hasOwnProfile;
+    if (accountRouteMode && hasOwnProfile) {
+        window.location.replace(`/p/${encodeURIComponent(currentProfileOwner.player_name)}`);
+        return;
+    }
 
     if (currentProfileOwner) {
         const ownsThisProfile = currentProfileOwner.player_key === currentProfileKey;
         profileAccountStatus.textContent = ownsThisProfile
             ? `Este perfil de ${currentProfileOwner.player_name} está vinculado a tu cuenta. Puedes actualizar la foto y el banner.`
             : `Tu cuenta ya está vinculada al perfil de ${currentProfileOwner.player_name}. Solo puedes tener un perfil vinculado.`;
+        if (accountRouteMode) accountRouteMessage.textContent = `Tu perfil está vinculado a ${currentProfileOwner.player_name}.`;
         profileImageControls.hidden = !ownsThisProfile;
         if (ownsThisProfile) {
             document.getElementById('avatarUrlInput').value = currentPublicProfile?.avatar_url || '';
@@ -205,28 +243,32 @@ async function refreshAccountContext() {
         profileAccountStatus.textContent = requestedSameProfile
             ? stateText
             : `${stateText} Solo puedes solicitar un perfil; los alias adicionales se gestionan con el administrador.`;
+        if (accountRouteMode) accountRouteMessage.textContent = `${stateText} Abre el perfil del jugador para consultar su estado.`;
         return;
     }
 
     if (!currentProfileKey) {
         profileAccountStatus.textContent = 'Abre el perfil del jugador que quieres vincular a tu cuenta.';
+        if (accountRouteMode) accountRouteMessage.textContent = 'Abre el perfil del jugador que quieres vincular a tu cuenta. La solicitud se inicia desde el botón de la esquina superior derecha de ese perfil.';
         return;
     }
     if (currentPublicProfile) {
         profileAccountStatus.textContent = 'Este perfil ya está vinculado a una cuenta.';
+        if (accountRouteMode) accountRouteMessage.textContent = 'Este perfil ya está vinculado a una cuenta. Si es tuyo, inicia sesión con la cuenta que lo reclamó.';
         return;
     }
 
     profileAccountStatus.textContent = `Puedes solicitar vincular el perfil de ${currentProfileName} a tu cuenta. Solo se permite una solicitud.`;
-    requestProfileButton.textContent = `Solicitar perfil de ${currentProfileName}`;
-    requestProfileButton.hidden = false;
+    profileLinkButton.hidden = false;
+    profileLinkButton.setAttribute('aria-label', `Solicitar vinculación del perfil de ${currentProfileName}`);
+    profileLinkButton.title = `Solicitar vinculación del perfil de ${currentProfileName}`;
+    if (accountRouteMode) accountRouteMessage.textContent = `Abre el perfil de ${currentProfileName} y solicita la vinculación desde el botón de la esquina superior derecha.`;
 }
 
 document.getElementById('profileAccountButton')?.addEventListener('click', async () => {
-    setAuthMode('register');
+    if (currentUser && currentProfileOwner && goToOwnProfile()) return;
     if (currentUser) await refreshAccountContext();
-    if (typeof profileDialog.showModal === 'function') profileDialog.showModal();
-    else profileDialog.setAttribute('open', '');
+    openProfileDialog(currentUser ? 'login' : 'register');
 });
 document.getElementById('closeProfileDialog')?.addEventListener('click', () => profileDialog.close());
 profileDialog?.addEventListener('click', event => {
@@ -234,6 +276,10 @@ profileDialog?.addEventListener('click', event => {
 });
 document.getElementById('registerTab')?.addEventListener('click', () => setAuthMode('register'));
 document.getElementById('loginTab')?.addEventListener('click', () => setAuthMode('login'));
+document.getElementById('accountRouteRegisterButton')?.addEventListener('click', () => openProfileDialog('register'));
+document.getElementById('accountRouteLoginButton')?.addEventListener('click', () => openProfileDialog('login'));
+document.getElementById('accountRouteOwnProfileButton')?.addEventListener('click', goToOwnProfile);
+document.getElementById('goToOwnProfileButton')?.addEventListener('click', goToOwnProfile);
 
 document.getElementById('registerForm')?.addEventListener('submit', async event => {
     event.preventDefault();
@@ -283,9 +329,17 @@ document.getElementById('signInForm')?.addEventListener('submit', async event =>
     } finally { submit.disabled = false; }
 });
 
-requestProfileButton?.addEventListener('click', async () => {
-    if (!supabase || !currentUser || !currentProfileKey || !currentProfileName) return;
-    requestProfileButton.disabled = true;
+profileLinkButton?.addEventListener('click', async () => {
+    if (!currentUser) {
+        openProfileDialog('register');
+        return;
+    }
+    if (!supabase || !currentProfileKey || !currentProfileName) return;
+    if (currentProfileOwner || currentProfileRequest || currentPublicProfile) {
+        showProfileLinkNotice(profileAccountStatus.textContent || 'Este perfil no está disponible para solicitar.', 'error');
+        return;
+    }
+    profileLinkButton.disabled = true;
     try {
         const { error } = await supabase.from('player_profile_requests').insert({
             user_id: currentUser.id,
@@ -295,10 +349,10 @@ requestProfileButton?.addEventListener('click', async () => {
         });
         if (error) throw error;
         await refreshAccountContext();
-        setAuthNotice('Solicitud enviada. El administrador revisará la vinculación.', 'success');
+        showProfileLinkNotice('Solicitud enviada. El administrador revisará la vinculación.', 'success');
     } catch (error) {
-        setAuthNotice(error.message || 'No se pudo enviar la solicitud.', 'error');
-    } finally { requestProfileButton.disabled = false; }
+        showProfileLinkNotice(error.message || 'No se pudo enviar la solicitud.', 'error');
+    } finally { profileLinkButton.disabled = false; }
 });
 
 async function saveProfileImage(kind) {
@@ -616,12 +670,14 @@ function renderBestTournament(profiles) {
 async function initializeProfile() {
     const requestedName = resolvePlayerName();
     const targetName = normalizeName(requestedName);
-    if (!targetName) {
+    const normalizedPath = window.location.pathname.replace(/\/+$/, '') || '/';
+    accountRouteMode = new URLSearchParams(window.location.search).get('account') === '1' || normalizedPath === '/p';
+    if (!targetName && !accountRouteMode) {
         showError('No se especificó el nombre del jugador.');
         return;
     }
 
-    playerNameHeading.textContent = requestedName;
+    if (targetName) playerNameHeading.textContent = requestedName;
     try {
         const config = await getSupabaseConfig();
         supabase = createClient(config.url, config.anonKey, {
@@ -637,6 +693,15 @@ async function initializeProfile() {
                 refreshAccountContext().catch(error => setAuthNotice(error.message || 'No se pudo cargar tu cuenta.', 'error'));
             }, 0);
         });
+        if (accountRouteMode) {
+            accountRoutePanel.hidden = false;
+            loadingState.hidden = true;
+            profileCard.hidden = true;
+            resultFilterPanel.hidden = true;
+            tournamentList.hidden = true;
+            await refreshAccountContext();
+            return;
+        }
         const [tournaments, aliases, registeredPlayers] = await Promise.all([
             loadFinishedTournaments(config),
             loadPlayerAliases(config),
