@@ -9,7 +9,11 @@ const aliasForm = document.getElementById('aliasForm');
 const aliasInput = document.getElementById('aliasName');
 const canonicalSelect = document.getElementById('canonicalName');
 const aliasList = document.getElementById('aliasList');
+const profileRequestsList = document.getElementById('profileRequestsList');
 const tournamentList = document.getElementById('tournamentList');
+const activeTournamentList = document.getElementById('activeTournamentList');
+const tournamentSubmissionList = document.getElementById('tournamentSubmissionList');
+const activityLog = document.getElementById('activityLog');
 const refreshButton = document.getElementById('refreshButton');
 
 let config = null;
@@ -196,7 +200,7 @@ function renderTournaments(rows) {
         meta.className = 'row-meta';
         const count = Array.isArray(tournament.participants) ? tournament.participants.length : 0;
         const date = tournament.finished_at ? new Date(tournament.finished_at).toLocaleDateString('es-CL') : 'Sin fecha';
-        meta.textContent = `${date} · ${count} participantes`;
+        meta.textContent = `${date} · ${count} participantes${tournament.created_by ? ` · creado por ${tournament.created_by}` : ''}`;
         copy.append(title, meta);
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -208,20 +212,255 @@ function renderTournaments(rows) {
     });
 }
 
+function renderProfileRequests(rows) {
+    profileRequestsList.replaceChildren();
+    if (!rows.length) return appendEmpty(profileRequestsList, 'No hay solicitudes pendientes.');
+    rows.forEach(request => {
+        const row = document.createElement('div');
+        row.className = 'list-row';
+        const copy = document.createElement('div');
+        copy.className = 'row-copy';
+        const title = document.createElement('div');
+        title.className = 'row-title';
+        title.textContent = `${request.player_name} · ${request.status === 'pending' ? 'Pendiente' : request.status === 'approved' ? 'Aprobada' : 'Rechazada'}`;
+        const meta = document.createElement('div');
+        meta.className = 'row-meta';
+        const date = request.created_at ? new Date(request.created_at).toLocaleString('es-CL') : 'Sin fecha';
+        meta.textContent = `${request.email} · ${date}`;
+        copy.append(title, meta);
+        row.appendChild(copy);
+
+        if (request.status === 'pending') {
+            const actions = document.createElement('div');
+            actions.className = 'row-actions';
+            const approve = document.createElement('button');
+            approve.type = 'button';
+            approve.className = 'button primary';
+            approve.textContent = 'Aprobar';
+            approve.addEventListener('click', () => reviewProfileRequest(request, true));
+            const reject = document.createElement('button');
+            reject.type = 'button';
+            reject.className = 'button danger';
+            reject.textContent = 'Rechazar';
+            reject.addEventListener('click', () => reviewProfileRequest(request, false));
+            actions.append(approve, reject);
+            row.appendChild(actions);
+        }
+        profileRequestsList.appendChild(row);
+    });
+}
+
+function renderActiveTournaments(rows) {
+    activeTournamentList.replaceChildren();
+    if (!rows.length) return appendEmpty(activeTournamentList, 'No hay torneos activos compartidos.');
+    rows.forEach(tournament => {
+        const row = document.createElement('div');
+        row.className = 'list-row';
+        const copy = document.createElement('div');
+        copy.className = 'row-copy';
+        const title = document.createElement('div');
+        title.className = 'row-title';
+        title.textContent = tournament.tournament_name || 'Torneo sin nombre';
+        const meta = document.createElement('div');
+        meta.className = 'row-meta';
+        const participantCount = Array.isArray(tournament.participants) ? tournament.participants.length : 0;
+        const expiry = tournament.expires_at ? new Date(tournament.expires_at).toLocaleString('es-CL') : 'Sin vencimiento';
+        meta.textContent = `${tournament.phase_label || 'Torneo en curso'} · Ronda ${tournament.current_round || 0} · ${participantCount} participantes · vence ${expiry}`;
+        copy.append(title, meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'row-actions';
+        const shareUrl = new URL('/view/', window.location.origin);
+        shareUrl.searchParams.set('id', tournament.id);
+        const openLink = document.createElement('a');
+        openLink.className = 'button secondary';
+        openLink.href = shareUrl.href;
+        openLink.target = '_blank';
+        openLink.rel = 'noopener noreferrer';
+        openLink.textContent = 'Ver enlace';
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'button danger';
+        close.textContent = 'Cerrar torneo';
+        close.addEventListener('click', () => closeActiveTournament(tournament));
+        actions.append(openLink, close);
+        row.append(copy, actions);
+        activeTournamentList.appendChild(row);
+    });
+}
+
+function renderTournamentSubmissions(rows) {
+    tournamentSubmissionList.replaceChildren();
+    if (!rows.length) return appendEmpty(tournamentSubmissionList, 'No hay torneos en espera de aprobación.');
+    rows.forEach(submission => {
+        const row = document.createElement('div');
+        row.className = 'list-row';
+        const copy = document.createElement('div');
+        copy.className = 'row-copy';
+        const title = document.createElement('div');
+        title.className = 'row-title';
+        title.textContent = submission.tournament_name || 'Torneo sin nombre';
+        const meta = document.createElement('div');
+        meta.className = 'row-meta';
+        const payload = submission.payload || {};
+        const participantCount = Array.isArray(payload.participants) ? payload.participants.length : 0;
+        const type = submission.submission_type === 'shared_live' ? 'Enlace en vivo' : 'Tabla final';
+        const date = submission.submitted_at ? new Date(submission.submitted_at).toLocaleString('es-CL') : 'Sin fecha';
+        meta.textContent = `${type} · ${submission.submitter_name || 'Anónimo'} · ${participantCount} participantes · ${date}`;
+        copy.append(title, meta);
+        const actions = document.createElement('div');
+        actions.className = 'row-actions';
+        const approve = document.createElement('button');
+        approve.type = 'button';
+        approve.className = 'button primary';
+        approve.textContent = 'Aprobar';
+        approve.addEventListener('click', () => reviewTournamentSubmission(submission, true));
+        const reject = document.createElement('button');
+        reject.type = 'button';
+        reject.className = 'button danger';
+        reject.textContent = 'Rechazar';
+        reject.addEventListener('click', () => reviewTournamentSubmission(submission, false));
+        actions.append(approve, reject);
+        row.append(copy, actions);
+        tournamentSubmissionList.appendChild(row);
+    });
+}
+
+function renderActivityLog(rows) {
+    activityLog.replaceChildren();
+    if (!rows.length) {
+        activityLog.textContent = 'Sin actividad registrada.';
+        return;
+    }
+    const descriptions = {
+        created: 'creó un torneo',
+        approval_requested: 'envió un torneo a revisión',
+        approved: 'aprobó un torneo',
+        rejected: 'rechazó un torneo',
+        published: 'publicó un torneo',
+        closed: 'cerró un torneo',
+        deleted: 'eliminó una tabla final',
+        round_updated: 'actualizó una ronda',
+        updated: 'actualizó el torneo'
+    };
+    rows.forEach(entry => {
+        const line = document.createElement('div');
+        line.className = 'log-line';
+        const time = document.createElement('time');
+        time.dateTime = entry.created_at || '';
+        time.textContent = entry.created_at ? new Date(entry.created_at).toLocaleString('es-CL') : '';
+        const action = document.createElement('span');
+        const details = entry.event_type === 'updated' && entry.details
+            ? ` (ronda ${entry.details.round || 0} · ${entry.details.participants || 0} participantes · ${entry.details.matches || 0} enfrentamientos)`
+            : '';
+        action.textContent = `${entry.actor_name || 'Anónimo'} ${descriptions[entry.event_type] || entry.event_type} “${entry.tournament_name || 'Torneo sin nombre'}”${details}.`;
+        line.append(time, action);
+        activityLog.appendChild(line);
+    });
+    activityLog.scrollTop = 0;
+}
+
+function setAdminListsLoading(loading) {
+    const lists = [aliasList, tournamentList, activeTournamentList, tournamentSubmissionList, profileRequestsList];
+    if (!loading) {
+        lists.forEach(list => list.setAttribute('aria-busy', 'false'));
+        activityLog.setAttribute('aria-busy', 'false');
+        return;
+    }
+    lists.forEach(list => {
+        list.setAttribute('aria-busy', 'true');
+        list.innerHTML = Array.from({ length: 3 }, () => `
+            <div class="admin-loading-row" aria-hidden="true">
+                <div class="admin-loading-copy"><span class="loading-skeleton skeleton-line medium"></span><span class="loading-skeleton skeleton-line long"></span></div>
+                <span class="loading-skeleton admin-loading-action"></span>
+            </div>`).join('');
+    });
+    activityLog.setAttribute('aria-busy', 'true');
+    activityLog.innerHTML = Array.from({ length: 5 }, () => '<span class="loading-skeleton admin-loading-log-line" aria-hidden="true"></span>').join('');
+}
+
 async function loadAdminData() {
     showNotice('Cargando…');
-    const params = new URLSearchParams({ select: 'id,name,finished_at,participants,standings', order: 'finished_at.desc', limit: '1000' });
-    const [aliases, tournaments, players] = await Promise.all([
-        dataRequest('player_aliases?select=alias_key,alias_name,canonical_key,canonical_name&order=canonical_name.asc,alias_name.asc'),
-        dataRequest(`finished_tournaments?${params}`),
-        dataRequest('players?select=name&order=name.asc&limit=1000')
-    ]);
-    tournamentRows = Array.isArray(tournaments) ? tournaments : [];
-    renderAliases(Array.isArray(aliases) ? aliases : []);
-    renderCanonicalOptions(collectCanonicalNames(players, tournamentRows, aliases));
-    renderTournaments(tournamentRows);
-    showNotice('Datos actualizados.', 'success');
-    setTimeout(() => { if (notice.textContent === 'Datos actualizados.') notice.hidden = true; }, 2200);
+    setAdminListsLoading(true);
+    const params = new URLSearchParams({ select: 'id,name,finished_at,participants,standings,created_by,created_by_user_id', order: 'finished_at.desc', limit: '1000' });
+    const activeParams = new URLSearchParams({
+        select: 'id,tournament_name,phase_label,current_round,participants,expires_at,updated_at',
+        tournament_finished: 'eq.false',
+        expires_at: `gt.${new Date().toISOString()}`,
+        order: 'updated_at.desc',
+        limit: '1000'
+    });
+    try {
+        const [aliases, tournaments, players, profileRequests, activeTournaments, submissions, logs] = await Promise.all([
+            dataRequest('player_aliases?select=alias_key,alias_name,canonical_key,canonical_name&order=canonical_name.asc,alias_name.asc'),
+            dataRequest(`finished_tournaments?${params}`),
+            dataRequest('players?select=name&order=name.asc&limit=1000'),
+            dataRequest('player_profile_requests?select=user_id,email,player_key,player_name,status,created_at&order=created_at.desc&limit=1000'),
+            dataRequest(`shared_tournaments?${activeParams}`),
+            dataRequest('tournament_submissions?select=id,tournament_id,tournament_name,submission_type,payload,share_id,submitter_name,submitted_at&status=eq.pending&order=submitted_at.asc&limit=500'),
+            dataRequest('admin_activity_log?select=id,event_type,tournament_id,tournament_name,actor_name,details,created_at&order=created_at.desc&limit=200')
+        ]);
+        tournamentRows = Array.isArray(tournaments) ? tournaments : [];
+        renderAliases(Array.isArray(aliases) ? aliases : []);
+        renderCanonicalOptions(collectCanonicalNames(players, tournamentRows, aliases));
+        renderProfileRequests(Array.isArray(profileRequests) ? profileRequests : []);
+        renderTournaments(tournamentRows);
+        renderActiveTournaments(Array.isArray(activeTournaments) ? activeTournaments : []);
+        renderTournamentSubmissions(Array.isArray(submissions) ? submissions : []);
+        renderActivityLog(Array.isArray(logs) ? logs : []);
+        setAdminListsLoading(false);
+        showNotice('Datos actualizados.', 'success');
+        setTimeout(() => { if (notice.textContent === 'Datos actualizados.') notice.hidden = true; }, 2200);
+    } catch (error) {
+        [aliasList, tournamentList, activeTournamentList, tournamentSubmissionList, profileRequestsList].forEach(list => {
+            list.setAttribute('aria-busy', 'false');
+            list.replaceChildren(Object.assign(document.createElement('p'), { className: 'empty', textContent: 'No se pudieron cargar estos datos. Intenta actualizar.' }));
+        });
+        activityLog.setAttribute('aria-busy', 'false');
+        activityLog.textContent = 'No se pudo cargar el registro de actividad.';
+        throw error;
+    }
+}
+
+async function reviewTournamentSubmission(submission, approve) {
+    const action = approve ? 'aprobar y publicar' : 'rechazar';
+    if (!confirm(`¿${action} “${submission.tournament_name}” (${submission.submission_type === 'shared_live' ? 'enlace en vivo' : 'tabla final'})?`)) return;
+    try {
+        await dataRequest('rpc/admin_review_tournament_submission', {
+            method: 'POST', body: JSON.stringify({ p_submission_id: submission.id, p_approve: approve })
+        });
+        showNotice(`Torneo ${approve ? 'aprobado y publicado' : 'rechazado'}.`, 'success');
+        await loadAdminData();
+    } catch (error) { showNotice(`No se pudo ${action} el torneo: ${error.message}`, 'error'); }
+}
+
+async function closeActiveTournament(tournament) {
+    const name = tournament.tournament_name || 'Torneo sin nombre';
+    if (!confirm(`¿Cerrar “${name}”? El enlace público dejará de funcionar y el torneo no podrá volver a publicarse.`)) return;
+    try {
+        await dataRequest('rpc/admin_close_shared_tournament', {
+            method: 'POST',
+            body: JSON.stringify({ p_share_id: tournament.id })
+        });
+        showNotice(`Torneo “${name}” cerrado.`, 'success');
+        await loadAdminData();
+    } catch (error) { showNotice(`No se pudo cerrar el torneo: ${error.message}`, 'error'); }
+}
+
+async function reviewProfileRequest(request, approve) {
+    const action = approve ? 'aprobar' : 'rechazar';
+    const message = approve
+        ? `¿Aprobar la vinculación de ${request.player_name} con ${request.email}? El usuario no podrá solicitar otro perfil.`
+        : `¿Rechazar la solicitud de ${request.email} para el perfil de ${request.player_name}? No podrá volver a solicitar otro perfil.`;
+    if (!confirm(message)) return;
+    try {
+        await dataRequest('rpc/admin_review_player_profile_request', {
+            method: 'POST',
+            body: JSON.stringify({ p_user_id: request.user_id, p_approve: approve })
+        });
+        showNotice(`Solicitud ${approve ? 'aprobada' : 'rechazada'}.`, 'success');
+        await loadAdminData();
+    } catch (error) { showNotice(`No se pudo ${action} la solicitud: ${error.message}`, 'error'); }
 }
 
 async function removeAlias(alias) {
@@ -248,10 +487,9 @@ async function removeTournament(tournament) {
     const name = tournament.name || 'Torneo sin nombre';
     if (!confirm(`¿Eliminar permanentemente “${name}” y toda su tabla e historial guardados?`)) return;
     try {
-        const rows = await dataRequest(`finished_tournaments?id=eq.${encodeURIComponent(tournament.id)}&select=id`, {
-            method: 'DELETE', headers: { Prefer: 'return=representation' }
+        await dataRequest('rpc/admin_delete_finished_tournament', {
+            method: 'POST', body: JSON.stringify({ p_tournament_id: tournament.id })
         });
-        if (!Array.isArray(rows) || rows.length === 0) throw new Error('No se eliminó el torneo. Revisa tus permisos y vuelve a actualizar.');
         showNotice(`Torneo “${name}” eliminado.`, 'success');
         await loadAdminData();
     } catch (error) { showNotice(error.message, 'error'); }

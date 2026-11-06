@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#0b1726">
     <title>Administración · LaMafia</title>
     <link rel="stylesheet" href="/admin/admin.css">
+    <link rel="stylesheet" href="/loading.css">
 </head>
 <body>
     <main class="admin-shell">
@@ -13,7 +14,7 @@
             <div>
                 <a class="back-link" href="/">← Volver a LaMafia</a>
                 <h1>Administración</h1>
-                <p>Alias de jugadores y torneos guardados</p>
+                <p>Alias de jugadores y gestión de torneos</p>
             </div>
             <button id="logoutButton" class="button secondary" type="button" hidden>Cerrar sesión</button>
         </header>
@@ -36,6 +37,36 @@
             <section class="panel">
                 <div class="section-heading">
                     <div>
+                        <h2>Solicitudes de torneos</h2>
+                        <p>Las tablas finales anónimas esperan aprobación antes de guardarse.</p>
+                    </div>
+                </div>
+                <div id="tournamentSubmissionList" class="list" aria-live="polite"></div>
+            </section>
+
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>Registro de actividad</h2>
+                        <p>Creaciones, solicitudes, publicaciones y cierres.</p>
+                    </div>
+                </div>
+                <div id="activityLog" class="log-console" role="log" aria-live="polite"></div>
+            </section>
+
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>Torneos activos</h2>
+                        <p>Cerrar un torneo revoca su enlace público de inmediato.</p>
+                    </div>
+                </div>
+                <div id="activeTournamentList" class="list" aria-live="polite"></div>
+            </section>
+
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
                         <h2>Vincular nombres</h2>
                         <p>El alias llevará al perfil y al historial del jugador principal.</p>
                     </div>
@@ -52,6 +83,16 @@
                     <button class="button primary" type="submit">Vincular</button>
                 </form>
                 <div id="aliasList" class="list" aria-live="polite"></div>
+            </section>
+
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>Solicitudes de perfiles</h2>
+                        <p>Aprueba una solicitud para vincular el jugador a la cuenta del solicitante.</p>
+                    </div>
+                </div>
+                <div id="profileRequestsList" class="list" aria-live="polite"></div>
             </section>
 
             <section class="panel">

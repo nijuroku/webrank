@@ -13,6 +13,39 @@ const standingsBody = document.getElementById('standingsBody');
 let supabase = null;
 let snapshot = null;
 let selectedRoundKey = null;
+const THEME_STORAGE_KEY = 'beybladex_theme';
+
+function applyTheme(theme) {
+    const isLight = theme === 'light';
+    document.documentElement.classList.toggle('light-theme', isLight);
+    document.body.classList.toggle('light-theme', isLight);
+
+    const themeToggle = document.getElementById('themeToggleBtn');
+    const modeLabel = themeToggle?.querySelector('.theme-mode-label');
+    if (modeLabel) modeLabel.textContent = isLight ? 'Claro' : 'Oscuro';
+    if (themeToggle) {
+        themeToggle.setAttribute('aria-pressed', String(isLight));
+        themeToggle.setAttribute('aria-label', isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro');
+        themeToggle.title = isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro';
+    }
+
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = isLight ? '#eaf5ed' : '#101a2a';
+}
+
+let savedTheme = 'dark';
+try { savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'dark'; } catch { /* Tema oscuro predeterminado. */ }
+applyTheme(savedTheme);
+
+document.getElementById('themeToggleBtn')?.addEventListener('click', () => {
+    const nextTheme = document.documentElement.classList.contains('light-theme') ? 'dark' : 'light';
+    try { localStorage.setItem(THEME_STORAGE_KEY, nextTheme); } catch { /* El cambio se mantiene en esta pestaña. */ }
+    applyTheme(nextTheme);
+});
+
+window.addEventListener('storage', event => {
+    if (event.key === THEME_STORAGE_KEY) applyTheme(event.newValue || 'dark');
+});
 
 function setConnectionStatus(message, state = '') {
     connectionStatus.textContent = message;
@@ -240,7 +273,7 @@ async function startViewer() {
         const { data, error } = await supabase.from('shared_tournaments').select('*').eq('id', shareId).maybeSingle();
         if (error) throw error;
         if (!data) {
-            showError('No encontramos este torneo compartido. Puede que el enlace haya sido reemplazado o sea incorrecto.');
+            showError('No encontramos este torneo compartido. Puede que el enlace sea incorrecto o haya vencido tras siete días sin actualizaciones.');
             return;
         }
         renderSnapshot(data);

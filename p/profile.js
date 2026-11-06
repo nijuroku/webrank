@@ -1,3 +1,5 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 const configEndpoint = '/api/supabase-config';
 const tournamentsEndpoint = '/rest/v1/finished_tournaments';
 const aliasesEndpoint = '/rest/v1/player_aliases';
@@ -14,7 +16,23 @@ const resultFilterPanel = document.getElementById('resultFilterPanel');
 const resultFilterTitle = document.getElementById('resultFilterTitle');
 const resultFilterList = document.getElementById('resultFilterList');
 const tournamentList = document.getElementById('tournamentList');
+const profileBanner = document.getElementById('playerBanner');
+const profileDialog = document.getElementById('profileDialog');
+const authPanel = document.getElementById('authPanel');
+const accountPanel = document.getElementById('accountPanel');
+const profileAuthNotice = document.getElementById('profileAuthNotice');
+const profileAccountSummary = document.getElementById('profileAccountSummary');
+const profileAccountStatus = document.getElementById('profileAccountStatus');
+const requestProfileButton = document.getElementById('requestProfileButton');
+const profileImageControls = document.getElementById('profileImageControls');
 let activeResultFilter = null;
+let supabase = null;
+let currentUser = null;
+let currentProfileKey = null;
+let currentProfileName = null;
+let currentPublicProfile = null;
+let currentProfileRequest = null;
+let currentProfileOwner = null;
 
 function normalizeName(value) {
     return String(value || '').trim().normalize('NFKC').toLocaleLowerCase();
@@ -55,6 +73,22 @@ function setPlayerAvatar(name) {
     playerAvatar.alt = `Imagen de perfil de ${name}`;
 }
 
+function applyPlayerProfileAssets(profile) {
+    if (profile?.avatar_url) {
+        playerAvatar.src = profile.avatar_url;
+        playerAvatar.alt = `Imagen de perfil de ${profile.player_name || currentProfileName}`;
+    } else {
+        setPlayerAvatar(profile?.player_name || currentProfileName || 'Jugador');
+    }
+    if (profile?.banner_url) {
+        profileBanner.src = profile.banner_url;
+        profileBanner.hidden = false;
+    } else {
+        profileBanner.removeAttribute('src');
+        profileBanner.hidden = true;
+    }
+}
+
 async function getSupabaseConfig() {
     const response = await fetch(configEndpoint, { cache: 'no-store' });
     if (!response.ok) throw new Error('No se pudo cargar la conexión a la base de datos.');
@@ -62,6 +96,263 @@ async function getSupabaseConfig() {
     if (!config.url || !config.anonKey) throw new Error('La base de datos todavía no está configurada.');
     return { url: config.url.replace(/\/$/, ''), anonKey: config.anonKey };
 }
+
+function applyTheme(theme) {
+    const isLight = theme === 'light';
+    document.documentElement.classList.toggle('light-theme', isLight);
+    document.body.classList.toggle('light-theme', isLight);
+    const button = document.getElementById('themeToggleBtn');
+    const label = button?.querySelector('.theme-mode-label');
+    if (label) label.textContent = isLight ? 'Claro' : 'Oscuro';
+    if (button) {
+        button.setAttribute('aria-pressed', String(isLight));
+        button.setAttribute('aria-label', isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro');
+        button.title = isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro';
+    }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = isLight ? '#eaf5ed' : '#101a2a';
+}
+
+let savedTheme = 'dark';
+try { savedTheme = localStorage.getItem('beybladex_theme') || 'dark'; } catch { /* Tema oscuro predeterminado. */ }
+applyTheme(savedTheme);
+
+document.getElementById('themeToggleBtn')?.addEventListener('click', () => {
+    const nextTheme = document.documentElement.classList.contains('light-theme') ? 'dark' : 'light';
+    try { localStorage.setItem('beybladex_theme', nextTheme); } catch { /* Se aplica en esta pestaña. */ }
+    applyTheme(nextTheme);
+});
+window.addEventListener('storage', event => {
+    if (event.key === 'beybladex_theme') applyTheme(event.newValue || 'dark');
+});
+
+function setAuthNotice(message, kind = '') {
+    profileAuthNotice.textContent = message;
+    profileAuthNotice.className = `profile-auth-notice ${kind}`.trim();
+    profileAuthNotice.hidden = !message;
+}
+
+function setAuthMode(mode) {
+    const register = mode === 'register';
+    document.getElementById('registerForm').hidden = !register;
+    document.getElementById('signInForm').hidden = register;
+    document.getElementById('registerTab').classList.toggle('active', register);
+    document.getElementById('loginTab').classList.toggle('active', !register);
+    document.getElementById('registerTab').setAttribute('aria-selected', String(register));
+    document.getElementById('loginTab').setAttribute('aria-selected', String(!register));
+    setAuthNotice('');
+}
+
+function renderAccountButton() {
+    const button = document.getElementById('profileAccountButton');
+    if (!button) return;
+    button.textContent = currentUser ? 'Mi perfil' : 'Perfil';
+    button.setAttribute('aria-label', currentUser ? 'Abrir mi cuenta de perfil' : 'Crear perfil o iniciar sesión');
+}
+
+async function refreshAccountContext() {
+    if (!supabase || !profileDialog) return;
+    if (!currentUser) {
+        authPanel.hidden = false;
+        accountPanel.hidden = true;
+        requestProfileButton.hidden = true;
+        profileImageControls.hidden = true;
+        return;
+    }
+
+    authPanel.hidden = true;
+    accountPanel.hidden = false;
+    setAuthNotice('');
+    const [accountResult, requestResult, ownerResult] = await Promise.all([
+        supabase.from('player_accounts').select('nickname').eq('user_id', currentUser.id).maybeSingle(),
+        supabase.from('player_profile_requests').select('user_id,email,player_key,player_name,status').eq('user_id', currentUser.id).maybeSingle(),
+        supabase.from('player_profile_owners').select('user_id,player_key,player_name').eq('user_id', currentUser.id).maybeSingle()
+    ]);
+    const error = accountResult.error || requestResult.error || ownerResult.error;
+    if (error) {
+        setAuthNotice('No se pudo cargar el estado de tu perfil. Intenta nuevamente.', 'error');
+        return;
+    }
+
+    const nickname = accountResult.data?.nickname || currentUser.user_metadata?.nickname || 'Jugador';
+    profileAccountSummary.textContent = `${nickname} · ${currentUser.email || ''}`;
+    currentProfileRequest = requestResult.data || null;
+    currentProfileOwner = ownerResult.data || null;
+    requestProfileButton.hidden = true;
+    profileImageControls.hidden = true;
+
+    if (currentProfileOwner) {
+        const ownsThisProfile = currentProfileOwner.player_key === currentProfileKey;
+        profileAccountStatus.textContent = ownsThisProfile
+            ? `Este perfil de ${currentProfileOwner.player_name} está vinculado a tu cuenta. Puedes actualizar la foto y el banner.`
+            : `Tu cuenta ya está vinculada al perfil de ${currentProfileOwner.player_name}. Solo puedes tener un perfil vinculado.`;
+        profileImageControls.hidden = !ownsThisProfile;
+        if (ownsThisProfile) {
+            document.getElementById('avatarUrlInput').value = currentPublicProfile?.avatar_url || '';
+            document.getElementById('bannerUrlInput').value = currentPublicProfile?.banner_url || '';
+        }
+        return;
+    }
+
+    if (currentProfileRequest) {
+        const requestedSameProfile = currentProfileRequest.player_key === currentProfileKey;
+        const requestedName = currentProfileRequest.player_name;
+        const stateText = currentProfileRequest.status === 'pending'
+            ? `Solicitud pendiente para ${requestedName}. El administrador debe confirmarla.`
+            : currentProfileRequest.status === 'approved'
+                ? `La solicitud para ${requestedName} fue aprobada.`
+                : `La solicitud para ${requestedName} fue rechazada. Contacta al administrador para resolverlo.`;
+        profileAccountStatus.textContent = requestedSameProfile
+            ? stateText
+            : `${stateText} Solo puedes solicitar un perfil; los alias adicionales se gestionan con el administrador.`;
+        return;
+    }
+
+    if (!currentProfileKey) {
+        profileAccountStatus.textContent = 'Abre el perfil del jugador que quieres vincular a tu cuenta.';
+        return;
+    }
+    if (currentPublicProfile) {
+        profileAccountStatus.textContent = 'Este perfil ya está vinculado a una cuenta.';
+        return;
+    }
+
+    profileAccountStatus.textContent = `Puedes solicitar vincular el perfil de ${currentProfileName} a tu cuenta. Solo se permite una solicitud.`;
+    requestProfileButton.textContent = `Solicitar perfil de ${currentProfileName}`;
+    requestProfileButton.hidden = false;
+}
+
+document.getElementById('profileAccountButton')?.addEventListener('click', async () => {
+    setAuthMode('register');
+    if (currentUser) await refreshAccountContext();
+    if (typeof profileDialog.showModal === 'function') profileDialog.showModal();
+    else profileDialog.setAttribute('open', '');
+});
+document.getElementById('closeProfileDialog')?.addEventListener('click', () => profileDialog.close());
+profileDialog?.addEventListener('click', event => {
+    if (event.target === profileDialog) profileDialog.close();
+});
+document.getElementById('registerTab')?.addEventListener('click', () => setAuthMode('register'));
+document.getElementById('loginTab')?.addEventListener('click', () => setAuthMode('login'));
+
+document.getElementById('registerForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!supabase) return setAuthNotice('La conexión con Supabase aún no está lista.', 'error');
+    const nickname = document.getElementById('registerNickname').value.trim();
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    const submit = event.currentTarget.querySelector('[type="submit"]');
+    submit.disabled = true;
+    try {
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: { data: { nickname } }
+        });
+        if (error) throw error;
+        currentUser = data.session?.user || null;
+        renderAccountButton();
+        if (data.session) {
+            await refreshAccountContext();
+            setAuthNotice('Cuenta creada. Ya puedes solicitar el perfil de un jugador.', 'success');
+        } else {
+            setAuthMode('login');
+            setAuthNotice('Cuenta creada. Revisa tu correo para confirmar la cuenta y luego inicia sesión.', 'success');
+        }
+    } catch (error) {
+        setAuthNotice(error.message || 'No se pudo crear la cuenta.', 'error');
+    } finally { submit.disabled = false; }
+});
+
+document.getElementById('signInForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!supabase) return setAuthNotice('La conexión con Supabase aún no está lista.', 'error');
+    const email = document.getElementById('signInEmail').value.trim();
+    const password = document.getElementById('signInPassword').value;
+    const submit = event.currentTarget.querySelector('[type="submit"]');
+    submit.disabled = true;
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        currentUser = data.user;
+        renderAccountButton();
+        await refreshAccountContext();
+        setAuthNotice('Sesión iniciada.', 'success');
+    } catch (error) {
+        setAuthNotice(error.message || 'No se pudo iniciar sesión.', 'error');
+    } finally { submit.disabled = false; }
+});
+
+requestProfileButton?.addEventListener('click', async () => {
+    if (!supabase || !currentUser || !currentProfileKey || !currentProfileName) return;
+    requestProfileButton.disabled = true;
+    try {
+        const { error } = await supabase.from('player_profile_requests').insert({
+            user_id: currentUser.id,
+            email: currentUser.email,
+            player_key: currentProfileKey,
+            player_name: currentProfileName
+        });
+        if (error) throw error;
+        await refreshAccountContext();
+        setAuthNotice('Solicitud enviada. El administrador revisará la vinculación.', 'success');
+    } catch (error) {
+        setAuthNotice(error.message || 'No se pudo enviar la solicitud.', 'error');
+    } finally { requestProfileButton.disabled = false; }
+});
+
+async function saveProfileImage(kind) {
+    const input = document.getElementById(kind === 'avatar' ? 'avatarUrlInput' : 'bannerUrlInput');
+    const button = document.getElementById(kind === 'avatar' ? 'saveAvatarButton' : 'saveBannerButton');
+    const rawUrl = input?.value.trim() || '';
+    let imageUrl = null;
+    if (rawUrl) {
+        try {
+            const parsedUrl = new URL(rawUrl);
+            if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password) {
+                throw new Error('El enlace debe ser una URL pública segura que empiece con https://.');
+            }
+            imageUrl = parsedUrl.href;
+        } catch (error) {
+            return setAuthNotice(error.message || 'Ingresa un enlace de imagen válido.', 'error');
+        }
+    }
+    if (!currentUser || !currentProfileOwner || currentProfileOwner.player_key !== currentProfileKey || !currentProfileKey) {
+        return setAuthNotice('Esta cuenta no es propietaria de este perfil.', 'error');
+    }
+
+    button.disabled = true;
+    try {
+        const column = kind === 'avatar' ? 'avatar_url' : 'banner_url';
+        const { data, error } = await supabase.from('player_profiles')
+            .update({ [column]: imageUrl })
+            .eq('player_key', currentProfileKey)
+            .select('player_key,player_name,nickname,avatar_url,banner_url')
+            .single();
+        if (error) throw error;
+        currentPublicProfile = data;
+        applyPlayerProfileAssets(data);
+        setAuthNotice(imageUrl
+            ? (kind === 'avatar' ? 'Enlace de la foto actualizado.' : 'Enlace del banner actualizado.')
+            : (kind === 'avatar' ? 'Foto de perfil eliminada.' : 'Banner eliminado.'), 'success');
+    } catch (error) {
+        setAuthNotice(error.message || 'No se pudo guardar la imagen.', 'error');
+    } finally { button.disabled = false; }
+}
+
+document.getElementById('saveAvatarButton')?.addEventListener('click', () => saveProfileImage('avatar'));
+document.getElementById('saveBannerButton')?.addEventListener('click', () => saveProfileImage('banner'));
+document.getElementById('signOutButton')?.addEventListener('click', async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) return setAuthNotice(error.message, 'error');
+    currentUser = null;
+    currentProfileOwner = null;
+    currentProfileRequest = null;
+    renderAccountButton();
+    await refreshAccountContext();
+    setAuthMode('register');
+    setAuthNotice('Sesión cerrada.', 'success');
+});
 
 async function loadFinishedTournaments(config) {
     const allRows = [];
@@ -82,6 +373,20 @@ async function loadFinishedTournaments(config) {
         if (!Array.isArray(rows) || rows.length < pageSize) break;
     }
     return allRows;
+}
+
+async function loadRegisteredPlayerNames(config) {
+    const params = new URLSearchParams({ select: 'name', order: 'name.asc', limit: '1000' });
+    try {
+        const response = await fetch(`${config.url}/rest/v1/players?${params}`, {
+            headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` }
+        });
+        if (!response.ok) return [];
+        const rows = await response.json();
+        return Array.isArray(rows) ? rows.map(row => row.name).filter(Boolean) : [];
+    } catch {
+        return [];
+    }
 }
 
 async function loadPlayerAliases(config) {
@@ -282,6 +587,13 @@ function showResultMatches(result, profiles) {
 }
 
 function renderBestTournament(profiles) {
+    if (!profiles.length) {
+        bestTournamentCard.replaceChildren(
+            makeElement('span', 'best-tournament-icon', '🏆'),
+            makeElement('div', 'best-tournament-copy', 'Todavía no hay torneos finalizados.')
+        );
+        return;
+    }
     const ranked = profiles.slice().sort((a, b) => {
         const aRank = a.position || Number.MAX_SAFE_INTEGER;
         const bRank = b.position || Number.MAX_SAFE_INTEGER;
@@ -312,18 +624,45 @@ async function initializeProfile() {
     playerNameHeading.textContent = requestedName;
     try {
         const config = await getSupabaseConfig();
-        const [tournaments, aliases] = await Promise.all([loadFinishedTournaments(config), loadPlayerAliases(config)]);
+        supabase = createClient(config.url, config.anonKey, {
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+        });
+        const { data: sessionData } = await supabase.auth.getSession();
+        currentUser = sessionData.session?.user || null;
+        renderAccountButton();
+        supabase.auth.onAuthStateChange((_event, session) => {
+            currentUser = session?.user || null;
+            window.setTimeout(() => {
+                renderAccountButton();
+                refreshAccountContext().catch(error => setAuthNotice(error.message || 'No se pudo cargar tu cuenta.', 'error'));
+            }, 0);
+        });
+        const [tournaments, aliases, registeredPlayers] = await Promise.all([
+            loadFinishedTournaments(config),
+            loadPlayerAliases(config),
+            loadRegisteredPlayerNames(config)
+        ]);
         const identity = resolvePlayerIdentity(requestedName, aliases);
+        currentProfileKey = identity.canonicalKey;
+        currentProfileName = identity.canonicalName;
+        const { data: publicProfile, error: publicProfileError } = await supabase.from('player_profiles')
+            .select('player_key,player_name,nickname,avatar_url,banner_url')
+            .eq('player_key', currentProfileKey)
+            .maybeSingle();
+        if (publicProfileError) console.warn('No se pudo cargar la imagen del perfil:', publicProfileError);
+        currentPublicProfile = publicProfile || null;
         const profiles = tournaments.map(tournament => renderTournament(tournament, identity.nameKeys, identity.canonicalKey, identity.canonicalName)).filter(Boolean);
         const canonicalName = identity.canonicalName;
         playerNameHeading.textContent = canonicalName;
         renderPlayerAliases(identity.aliasNames);
-        setPlayerAvatar(canonicalName);
+        applyPlayerProfileAssets(currentPublicProfile);
+        await refreshAccountContext();
         loadingState.hidden = true;
 
-        if (!profiles.length) {
+        const knownPlayer = profiles.length > 0 || Boolean(currentPublicProfile)
+            || registeredPlayers.some(name => normalizeName(name) === identity.canonicalKey);
+        if (!knownPlayer) {
             showError(`No encontramos torneos finalizados para ${requestedName}.`);
-        playerNameHeading.textContent = requestedName;
             return;
         }
 
@@ -339,7 +678,10 @@ async function initializeProfile() {
         );
         renderBestTournament(profiles);
         profileCard.hidden = false;
-        tournamentList.replaceChildren(makeElement('h2', 'profile-section-title', 'Torneos'), ...profiles.map(profile => profile.details));
+        const tournamentContent = profiles.length
+            ? profiles.map(profile => profile.details)
+            : [makeElement('p', 'profile-empty-matches', 'Todavía no hay torneos finalizados guardados para este jugador.')];
+        tournamentList.replaceChildren(makeElement('h2', 'profile-section-title', 'Torneos'), ...tournamentContent);
         tournamentList.hidden = false;
         playerSummary.addEventListener('click', event => {
             const button = event.target.closest('[data-result-filter]');

@@ -56,9 +56,13 @@ input:focus, select:focus { border-color: #75bdf1; box-shadow: 0 0 0 3px rgba(11
 .alias-form { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; }
 .field { display: grid; gap: 8px; min-width: 0; }
 .list { display: grid; gap: 10px; margin-top: 18px; }
+.log-console { display: grid; gap: 7px; max-height: 360px; overflow: auto; margin-top: 18px; padding: 14px; border: 1px solid rgba(117, 189, 241, .2); border-radius: 14px; color: #cde4f9; background: rgba(4, 13, 23, .75); font: .82rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.log-line { display: grid; grid-template-columns: minmax(150px, auto) 1fr; gap: 12px; }
+.log-line time { color: #76b8e8; }
 .list-row { min-width: 0; padding: 13px 14px; border: 1px solid rgba(161, 195, 226, .16); border-radius: 14px; background: rgba(8, 22, 38, .4); }
 .row-copy { min-width: 0; overflow-wrap: anywhere; }
 .row-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+.row-actions a { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .row-title { font-weight: 700; }
 .row-meta { margin-top: 4px; color: #a8b9cc; font-size: .86rem; }
 .button.danger { flex: 0 0 auto; color: #ffdfe5; border-color: rgba(255, 102, 131, .35); background: rgba(170, 34, 59, .24); }
@@ -66,6 +70,12 @@ input:focus, select:focus { border-color: #75bdf1; box-shadow: 0 0 0 3px rgba(11
 .notice.error { border-color: rgba(255, 110, 133, .4); color: #ffd8df; background: rgba(111, 31, 48, .48); }
 .notice.success { border-color: rgba(118, 228, 179, .35); color: #d6ffeb; background: rgba(23, 91, 64, .38); }
 .empty { padding: 14px 4px; color: #a8b9cc; }
+.admin-loading-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 68px; padding: 12px 14px; border: 1px solid rgba(161, 195, 226, .12); border-radius: 14px; background: rgba(8, 22, 38, .24); }
+.admin-loading-copy { display: grid; flex: 1; gap: 9px; }
+.admin-loading-action { width: 84px; height: 36px; border-radius: 11px; }
+.admin-loading-log-line { display: block; width: min(100%, 620px); height: 14px; }
+.admin-loading-log-line:nth-child(even) { width: min(82%, 500px); }
+.log-console[aria-busy="true"] { gap: 12px; }
 
 @media (max-width: 640px) {
     .admin-shell { width: min(100% - 20px, 560px); padding-top: 18px; }

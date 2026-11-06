@@ -30,6 +30,12 @@
     let tournamentFinished = false;
     let tournamentWinner = null;
     let tournamentId = null; // ID único para el torneo actual
+    let tournamentCreatorUserId = null;
+    let tournamentCreatorName = null;
+    let tournamentCreationLogged = false;
+    let finishedTournamentSubmissionId = null;
+    let lastLoggedTournamentStateSignature = null;
+    let tournamentActivityLogTimer = null;
     let tournamentShareId = null;
     let tournamentShareWriteToken = null;
     let tournamentSharingEnabled = false;
@@ -158,9 +164,13 @@
     let activeTab = 'participants';
     let supabaseConfig = null;
     let supabaseInitialization = null;
+    let supabaseAuthClient = null;
+    let appAuthSession = null;
     let savedScoreTables = [];
     let activeSavedScoreTable = null;
     let playerSuggestionTimer = null;
+    let championProfileRequestId = 0;
+    const championProfileCache = new Map();
     let playerSuggestionRequestId = 0;
     let activePlayerSuggestionIndex = -1;
 
@@ -309,6 +319,15 @@
             const config = await response.json();
             if (!config.url || !config.anonKey) throw new Error('Faltan variables públicas de Supabase en Vercel.');
             supabaseConfig = { url: config.url.replace(/\/$/, ''), anonKey: config.anonKey };
+            try {
+                const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+                supabaseAuthClient = createClient(supabaseConfig.url, supabaseConfig.anonKey, {
+                    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+                });
+                const { data: sessionResult } = await supabaseAuthClient.auth.getSession();
+                appAuthSession = sessionResult.session || null;
+                supabaseAuthClient.auth.onAuthStateChange((_event, session) => { appAuthSession = session || null; });
+            } catch (authError) { console.warn('No se pudo cargar la sesión del perfil:', authError.message); }
             await loadSavedScoreTables();
         } catch (error) {
             console.warn('Supabase no está configurado:', error.message);
@@ -319,13 +338,13 @@
         }
     }
 
-    async function supabaseRequest(path, options = {}) {
+    async function supabaseRequest(path, options = {}, accessToken = null) {
         if (!supabaseConfig) throw new Error('Supabase no está conectado. Configura las variables SUPABASE_URL y SUPABASE_ANON_KEY en Vercel.');
         const response = await fetch(`${supabaseConfig.url}${path}`, {
             ...options,
             headers: {
                 apikey: supabaseConfig.anonKey,
-                Authorization: `Bearer ${supabaseConfig.anonKey}`,
+                Authorization: `Bearer ${accessToken || supabaseConfig.anonKey}`,
                 'Content-Type': 'application/json',
                 ...(options.headers || {})
             }
@@ -337,6 +356,87 @@
         if (response.status === 204) return null;
         const responseBody = await response.text();
         return responseBody ? JSON.parse(responseBody) : null;
+    }
+
+    async function getTournamentAccessToken() {
+        if (supabaseInitialization) await supabaseInitialization;
+        if (!supabaseAuthClient || !tournamentCreatorUserId) return null;
+        const { data, error } = await supabaseAuthClient.auth.getSession();
+        if (error) throw error;
+        const session = data.session || null;
+        appAuthSession = session;
+        if (!session || session.user.id !== tournamentCreatorUserId) {
+            throw new Error(`Inicia sesión con la cuenta creadora (${tournamentCreatorName || 'usuario identificado'}) para publicar este torneo.`);
+        }
+        return session.access_token;
+    }
+
+    async function captureTournamentCreatorAndLog() {
+        if (tournamentCreationLogged || !tournamentId) return;
+        if (supabaseInitialization) await supabaseInitialization;
+        const { data } = supabaseAuthClient ? await supabaseAuthClient.auth.getSession() : { data: { session: null } };
+        const session = data.session || null;
+        appAuthSession = session;
+        tournamentCreatorUserId = session?.user?.id || null;
+        tournamentCreatorName = session?.user?.user_metadata?.nickname || null;
+        tournamentCreationLogged = true;
+        if (supabaseConfig) {
+            try {
+                await supabaseRequest('/rest/v1/rpc/log_tournament_created', {
+                    method: 'POST',
+                    body: JSON.stringify({ p_tournament_id: tournamentId, p_tournament_name: tournamentName })
+                }, session?.access_token || null);
+            } catch (error) { console.warn('No se pudo registrar la creación del torneo:', error.message); }
+        }
+        lastLoggedTournamentStateSignature = getTournamentActivityState().signature;
+        saveToLocalStorage();
+    }
+
+    function getTournamentActivityState() {
+        const details = {
+            participants: participants.length,
+            phase: currentPhase === 2 ? 'eliminatorias' : 'grupos',
+            round: currentPhase === 2 ? knockoutRound : groupRound,
+            matches: versus.length,
+            archivedMatches: matchHistory.length,
+            tournamentFinished,
+            tournamentVisible
+        };
+        const signature = JSON.stringify([
+            tournamentId, tournamentName, participants, versus, matchHistory, accumulatedPoints,
+            currentPhase, groupRound, knockoutRound, tournamentFinished, preFinalMatch,
+            preFinalPlayed, finalMatch, finalPlayed, podium, swissByes, tournamentVisible
+        ]);
+        return { details, signature };
+    }
+
+    function scheduleTournamentActivityLog() {
+        if (!tournamentId || !tournamentCreationLogged) return;
+        const state = getTournamentActivityState();
+        if (state.signature === lastLoggedTournamentStateSignature) return;
+        clearTimeout(tournamentActivityLogTimer);
+        tournamentActivityLogTimer = setTimeout(async () => {
+            const latest = getTournamentActivityState();
+            if (latest.signature === lastLoggedTournamentStateSignature) return;
+            try {
+                if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
+                let accessToken = null;
+                if (supabaseAuthClient) {
+                    const { data } = await supabaseAuthClient.auth.getSession();
+                    accessToken = data.session?.access_token || null;
+                    appAuthSession = data.session || null;
+                }
+                await supabaseRequest('/rest/v1/rpc/log_tournament_activity', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        p_tournament_id: tournamentId,
+                        p_tournament_name: tournamentName,
+                        p_details: latest.details
+                    })
+                }, accessToken);
+                lastLoggedTournamentStateSignature = latest.signature;
+            } catch (error) { console.warn('No se pudo registrar el cambio del torneo:', error.message); }
+        }, 650);
     }
 
     async function loadSavedScoreTables() {
@@ -507,17 +607,26 @@
     async function loadSavedScoreTableById(id) {
         if (!id) {
             activeSavedScoreTable = null;
+            totalScoreTableEl?.setAttribute('aria-busy', 'false');
             renderTotalScoreTable();
             return;
         }
-        totalScoreTableEl.innerHTML = '<div class="empty-message">Cargando tabla e historial…</div>';
+        totalScoreTableEl.setAttribute('aria-busy', 'true');
+        totalScoreTableEl.innerHTML = `<div class="score-table-skeleton" role="status" aria-label="Cargando tabla">
+            <span class="loading-skeleton skeleton-line medium"></span>
+            <div class="score-table-skeleton-head">${Array.from({ length: 6 }, () => '<span class="loading-skeleton skeleton-line short"></span>').join('')}</div>
+            ${Array.from({ length: 6 }, () => `<div class="score-table-skeleton-row">${Array.from({ length: 6 }, () => '<span class="loading-skeleton skeleton-line medium"></span>').join('')}</div>`).join('')}
+        </div>`;
         try {
             const rows = await supabaseRequest(`${SUPABASE_TABLES_ENDPOINT}?id=eq.${encodeURIComponent(id)}&select=*`);
             if (savedScoreTableSelect?.value !== id) return;
             activeSavedScoreTable = rows[0] || null;
+            totalScoreTableEl.setAttribute('aria-busy', 'false');
             renderTotalScoreTable();
         } catch (error) {
             console.error('No se pudo cargar la tabla seleccionada:', error);
+            if (savedScoreTableSelect?.value !== id) return;
+            totalScoreTableEl.setAttribute('aria-busy', 'false');
             totalScoreTableEl.innerHTML = '<div class="empty-message">No se pudo cargar esta tabla. Intenta actualizar.</div>';
         }
     }
@@ -542,19 +651,30 @@
             podium: Object.fromEntries(Object.entries(podium || {}).map(([place, player]) => [place, capitalizePlayerName(player) || null]))
         };
         try {
-            const existing = await supabaseRequest(`${SUPABASE_TABLES_ENDPOINT}?id=eq.${encodeURIComponent(tournamentId)}&select=id`);
-            if (existing.length === 0) await supabaseRequest(SUPABASE_TABLES_ENDPOINT, {
-                method: 'POST',
-                headers: { Prefer: 'return=minimal' },
-                body: JSON.stringify(payload)
-            });
-            if (storageStatusEl) {
-                storageStatusEl.textContent = '☁️ Tabla guardada';
-                storageStatusEl.title = 'La tabla final se guardó en Supabase.';
+            if (tournamentCreatorUserId) {
+                const accessToken = await getTournamentAccessToken();
+                await supabaseRequest('/rest/v1/rpc/publish_finished_tournament', {
+                    method: 'POST',
+                    body: JSON.stringify({ p_tournament: payload, p_creator_user_id: tournamentCreatorUserId })
+                }, accessToken);
+            } else if (!finishedTournamentSubmissionId) {
+                finishedTournamentSubmissionId = await supabaseRequest('/rest/v1/rpc/submit_tournament_for_approval', {
+                    method: 'POST',
+                    body: JSON.stringify({ p_tournament: payload })
+                });
+                saveToLocalStorage();
             }
-            await loadSavedScoreTables();
-            if (savedScoreTableSelect) savedScoreTableSelect.value = tournamentId;
-            await loadSavedScoreTableById(tournamentId);
+            if (storageStatusEl) {
+                storageStatusEl.textContent = tournamentCreatorUserId ? '☁️ Tabla publicada' : '⏳ En revisión';
+                storageStatusEl.title = tournamentCreatorUserId
+                    ? `La tabla fue publicada por ${tournamentCreatorName || 'un usuario registrado'}.`
+                    : 'La tabla se enviará a la base de datos después de la aprobación del administrador.';
+            }
+            if (tournamentCreatorUserId) {
+                await loadSavedScoreTables();
+                if (savedScoreTableSelect) savedScoreTableSelect.value = tournamentId;
+                await loadSavedScoreTableById(tournamentId);
+            }
         } catch (error) {
             console.error('No se pudo guardar la tabla final en Supabase:', error);
             if (storageStatusEl) {
@@ -568,9 +688,9 @@
         try {
             if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
             if (!supabaseConfig || !player?.id || !player?.name) return;
-            await supabaseRequest('/rest/v1/players?on_conflict=id', {
+            await supabaseRequest('/rest/v1/players', {
                 method: 'POST',
-                headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+                headers: { Prefer: 'return=minimal' },
                 body: JSON.stringify({ id: player.id, name: capitalizePlayerName(player.name) })
             });
         } catch (error) {
@@ -665,6 +785,7 @@
             const snapshot = buildSharedTournamentSnapshot();
             const signature = JSON.stringify(snapshot);
             if (signature === lastSharedTournamentSnapshot) return true;
+            const accessToken = tournamentCreatorUserId ? await getTournamentAccessToken() : null;
             await supabaseRequest('/rest/v1/rpc/publish_shared_tournament', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -672,7 +793,7 @@
                     p_write_token: tournamentShareWriteToken,
                     p_snapshot: snapshot
                 })
-            });
+            }, accessToken);
             lastSharedTournamentSnapshot = signature;
             return true;
         } catch (error) {
@@ -696,12 +817,13 @@
             throw new Error('Supabase aún no está conectado. No se pudo crear el enlace compartido.');
         }
         if (!tournamentId) tournamentId = generateTournamentId();
+        if (!tournamentCreationLogged) await captureTournamentCreatorAndLog();
         if (!tournamentShareId) tournamentShareId = generateTournamentShareId();
         if (!tournamentShareWriteToken) tournamentShareWriteToken = generateTournamentShareWriteToken();
         tournamentSharingEnabled = true;
         lastSharedTournamentSnapshot = null;
-        saveToLocalStorage();
         clearTimeout(sharedTournamentSyncTimer);
+        saveToLocalStorage();
 
         if (!await syncSharedTournamentSnapshot()) {
             throw new Error('No se pudo guardar el torneo compartido. Comprueba la conexión e intenta nuevamente.');
@@ -757,6 +879,10 @@
             // Guardar torneo actual
             const data = {
                 tournamentId,
+                tournamentCreatorUserId,
+                tournamentCreatorName,
+                tournamentCreationLogged,
+                finishedTournamentSubmissionId,
                 tournamentShareId,
                 tournamentShareWriteToken,
                 tournamentSharingEnabled,
@@ -788,6 +914,7 @@
             // Guardar en la lista de torneos
             saveTournamentToList();
             scheduleSharedTournamentSync();
+            scheduleTournamentActivityLog();
 
             storageStatusEl.textContent = '💾 Datos guardados';
             storageStatusEl.style.background = 'rgba(223, 240, 230, 0.9)';
@@ -823,6 +950,12 @@
 
             const data = JSON.parse(stored);
             tournamentId = data.tournamentId || null;
+            tournamentCreatorUserId = data.tournamentCreatorUserId || null;
+            tournamentCreatorName = data.tournamentCreatorName || null;
+            tournamentCreationLogged = Object.prototype.hasOwnProperty.call(data, 'tournamentCreationLogged')
+                ? Boolean(data.tournamentCreationLogged)
+                : Boolean(data.tournamentId);
+            finishedTournamentSubmissionId = data.finishedTournamentSubmissionId || null;
             tournamentShareId = data.tournamentShareId || null;
             tournamentShareWriteToken = data.tournamentShareWriteToken || null;
             tournamentSharingEnabled = Boolean(data.tournamentSharingEnabled && tournamentShareId);
@@ -856,6 +989,7 @@
             });
 
             recalculateAccumulatedPoints();
+            lastLoggedTournamentStateSignature = getTournamentActivityState().signature;
             qualifiedCountInput.value = customQualifiedCount;
 
             storageStatusEl.textContent = '✅ Datos cargados';
@@ -979,6 +1113,7 @@
             });
 
             recalculateAccumulatedPoints();
+            lastLoggedTournamentStateSignature = getTournamentActivityState().signature;
             qualifiedCountInput.value = customQualifiedCount;
             renderAll();
             saveToLocalStorage();
@@ -1538,6 +1673,74 @@
         `;
     }
 
+    function normalizePlayerProfileKey(playerName) {
+        return String(playerName || '').trim().normalize('NFKC').toLocaleLowerCase();
+    }
+
+    function safeProfileImageUrl(value) {
+        try {
+            const url = new URL(String(value || ''));
+            return url.protocol === 'https:' ? url.href : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function renderChampionProfileCard(playerName) {
+        const name = String(playerName || '').trim();
+        const initial = Array.from(name)[0]?.toLocaleUpperCase() || '?';
+        return `<a class="champion-profile-card" data-champion-name="${escapeHtml(name)}" href="${escapeHtml(getPlayerProfilePath(name))}" aria-label="Ver perfil de ${escapeHtml(name)}, campeón del torneo">
+            <div class="champion-profile-banner" aria-hidden="true"></div>
+            <div class="champion-profile-identity">
+                <span class="champion-profile-avatar"><span class="champion-profile-initial">${escapeHtml(initial)}</span><img class="champion-profile-photo" alt="Foto de perfil de ${escapeHtml(name)}"></span>
+                <span class="champion-profile-copy"><span class="champion-profile-eyebrow">🏆 Campeón del torneo</span><strong>${escapeHtml(name)}</strong><span class="champion-profile-tournament">${escapeHtml(tournamentName)}</span></span>
+                <span class="champion-profile-medal" aria-hidden="true">🥇</span>
+            </div>
+        </a>`;
+    }
+
+    async function loadChampionProfileAssets(playerName, requestId) {
+        try {
+            if (supabaseInitialization) await supabaseInitialization;
+            if (!supabaseConfig || requestId !== championProfileRequestId) return;
+
+            const requestedKey = normalizePlayerProfileKey(playerName);
+            if (!championProfileCache.has(requestedKey)) {
+                championProfileCache.set(requestedKey, (async () => {
+                    const aliasParams = new URLSearchParams({ select: 'canonical_key', alias_key: `eq.${requestedKey}`, limit: '1' });
+                    const aliases = await supabaseRequest(`/rest/v1/player_aliases?${aliasParams.toString()}`);
+                    const playerKey = aliases?.[0]?.canonical_key || requestedKey;
+                    const profileParams = new URLSearchParams({ select: 'player_name,avatar_url,banner_url', player_key: `eq.${playerKey}`, limit: '1' });
+                    const profiles = await supabaseRequest(`/rest/v1/player_profiles?${profileParams.toString()}`);
+                    return Array.isArray(profiles) ? profiles[0] || null : null;
+                })());
+            }
+            const profile = await championProfileCache.get(requestedKey);
+            if (requestId !== championProfileRequestId) return;
+
+            const card = [...versusListEl.querySelectorAll('.champion-profile-card')]
+                .find(item => normalizePlayerProfileKey(item.dataset.championName) === requestedKey);
+            if (!card || !profile) return;
+
+            const bannerUrl = safeProfileImageUrl(profile.banner_url);
+            const avatarUrl = safeProfileImageUrl(profile.avatar_url);
+            const banner = card.querySelector('.champion-profile-banner');
+            const photo = card.querySelector('.champion-profile-photo');
+            const fallback = card.querySelector('.champion-profile-initial');
+            if (bannerUrl && banner) banner.style.backgroundImage = `linear-gradient(90deg, rgba(9, 18, 31, 0.34), rgba(9, 18, 31, 0.04)), url(${JSON.stringify(bannerUrl)})`;
+            if (avatarUrl && photo) {
+                photo.addEventListener('load', () => {
+                    photo.classList.add('loaded');
+                    fallback?.classList.add('hidden');
+                }, { once: true });
+                photo.addEventListener('error', () => photo.remove(), { once: true });
+                photo.src = avatarUrl;
+            }
+        } catch (error) {
+            console.warn('No se pudo cargar el perfil del campeón:', error.message);
+        }
+    }
+
     function renderSwissFinalStandings() {
         const ranking = getGroupRanking();
         const matches = [...matchHistory, ...versus].filter(match => match.round > 0);
@@ -1569,7 +1772,13 @@
         if (!selectedPlayerFilterId && playerFilterBar) playerFilterBar.hidden = true;
 
         if (tournamentFinished && tournamentWinner && !selectedPlayerFilterId) {
-            versusListEl.innerHTML = tournamentFormat === 'swiss' ? renderSwissFinalStandings() : renderPodium();
+            const championName = tournamentFormat === 'swiss'
+                ? getGroupRanking()[0]?.name || tournamentWinner
+                : podium.first || tournamentWinner;
+            const profileRequestId = ++championProfileRequestId;
+            versusListEl.innerHTML = renderChampionProfileCard(championName)
+                + (tournamentFormat === 'swiss' ? renderSwissFinalStandings() : renderPodium());
+            loadChampionProfileAssets(championName, profileRequestId);
             winnerMessageEl.innerHTML = '';
             thirdPlaceMessageEl.innerHTML = '';
 
@@ -2808,7 +3017,7 @@
     // 13. FUNCIONES DE UTILIDAD
     // ============================================================
 
-    function startTournament(selectedFormat = null) {
+    async function startTournament(selectedFormat = null) {
         if (participants.length < 2) {
             alert('❌ Necesitas al menos 2 participantes para iniciar el torneo.');
             return;
@@ -2823,6 +3032,7 @@
         if (!tournamentId) {
             tournamentId = generateTournamentId();
         }
+        await captureTournamentCreatorAndLog();
 
         tournamentVisible = true;
         document.getElementById('tournamentSection').style.display = 'block';
@@ -2845,6 +3055,7 @@
     function resetTournament() {
         if (!confirm('⚠️ ¿Reiniciar el torneo?\n\nSe eliminarán TODOS los enfrentamientos y el progreso.\nLos participantes se mantienen.')) return;
 
+        finishedTournamentSubmissionId = null;
         versus = [];
         matchHistory = [];
         accumulatedPoints = {};
@@ -2887,7 +3098,10 @@
     async function fetchGistsFromAPI() {
         try {
             const loadingIndicator = document.getElementById('gistLoadingIndicator');
-            if (loadingIndicator) loadingIndicator.style.display = 'block';
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'block';
+                loadingIndicator.innerHTML = '<div class="gist-loading-skeleton" aria-label="Cargando Gists">' + Array.from({ length: 3 }, () => '<span class="loading-skeleton skeleton-card"></span>').join('') + '</div>';
+            }
 
             console.log('📡 Solicitando Gists al servidor...');
 
@@ -2940,13 +3154,11 @@
         modal.classList.add('active');
 
         // Mostrar indicador de carga
-        if (loadingIndicator) loadingIndicator.style.display = 'block';
-        container.innerHTML = `
-        <div style="text-align:center; padding:2rem; color:#4A4A6A;">
-            <div style="font-size:2rem; margin-bottom:0.5rem;">⏳</div>
-            Cargando torneos...
-        </div>
-    `;
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'block';
+            loadingIndicator.innerHTML = '<div class="gist-loading-skeleton" aria-label="Cargando Gists">' + Array.from({ length: 3 }, () => '<span class="loading-skeleton skeleton-card"></span>').join('') + '</div>';
+        }
+        container.innerHTML = `<div class="gist-loading-skeleton" role="status" aria-label="Cargando torneos">${Array.from({ length: 3 }, () => '<span class="loading-skeleton skeleton-card"></span>').join('')}</div>`;
 
         // 1. Obtener torneos locales
         const localList = getTournamentList();
@@ -3053,8 +3265,8 @@
                 <div style="font-size:2rem; margin-bottom:0.5rem;">🏟️</div>
                 No tienes torneos guardados.
                 <div style="margin-top:0.5rem; font-size:0.8rem;">
-                    Crea uno nuevo desde el botón "Crear torneo" o 
-                    <button class="btn btn-sm btn-outline" id="refreshGistsFromEmptyBtn" 
+                    Crea uno nuevo desde el botón "Crear torneo" o
+                    <button class="btn btn-sm btn-outline" id="refreshGistsFromEmptyBtn"
                         style="border-color: rgba(0, 212, 255, 0.2); color: #00D4FF;">
                         ☁️ cargar desde GitHub
                     </button>
@@ -3183,7 +3395,7 @@
     // ============================================================
 
     // --- Crear torneo ---
-    createTournamentBtn.addEventListener('click', function () {
+    createTournamentBtn.addEventListener('click', async function () {
         if (tournamentId) {
             if (!confirm('⚠️ Ya estás en un torneo. ¿Quieres crear uno nuevo?\n\nEsto desconectará el torneo actual.')) {
                 return;
@@ -3199,6 +3411,10 @@
         activeSavedScoreTable = null;
         if (savedScoreTableSelect) savedScoreTableSelect.value = '';
         tournamentId = generateTournamentId();
+        tournamentCreatorUserId = null;
+        tournamentCreatorName = null;
+        tournamentCreationLogged = false;
+        finishedTournamentSubmissionId = null;
         tournamentShareId = null;
         tournamentShareWriteToken = null;
         tournamentSharingEnabled = false;
@@ -3225,6 +3441,8 @@
         selectedRound = 'all';
         customQualifiedCount = 8;
         qualifiedCountInput.value = 8;
+
+        await captureTournamentCreatorAndLog();
 
         document.getElementById('tournamentSection').style.display = 'none';
         renderAll();
@@ -3662,7 +3880,7 @@
     fileInput.addEventListener('change', function (e) {
         if (this.files && this.files[0]) {
             const reader = new FileReader();
-            reader.onload = function (e) {
+            reader.onload = async function (e) {
                 try {
                     const data = JSON.parse(e.target.result);
                     if (!data.participants) {
@@ -3670,6 +3888,10 @@
                         return;
                     }
                     tournamentId = data.tournamentId || generateTournamentId();
+                    tournamentCreatorUserId = null;
+                    tournamentCreatorName = null;
+                    tournamentCreationLogged = false;
+                    finishedTournamentSubmissionId = null;
                     tournamentShareId = null;
                     tournamentShareWriteToken = null;
                     tournamentSharingEnabled = false;
@@ -3702,6 +3924,7 @@
                     selectedRound = 'all';
                     qualifiedCountInput.value = customQualifiedCount;
                     recalculateAccumulatedPoints();
+                    await captureTournamentCreatorAndLog();
                     renderAll();
                     saveToLocalStorage();
                     alert('✅ Datos importados correctamente.');
@@ -3743,6 +3966,10 @@
 
             // Cargar datos del JSON
             tournamentId = jsonData.tournamentId || generateTournamentId();
+            tournamentCreatorUserId = null;
+            tournamentCreatorName = null;
+            tournamentCreationLogged = false;
+            finishedTournamentSubmissionId = null;
             tournamentShareId = null;
             tournamentShareWriteToken = null;
             tournamentSharingEnabled = false;
@@ -3787,6 +4014,8 @@
             }
 
             recalculateAccumulatedPoints();
+
+            await captureTournamentCreatorAndLog();
 
             // Mostrar la sección del torneo
             tournamentVisible = true;

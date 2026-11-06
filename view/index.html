@@ -6,13 +6,26 @@
     <meta name="theme-color" content="#10111c">
     <meta name="description" content="Consulta en vivo las rondas y la tabla de un torneo LaMafia BEYBLADEX.">
     <title>Torneo en vivo · LaMafia BEYBLADEX</title>
+    <script>
+        try {
+            document.documentElement.classList.toggle('light-theme', localStorage.getItem('beybladex_theme') === 'light');
+        } catch { /* El tema oscuro es el predeterminado si el almacenamiento no está disponible. */ }
+    </script>
     <link rel="stylesheet" href="/view/viewer.css">
+    <link rel="stylesheet" href="/loading.css">
     <script type="module" src="/view/viewer.js"></script>
 </head>
 <body>
     <header class="viewer-header">
-        <a class="brand" href="/">⚔️ LaMafia <span>BEYBLADEX</span></a>
-        <span class="readonly-label">Solo lectura</span>
+        <a class="brand" href="/" aria-label="Volver a LaMafia"><span class="brand-mark" aria-hidden="true">⚔️</span><span>LaMafia <strong>BEYBLADEX</strong></span></a>
+        <div class="header-actions">
+            <span class="readonly-label">Solo lectura</span>
+            <button class="theme-mode-toggle" id="themeToggleBtn" type="button" aria-pressed="false"
+                aria-label="Cambiar al modo claro" title="Cambiar al modo claro">
+                <span class="theme-mode-track" aria-hidden="true"><span class="theme-mode-thumb"></span></span>
+                <span class="theme-mode-label">Oscuro</span>
+            </button>
+        </div>
     </header>
 
     <main class="viewer-main">
@@ -22,7 +35,26 @@
             <span class="updated-at" id="updatedAt"></span>
         </div>
 
-        <section class="message-card" id="loadingState">Cargando torneo…</section>
+        <section class="message-card viewer-loading-state" id="loadingState" aria-label="Cargando torneo" aria-live="polite">
+            <span class="sr-only">Cargando torneo…</span>
+            <div class="viewer-loading-skeleton" aria-hidden="true">
+                <div class="loading-skeleton viewer-loading-heading"></div>
+                <div class="viewer-loading-content">
+                    <div class="viewer-loading-matches">
+                        <span class="loading-skeleton skeleton-line short"></span>
+                        <div class="viewer-loading-match-grid">
+                            <span class="loading-skeleton skeleton-card"></span><span class="loading-skeleton skeleton-card"></span>
+                            <span class="loading-skeleton skeleton-card"></span><span class="loading-skeleton skeleton-card"></span>
+                        </div>
+                    </div>
+                    <div class="viewer-loading-table">
+                        <span class="loading-skeleton skeleton-line medium"></span>
+                        <span class="loading-skeleton skeleton-card"></span><span class="loading-skeleton skeleton-card"></span>
+                        <span class="loading-skeleton skeleton-card"></span><span class="loading-skeleton skeleton-card"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
         <section class="message-card error-card" id="errorState" hidden></section>
 
         <div id="tournamentView" hidden>

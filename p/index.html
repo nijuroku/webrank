@@ -6,22 +6,35 @@
     <meta name="theme-color" content="#0b1727">
     <meta name="description" content="Perfil de jugador LaMafia BEYBLADEX: historial de partidas y torneos.">
     <title>Perfil de jugador · LaMafia BEYBLADEX</title>
+    <script>
+        try {
+            document.documentElement.classList.toggle('light-theme', localStorage.getItem('beybladex_theme') === 'light');
+        } catch { /* El tema oscuro es el predeterminado si el almacenamiento no está disponible. */ }
+    </script>
     <link rel="stylesheet" href="/view/viewer.css">
     <link rel="stylesheet" href="/p/profile.css">
+    <link rel="stylesheet" href="/loading.css">
     <script type="module" src="/p/profile.js"></script>
 </head>
 <body>
     <header class="viewer-header">
         <div class="viewer-header-start">
             <button class="profile-back-button" id="backButton" type="button" aria-label="Volver a la página anterior">← <span>Atrás</span></button>
-            <a class="brand" href="/">⚔️ LaMafia <span>BEYBLADEX</span></a>
+            <a class="brand" href="/" aria-label="Volver a LaMafia"><span class="brand-mark" aria-hidden="true">⚔️</span><span>LaMafia <strong>BEYBLADEX</strong></span></a>
         </div>
-        <span class="readonly-label">Perfil público</span>
+        <div class="profile-header-actions">
+            <button class="theme-mode-toggle" id="themeToggleBtn" type="button" aria-pressed="false"
+                aria-label="Cambiar al modo claro" title="Cambiar al modo claro">
+                <span class="theme-mode-track" aria-hidden="true"><span class="theme-mode-thumb"></span></span>
+                <span class="theme-mode-label">Oscuro</span>
+            </button>
+            <button class="profile-account-button" id="profileAccountButton" type="button">Perfil</button>
+        </div>
     </header>
 
     <main class="viewer-main profile-main">
         <section class="profile-card" id="profileCard" hidden aria-labelledby="playerName">
-            <div class="profile-banner" role="img" aria-label="Banner decorativo del perfil"></div>
+            <div class="profile-banner" id="profileBanner" role="img" aria-label="Banner del perfil"><img id="playerBanner" alt="" hidden></div>
             <div class="profile-content">
                 <div class="profile-identity">
                     <img class="profile-avatar" id="playerAvatar" alt="Imagen de perfil">
@@ -36,7 +49,27 @@
             </div>
         </section>
 
-        <section class="message-card" id="loadingState" aria-live="polite">Buscando torneos y partidas…</section>
+        <section class="message-card profile-loading-state" id="loadingState" aria-live="polite" aria-label="Cargando perfil">
+            <span class="sr-only">Buscando torneos y partidas…</span>
+            <div class="profile-loading-skeleton" aria-hidden="true">
+                <div class="loading-skeleton profile-loading-banner"></div>
+                <div class="profile-loading-body">
+                    <div class="loading-skeleton skeleton-circle"></div>
+                    <div class="profile-loading-copy">
+                        <span class="loading-skeleton skeleton-line short"></span>
+                        <span class="loading-skeleton skeleton-line medium"></span>
+                    </div>
+                </div>
+                <div class="profile-loading-stats">
+                    <span class="loading-skeleton skeleton-card"></span>
+                    <span class="loading-skeleton skeleton-card"></span>
+                    <span class="loading-skeleton skeleton-card"></span>
+                </div>
+                <span class="loading-skeleton profile-loading-best"></span>
+                <span class="loading-skeleton skeleton-line medium profile-loading-history"></span>
+                <span class="loading-skeleton skeleton-card profile-loading-tournament"></span>
+            </div>
+        </section>
         <section class="message-card error-card" id="errorState" hidden></section>
 
         <section class="result-filter-panel" id="resultFilterPanel" hidden aria-live="polite">
@@ -49,6 +82,53 @@
 
         <section class="profile-tournaments" id="tournamentList" hidden aria-label="Historial de torneos"></section>
     </main>
+
+    <dialog class="profile-dialog" id="profileDialog" aria-labelledby="profileDialogTitle">
+        <div class="profile-dialog-content">
+            <header class="profile-dialog-heading">
+                <div><p class="eyebrow">LaMafia BEYBLADEX</p><h2 id="profileDialogTitle">Tu perfil</h2></div>
+                <button class="profile-dialog-close" id="closeProfileDialog" type="button" aria-label="Cerrar">✕</button>
+            </header>
+            <div id="authPanel">
+                <div class="auth-mode-tabs" role="tablist" aria-label="Acceso a perfil">
+                    <button class="auth-mode-tab active" id="registerTab" type="button" role="tab" aria-selected="true">Crear perfil</button>
+                    <button class="auth-mode-tab" id="loginTab" type="button" role="tab" aria-selected="false">Iniciar sesión</button>
+                </div>
+                <form class="profile-auth-form" id="registerForm">
+                    <label for="registerNickname">Nickname</label>
+                    <input id="registerNickname" type="text" minlength="2" maxlength="40" autocomplete="nickname" required>
+                    <label for="registerEmail">Correo</label>
+                    <input id="registerEmail" type="email" autocomplete="email" required>
+                    <label for="registerPassword">Contraseña</label>
+                    <input id="registerPassword" type="password" minlength="8" autocomplete="new-password" required>
+                    <button class="profile-action-button primary" type="submit">Crear perfil</button>
+                </form>
+                <form class="profile-auth-form" id="signInForm" hidden>
+                    <label for="signInEmail">Correo</label>
+                    <input id="signInEmail" type="email" autocomplete="username" required>
+                    <label for="signInPassword">Contraseña</label>
+                    <input id="signInPassword" type="password" autocomplete="current-password" required>
+                    <button class="profile-action-button primary" type="submit">Iniciar sesión</button>
+                </form>
+            </div>
+            <section id="accountPanel" hidden>
+                <p class="profile-account-summary" id="profileAccountSummary"></p>
+                <p class="profile-account-status" id="profileAccountStatus" aria-live="polite"></p>
+                <button class="profile-action-button primary" id="requestProfileButton" type="button" hidden>Solicitar este perfil</button>
+                <div class="profile-image-controls" id="profileImageControls" hidden>
+                    <label for="avatarUrlInput">Enlace de la foto</label>
+                    <input id="avatarUrlInput" type="url" inputmode="url" autocomplete="url" placeholder="https://…" aria-describedby="profileImageUrlHelp">
+                    <p class="profile-image-help" id="profileImageUrlHelp">Pega un enlace directo a una imagen pública.</p>
+                    <button class="profile-action-button secondary" id="saveAvatarButton" type="button">Guardar foto</button>
+                    <label for="bannerUrlInput">Enlace del banner</label>
+                    <input id="bannerUrlInput" type="url" inputmode="url" autocomplete="url" placeholder="https://…">
+                    <button class="profile-action-button secondary" id="saveBannerButton" type="button">Guardar banner</button>
+                </div>
+                <button class="profile-action-button secondary" id="signOutButton" type="button">Cerrar sesión</button>
+            </section>
+            <p class="profile-auth-notice" id="profileAuthNotice" role="status" aria-live="polite" hidden></p>
+        </div>
+    </dialog>
 
     <footer>LaMafia BEYBLADEX · Perfiles de jugadores</footer>
 </body>

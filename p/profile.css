@@ -6,6 +6,17 @@
     grid-column: 1 / -1;
 }
 
+.profile-loading-state { text-align: left; }
+.profile-loading-skeleton { display: grid; gap: 1rem; width: min(100%, 760px); margin: 0 auto; }
+.profile-loading-banner { height: clamp(125px, 23vw, 205px); border-radius: 18px; }
+.profile-loading-body { display: flex; align-items: center; gap: 0.9rem; }
+.profile-loading-copy { display: grid; flex: 1; gap: 0.65rem; }
+.profile-loading-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
+.profile-loading-stats .skeleton-card { min-height: 76px; }
+.profile-loading-best { height: 76px; }
+.profile-loading-history { margin-top: 0.4rem; }
+.profile-loading-tournament { min-height: 70px; }
+
 .profile-card {
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.7);
@@ -467,6 +478,80 @@ body {
     gap: 0.8rem;
 }
 
+.profile-header-actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.profile-account-button,
+.profile-action-button {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    padding: 0.48rem 0.85rem;
+    border: 1px solid rgba(116, 227, 173, 0.34);
+    border-radius: 999px;
+    color: #b6f4d2;
+    background: rgba(36, 89, 72, 0.28);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.1);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 750;
+    cursor: pointer;
+    backdrop-filter: blur(14px);
+}
+
+.profile-action-button.primary {
+    width: 100%;
+    min-height: 46px;
+    color: #12354e;
+    border-color: rgba(189, 222, 248, 0.72);
+    background: linear-gradient(135deg, #b9dfff, #7bbdf2);
+}
+
+.profile-action-button.secondary { width: 100%; color: #d8eaff; border-color: rgba(166, 206, 241, 0.3); background: rgba(151, 192, 228, 0.1); }
+.profile-action-button:disabled { opacity: 0.6; cursor: wait; }
+
+.profile-dialog {
+    width: min(460px, calc(100% - 24px));
+    max-width: 460px;
+    max-height: min(88vh, 760px);
+    padding: 0;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    color: var(--ink);
+    background: var(--glass-strong);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(24px) saturate(145%);
+    -webkit-backdrop-filter: blur(24px) saturate(145%);
+}
+
+.profile-dialog::backdrop { background: rgba(4, 12, 23, 0.62); backdrop-filter: blur(7px); }
+.profile-dialog-content { display: grid; gap: 1rem; padding: 1.25rem; }
+.profile-dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.profile-dialog-heading h2 { margin: 0; }
+.profile-dialog-heading .eyebrow { margin-bottom: 0.25rem; }
+.profile-dialog-close { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: var(--glass); font: inherit; cursor: pointer; }
+.auth-mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; padding: 0.25rem; border: 1px solid var(--line-soft); border-radius: 999px; background: rgba(5, 15, 27, 0.2); }
+.auth-mode-tab { min-height: 38px; border: 0; border-radius: 999px; color: var(--muted); background: transparent; font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
+.auth-mode-tab.active { color: #14334d; background: linear-gradient(135deg, #b9dfff, #7bbdf2); }
+.profile-auth-form, .profile-image-controls { display: grid; gap: 0.55rem; }
+.profile-auth-form label, .profile-image-controls label { margin-top: 0.25rem; color: var(--ink); font-size: 0.82rem; font-weight: 700; }
+.profile-auth-form input, .profile-image-controls input[type="url"] { width: 100%; min-height: 44px; padding: 0.65rem 0.75rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--glass); font: inherit; font-size: 0.86rem; }
+.profile-image-help { margin: -0.3rem 0 0.2rem; color: var(--muted); font-size: 0.75rem; }
+.profile-auth-form input:focus, .profile-image-controls input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.profile-account-summary { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.profile-account-status { margin: 0; padding: 0.7rem; border: 1px solid var(--line-soft); border-radius: 12px; color: var(--muted); background: var(--glass); font-size: 0.86rem; line-height: 1.45; }
+.profile-auth-notice { margin: 0; padding: 0.75rem; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: var(--glass); font-size: 0.84rem; line-height: 1.45; }
+.profile-auth-notice.error { color: #ffb1ba; border-color: rgba(255, 113, 128, 0.4); }
+.profile-auth-notice.success { color: #b6f4d2; border-color: rgba(116, 227, 173, 0.36); }
+
+.profile-banner > img { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
 .profile-back-button {
     flex: 0 0 auto;
     min-height: 36px;
@@ -604,4 +689,69 @@ footer { color: #9bb1c6; }
     .viewer-header-start { gap: 0.55rem; }
     .profile-back-button { width: 38px; padding: 0; font-size: 1.05rem; }
     .profile-back-button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+    .profile-header-actions { gap: 0.35rem; }
+    .profile-header-actions .theme-mode-toggle { min-height: 38px; gap: 0.35rem; padding-right: 0.5rem; font-size: 0.68rem; }
+    .profile-account-button { min-height: 36px; padding: 0.35rem 0.65rem; font-size: 0.75rem; }
+    .profile-dialog-content { padding: 1rem; }
 }
+
+:root.light-theme .profile-card,
+:root.light-theme .result-filter-panel,
+:root.light-theme .tournament-entry {
+    border-color: rgba(255, 255, 255, 0.86);
+    color: var(--ink);
+    background: rgba(249, 255, 250, 0.68);
+    box-shadow: var(--shadow);
+}
+
+:root.light-theme .profile-banner {
+    background:
+        radial-gradient(ellipse at 14% 108%, rgba(255, 255, 255, 0.92) 0 10%, transparent 42%),
+        radial-gradient(ellipse at 86% -8%, rgba(144, 206, 158, 0.72) 0 13%, transparent 45%),
+        radial-gradient(ellipse at 54% 82%, rgba(109, 183, 144, 0.48) 0 15%, transparent 48%),
+        linear-gradient(118deg, #bde8d2, #e7f4d9 48%, #a8ddd1);
+}
+
+:root.light-theme .profile-avatar { border-color: rgba(255, 255, 255, 0.96); background: #dcefe0; }
+:root.light-theme .profile-name-wrap h1,
+:root.light-theme .result-filter-heading h2,
+:root.light-theme .profile-section-title,
+:root.light-theme .tournament-entry summary strong { color: var(--ink); }
+:root.light-theme .profile-name-wrap .eyebrow,
+:root.light-theme .profile-name-chevron,
+:root.light-theme .tournament-summary-chevron { color: var(--accent); }
+:root.light-theme .profile-alias-chip,
+:root.light-theme .profile-alias-empty { color: var(--ink); border-color: var(--line); background: rgba(249, 255, 250, 0.72); }
+:root.light-theme .profile-stat { color: var(--muted); border-color: var(--line); background: linear-gradient(145deg, rgba(249, 255, 250, 0.88), rgba(224, 243, 226, 0.82)); box-shadow: var(--shadow); }
+:root.light-theme .profile-stat-label { color: var(--muted); }
+:root.light-theme .profile-stat-value { color: var(--ink); }
+:root.light-theme .profile-stat.wins .profile-stat-value { color: #347d55; }
+:root.light-theme .profile-stat.losses .profile-stat-value { color: #ac4b54; }
+:root.light-theme .profile-stat.draws .profile-stat-value { color: #806324; }
+:root.light-theme .best-tournament { border-color: rgba(116, 177, 129, 0.38); background: linear-gradient(110deg, rgba(224, 243, 226, 0.88), rgba(249, 255, 250, 0.8)); }
+:root.light-theme .best-tournament-label,
+:root.light-theme .best-tournament-name,
+:root.light-theme .best-tournament-meta { color: var(--ink); }
+:root.light-theme .best-tournament-icon { border-color: rgba(116, 177, 129, 0.4); background: rgba(213, 239, 217, 0.8); }
+:root.light-theme .profile-result-match,
+:root.light-theme .profile-match { color: var(--ink); border-color: var(--line-soft); background: rgba(249, 255, 250, 0.62); }
+:root.light-theme .profile-result-tournament,
+:root.light-theme .profile-match-round,
+:root.light-theme .tournament-summary-meta { color: var(--muted); }
+:root.light-theme .profile-result-round,
+:root.light-theme .profile-result-opponent,
+:root.light-theme .profile-match-opponent { color: var(--ink); }
+:root.light-theme .profile-result-score,
+:root.light-theme .profile-match-score { color: var(--accent); }
+:root.light-theme .tournament-match-list,
+:root.light-theme .result-filter-heading { border-color: var(--line-soft); }
+:root.light-theme .profile-account-button { color: #235b39; border-color: rgba(116, 177, 129, 0.58); background: linear-gradient(145deg, #e0f4df, #bfe6c7); }
+:root.light-theme .brand { color: var(--ink); }
+:root.light-theme .brand span,
+:root.light-theme .brand strong { color: var(--accent); }
+:root.light-theme .profile-back-button { color: var(--ink); border-color: var(--line); background: rgba(249, 255, 250, 0.66); }
+:root.light-theme .profile-action-button.primary,
+:root.light-theme .auth-mode-tab.active { color: #235b39; border-color: rgba(116, 177, 129, 0.58); background: linear-gradient(145deg, #e0f4df, #bfe6c7); }
+:root.light-theme .profile-action-button.secondary { color: var(--ink); border-color: var(--line); background: rgba(224, 243, 226, 0.72); }
+:root.light-theme .profile-auth-notice.success { color: #286b47; }
+:root.light-theme .profile-auth-notice.error { color: #963f49; }
