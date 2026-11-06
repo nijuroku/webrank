@@ -21,6 +21,11 @@
         return `<a class="score-player-profile" href="${escapeHtml(getPlayerProfilePath(playerName))}">${escapeHtml(playerName)}</a>`;
     }
 
+    function playerTournamentHistoryLinkMarkup(playerName, playerId) {
+        if (!playerName) return '—';
+        return `<a class="score-player-history" href="#playerHistoryModal" data-player-id="${escapeHtml(playerId)}" title="Ver historial de ${escapeHtml(playerName)} en este torneo">${escapeHtml(playerName)}</a>`;
+    }
+
     // ============================================================
     // 2. ESTADO GLOBAL
     // ============================================================
@@ -162,6 +167,7 @@
     let selectedRound = 'all';
     let selectedPlayerFilterId = null;
     let activeTab = 'participants';
+    const requestedNavigationTab = new URLSearchParams(window.location.search).get('tab');
     let supabaseConfig = null;
     let supabaseInitialization = null;
     let supabaseAuthClient = null;
@@ -204,7 +210,7 @@
     const headerQualified = document.getElementById('headerQualified');
     const storageStatusEl = document.getElementById('storageStatus');
     const themeToggleBtn = document.getElementById('themeToggleBtn');
-    const tabNavigationButtons = document.querySelectorAll('.tab-navigation-btn');
+    const tabNavigationButtons = document.querySelectorAll('.tab-navigation-btn[data-tab]');
     const tabPanels = document.querySelectorAll('[data-tab-panel]');
 
     function activateTab(tabName, scrollToContent = false) {
@@ -1750,7 +1756,7 @@
             const draws = played.filter(match => match.drawResult || (match.scoreA === match.scoreB && (match.scoreA !== 0 || match.scoreB !== 0))).length;
             const losses = played.filter(match => match.scoreA !== match.scoreB && (player.id === (match.playerAId || getParticipantIdByName(match.playerA)) ? match.scoreA < match.scoreB : match.scoreB < match.scoreA)).length;
             const byes = swissByes.filter(id => String(id) === String(player.id)).length;
-            return `<tr><td>${index + 1}</td><td class="name-cell"><a class="score-player-profile" href="${escapeHtml(getPlayerProfilePath(player.name))}">${escapeHtml(player.name)}</a></td><td>${wins + byes} - ${losses} - ${draws}</td><td class="points-cell">${player.points.toFixed(1)}</td><td>${player.buchholz.toFixed(1)}</td><td>${player.pointDifference > 0 ? '+' : ''}${player.pointDifference}</td></tr>`;
+            return `<tr><td>${index + 1}</td><td class="name-cell">${playerTournamentHistoryLinkMarkup(player.name, player.id)}</td><td>${wins + byes} - ${losses} - ${draws}</td><td class="points-cell">${player.points.toFixed(1)}</td><td>${player.buchholz.toFixed(1)}</td><td>${player.pointDifference > 0 ? '+' : ''}${player.pointDifference}</td></tr>`;
         }).join('');
         return `<div class="podium-container swiss-final-standings">
             <div class="podium-title">🏆 ${tournamentName} · Clasificación final</div>
@@ -2182,12 +2188,14 @@
         totalScoreTableEl.innerHTML = `<div style="font-size:0.75rem;color:#4A4A6A;margin-bottom:0.5rem;">📊 Tabla final · ${savedTable.finished_at ? new Date(savedTable.finished_at).toLocaleString() : 'fecha no disponible'}</div><div class="table-scroll"><table class="total-score-table"><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table></div>`;
     }
 
-    function showPlayerHistory(playerId) {
-        const savedParticipants = activeSavedScoreTable?.participants || participants;
+    function showPlayerHistory(playerId, currentTournamentOnly = false) {
+        const savedParticipants = currentTournamentOnly ? participants : activeSavedScoreTable?.participants || participants;
         const player = savedParticipants.find(item => String(item.id) === String(playerId)) || getParticipantById(playerId);
         if (!player) return;
         const playerKey = String(player.id || playerId);
-        const historyMatches = activeSavedScoreTable?.matches || [...matchHistory, ...versus];
+        const historyMatches = currentTournamentOnly
+            ? [...new Set([...matchHistory, ...versus, preFinalMatch, finalMatch].filter(Boolean))]
+            : activeSavedScoreTable?.matches || [...matchHistory, ...versus];
         const findIdByName = name => savedParticipants.find(item => item.name === name)?.id || getParticipantIdByName(name);
         const matches = historyMatches
             .filter(match => {
@@ -2208,9 +2216,9 @@
             return `<tr><td>${match.round > 0 ? `Ronda ${match.round}` : 'Eliminatorias'}</td><td>${escapeHtml(opponent || '—')}</td><td>${played ? `${Number(scoreFor) || 0}–${Number(scoreAgainst) || 0}` : '—'}</td><td class="${resultClass}">${result}</td></tr>`;
         });
 
-        if ((activeSavedScoreTable?.tournament_format || tournamentFormat) === 'swiss') {
+        if ((currentTournamentOnly ? tournamentFormat : activeSavedScoreTable?.tournament_format || tournamentFormat) === 'swiss') {
             let byeNumber = 0;
-            (activeSavedScoreTable?.swiss_byes || swissByes).forEach((id, index) => {
+            (currentTournamentOnly ? swissByes : activeSavedScoreTable?.swiss_byes || swissByes).forEach((id, index) => {
                 if (String(id) === playerKey) {
                     byeNumber++;
                     historyRows.push(`<tr><td>Ronda ${index + 1}</td><td>Bye (descanso)</td><td>—</td><td class="history-result-win">Victoria · 1 pt</td></tr>`);
@@ -2219,7 +2227,9 @@
         }
 
         const content = document.getElementById('playerHistoryContent');
-        document.getElementById('playerHistoryTitle').textContent = `📜 Historial · ${player.name}`;
+        document.getElementById('playerHistoryTitle').textContent = currentTournamentOnly
+            ? `📜 Historial del torneo · ${player.name}`
+            : `📜 Historial · ${player.name}`;
         content.innerHTML = historyRows.length
             ? `<div class="player-history-content"><table class="total-score-table"><thead><tr><th>Ronda</th><th>Rival</th><th>Marcador</th><th>Resultado</th></tr></thead><tbody>${historyRows.join('')}</tbody></table></div>`
             : '<div class="empty-message">Este participante todavía no tiene enfrentamientos registrados.</div>';
@@ -3383,6 +3393,9 @@
             }
 
             if (tournamentVisible) setParticipantsCollapsed(true);
+            if (['participants', 'matches', 'table'].includes(requestedNavigationTab)) {
+                activateTab(requestedNavigationTab);
+            }
 
             console.log('🚀 App inicializada correctamente');
         } catch (error) {
@@ -3629,6 +3642,12 @@
     });
 
     versusListEl?.addEventListener('click', function (event) {
+        const historyTrigger = event.target.closest('.score-player-history');
+        if (historyTrigger) {
+            event.preventDefault();
+            showPlayerHistory(historyTrigger.dataset.playerId, true);
+            return;
+        }
         const trigger = event.target.closest('.player-filter-trigger');
         if (!trigger) return;
         selectedPlayerFilterId = trigger.dataset.playerFilterId;

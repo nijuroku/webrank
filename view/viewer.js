@@ -47,6 +47,27 @@ window.addEventListener('storage', event => {
     if (event.key === THEME_STORAGE_KEY) applyTheme(event.newValue || 'dark');
 });
 
+document.querySelectorAll('.persistent-navigation a[href^="#"]').forEach(link => {
+    link.addEventListener('click', () => {
+        document.querySelectorAll('.persistent-navigation a').forEach(item => {
+            item.classList.remove('active');
+            item.removeAttribute('aria-current');
+        });
+        link.classList.add('active');
+        link.setAttribute('aria-current', 'location');
+    });
+});
+
+if (window.location.hash === '#standingsSection') {
+    const tableLink = document.querySelector('.persistent-navigation a[href="#standingsSection"]');
+    document.querySelectorAll('.persistent-navigation a').forEach(item => {
+        item.classList.remove('active');
+        item.removeAttribute('aria-current');
+    });
+    tableLink?.classList.add('active');
+    tableLink?.setAttribute('aria-current', 'location');
+}
+
 function setConnectionStatus(message, state = '') {
     connectionStatus.textContent = message;
     liveDot.className = `live-dot ${state}`;

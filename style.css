@@ -4097,6 +4097,8 @@ body {
     transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
+.profile-navigation-btn { text-decoration: none; }
+
 .tab-navigation-btn .tab-icon {
     width: auto;
     flex: 0 0 auto;
