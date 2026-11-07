@@ -220,10 +220,6 @@ async function refreshAccountContext() {
     document.getElementById('goToOwnProfileButton').hidden = !hasOwnProfile;
     accountRouteActions.hidden = Boolean(currentUser);
     accountRouteOwnProfileButton.hidden = !hasOwnProfile;
-    if (accountRouteMode && hasOwnProfile) {
-        window.location.replace(`/p/${encodeURIComponent(currentProfileOwner.player_name)}`);
-        return;
-    }
 
     if (currentProfileOwner) {
         const ownsThisProfile = currentProfileOwner.player_key === currentProfileKey;
