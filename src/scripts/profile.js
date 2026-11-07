@@ -20,6 +20,12 @@ const accountRoutePanel = document.getElementById('accountRoutePanel');
 const accountRouteMessage = document.getElementById('accountRouteMessage');
 const accountRouteActions = document.getElementById('accountRouteActions');
 const accountRouteOwnProfileButton = document.getElementById('accountRouteOwnProfileButton');
+const profileDirectory = document.getElementById('profileDirectory');
+const profileDirectorySearch = document.getElementById('profileDirectorySearch');
+const profileDirectoryLoading = document.getElementById('profileDirectoryLoading');
+const profileDirectoryGrid = document.getElementById('profileDirectoryGrid');
+const profileDirectoryStatus = document.getElementById('profileDirectoryStatus');
+const profileDirectoryCount = document.getElementById('profileDirectoryCount');
 const profileBanner = document.getElementById('playerBanner');
 const profileDialog = document.getElementById('profileDialog');
 const authPanel = document.getElementById('authPanel');
@@ -39,6 +45,7 @@ let currentProfileName = null;
 let currentPublicProfile = null;
 let currentProfileRequest = null;
 let currentProfileOwner = null;
+let directoryPlayers = [];
 
 function normalizeName(value) {
     return String(value || '').trim().normalize('NFKC').toLocaleLowerCase();
@@ -448,12 +455,127 @@ async function loadPlayerAliases(config) {
         select: 'alias_key,alias_name,canonical_key,canonical_name',
         order: 'alias_key.asc'
     });
-    const response = await fetch(`${config.url}${aliasesEndpoint}?${params}`, {
-        headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` }
+    const rows = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+        const response = await fetch(`${config.url}${aliasesEndpoint}?${params}`, {
+            headers: {
+                apikey: config.anonKey,
+                Authorization: `Bearer ${config.anonKey}`,
+                Range: `${offset}-${offset + pageSize - 1}`
+            }
+        });
+        if (!response.ok) throw new Error('No se pudieron cargar los alias de jugadores.');
+        const page = await response.json();
+        if (Array.isArray(page)) rows.push(...page);
+        if (!Array.isArray(page) || page.length < pageSize) break;
+    }
+    return rows;
+}
+
+function normalizeDirectoryTerm(value) {
+    return normalizeName(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function buildDirectoryPlayers(playerNames, aliases) {
+    const byCanonicalKey = new Map();
+    const getEntry = (canonicalKey, canonicalName) => {
+        let entry = byCanonicalKey.get(canonicalKey);
+        if (!entry) {
+            entry = { canonicalKey, canonicalName: canonicalName.trim(), searchTerms: new Set() };
+            byCanonicalKey.set(canonicalKey, entry);
+        } else if (canonicalName && canonicalName.length > entry.canonicalName.length) {
+            entry.canonicalName = canonicalName.trim();
+        }
+        entry.searchTerms.add(entry.canonicalName);
+        entry.searchTerms.add(entry.canonicalKey);
+        return entry;
+    };
+
+    aliases.forEach(alias => {
+        const canonicalKey = normalizeName(alias.canonical_key || alias.canonical_name);
+        const canonicalName = String(alias.canonical_name || '').trim();
+        if (!canonicalKey || !canonicalName) return;
+        const entry = getEntry(canonicalKey, canonicalName);
+        if (alias.alias_name) entry.searchTerms.add(String(alias.alias_name).trim());
+        if (alias.alias_key) entry.searchTerms.add(String(alias.alias_key).trim());
     });
-    if (!response.ok) throw new Error('No se pudieron cargar los alias de jugadores.');
-    const rows = await response.json();
-    return Array.isArray(rows) ? rows : [];
+
+    playerNames.forEach(rawName => {
+        const name = String(rawName || '').trim();
+        if (!name) return;
+        const nameKey = normalizeName(name);
+        const alias = aliases.find(row => normalizeName(row.alias_key) === nameKey || normalizeName(row.alias_name) === nameKey);
+        const canonicalName = String(alias?.canonical_name || name).trim();
+        const canonicalKey = normalizeName(alias?.canonical_key || canonicalName);
+        if (!canonicalKey) return;
+        const entry = getEntry(canonicalKey, canonicalName);
+        entry.searchTerms.add(name);
+        if (alias?.alias_name) entry.searchTerms.add(String(alias.alias_name).trim());
+        if (alias?.alias_key) entry.searchTerms.add(String(alias.alias_key).trim());
+    });
+
+    return [...byCanonicalKey.values()].sort((a, b) =>
+        a.canonicalName.localeCompare(b.canonicalName, 'es', { sensitivity: 'base', numeric: true })
+    );
+}
+
+function renderDirectoryResults() {
+    if (!profileDirectoryGrid) return;
+    const query = normalizeDirectoryTerm(profileDirectorySearch?.value || '');
+    const filteredPlayers = directoryPlayers.filter(player => !query ||
+        [...player.searchTerms].some(term => normalizeDirectoryTerm(term).includes(query))
+    );
+    profileDirectoryGrid.replaceChildren();
+    filteredPlayers.forEach(player => {
+        const card = makeElement('a', 'profile-directory-card');
+        card.href = `/p/${encodeURIComponent(player.canonicalName)}`;
+        card.setAttribute('aria-label', `Ver perfil de ${player.canonicalName}`);
+        const avatar = makeElement('span', 'profile-directory-avatar', Array.from(player.canonicalName)[0]?.toLocaleUpperCase() || '?');
+        avatar.setAttribute('aria-hidden', 'true');
+        const copy = makeElement('span', 'profile-directory-copy');
+        copy.append(makeElement('strong', '', player.canonicalName), makeElement('small', '', 'Ver perfil de jugador'));
+        const arrow = makeElement('span', 'profile-directory-arrow', '›');
+        arrow.setAttribute('aria-hidden', 'true');
+        card.append(avatar, copy, arrow);
+        profileDirectoryGrid.appendChild(card);
+    });
+    profileDirectoryGrid.hidden = false;
+    profileDirectoryCount.textContent = `${filteredPlayers.length} ${filteredPlayers.length === 1 ? 'perfil' : 'perfiles'}`;
+    profileDirectoryStatus.textContent = filteredPlayers.length
+        ? ''
+        : query ? 'No encontramos perfiles con ese nombre o alias.' : 'Todavía no hay perfiles registrados.';
+}
+
+async function loadProfileDirectory(config) {
+    const [playerRows, aliases] = await Promise.all([
+        (async () => {
+            const rows = [];
+            const pageSize = 1000;
+            for (let offset = 0; ; offset += pageSize) {
+                const { data, error } = await supabase.from('players').select('name')
+                    .order('name', { ascending: true }).range(offset, offset + pageSize - 1);
+                if (error) throw error;
+                rows.push(...(Array.isArray(data) ? data : []));
+                if (!Array.isArray(data) || data.length < pageSize) break;
+            }
+            return rows;
+        })(),
+        loadPlayerAliases(config)
+    ]);
+    directoryPlayers = buildDirectoryPlayers(
+        playerRows.map(row => row.name),
+        aliases
+    );
+    profileDirectoryLoading.hidden = true;
+    renderDirectoryResults();
+}
+
+function showProfileDirectoryError() {
+    profileDirectoryLoading.hidden = true;
+    profileDirectoryGrid.hidden = true;
+    profileDirectoryCount.textContent = '';
+    profileDirectoryStatus.textContent = 'No pudimos cargar los perfiles. Actualiza la página para volver a intentarlo.';
 }
 
 function resolvePlayerIdentity(requestedName, aliases) {
@@ -695,11 +817,18 @@ async function initializeProfile() {
         });
         if (accountRouteMode) {
             accountRoutePanel.hidden = false;
+            profileDirectory.hidden = false;
             loadingState.hidden = true;
             profileCard.hidden = true;
             resultFilterPanel.hidden = true;
             tournamentList.hidden = true;
-            await refreshAccountContext();
+            await Promise.all([
+                loadProfileDirectory(config).catch(error => {
+                    console.error('No se pudo cargar el directorio de perfiles:', error);
+                    showProfileDirectoryError();
+                }),
+                refreshAccountContext().catch(error => setAuthNotice(error.message || 'No se pudo cargar tu cuenta.', 'error'))
+            ]);
             return;
         }
         const [tournaments, aliases, registeredPlayers] = await Promise.all([
@@ -773,5 +902,7 @@ document.getElementById('backButton')?.addEventListener('click', () => {
     if (window.history.length > 1) window.history.back();
     else window.location.assign('/');
 });
+
+profileDirectorySearch?.addEventListener('input', renderDirectoryResults);
 
 initializeProfile();

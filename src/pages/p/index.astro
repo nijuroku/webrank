@@ -22,6 +22,31 @@ import '../../styles/loading.css';
 </SiteHeader>
 
     <main class="viewer-main profile-main">
+        <section class="profile-directory" id="profileDirectory" hidden aria-labelledby="profileDirectoryTitle">
+            <header class="profile-directory-heading">
+                <div>
+                    <p class="eyebrow">LaMafia BEYBLADEX</p>
+                    <h1 id="profileDirectoryTitle">Perfiles de jugadores</h1>
+                    <p>Busca un jugador por su nombre principal o por cualquiera de sus alias.</p>
+                </div>
+                <span class="profile-directory-count" id="profileDirectoryCount" aria-live="polite"></span>
+            </header>
+            <label class="profile-directory-search">
+                <span aria-hidden="true">⌕</span>
+                <input id="profileDirectorySearch" type="search" autocomplete="off" placeholder="Buscar por nombre o alias…" aria-label="Buscar perfiles por nombre o alias">
+            </label>
+            <div class="profile-directory-grid" id="profileDirectoryLoading" aria-label="Cargando perfiles" aria-hidden="true">
+                {Array.from({ length: 6 }).map(() => (
+                    <div class="profile-directory-skeleton">
+                        <span class="loading-skeleton skeleton-circle"></span>
+                        <span class="loading-skeleton skeleton-line medium"></span>
+                    </div>
+                ))}
+            </div>
+            <div class="profile-directory-grid" id="profileDirectoryGrid" hidden></div>
+            <p class="profile-directory-status" id="profileDirectoryStatus" role="status" aria-live="polite"></p>
+        </section>
+
         <section class="account-route-panel" id="accountRoutePanel" hidden aria-labelledby="accountRouteTitle">
             <p class="eyebrow">LaMafia BEYBLADEX</p>
             <h1 id="accountRouteTitle">Tu perfil</h1>
