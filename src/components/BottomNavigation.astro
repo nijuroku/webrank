@@ -15,23 +15,23 @@ if (page === 'view') {
 }
 ---
 
-<nav class={isTournament ? 'tab-navigation' : 'persistent-navigation'} aria-label="Navegación principal">
+<nav class="persistent-navigation" aria-label="Navegación principal">
     {items.map((item) => {
         const selected = active === item.key;
-        const className = isTournament
-            ? `tab-navigation-btn${selected ? ' active' : ''}${item.key === 'profile' ? ' profile-navigation-btn' : ''}`
+        const className = isTournament && !['home', 'profile'].includes(item.key)
+            ? `persistent-navigation-tab${selected ? ' active' : ''}`
             : selected ? 'active' : '';
         const current = selected ? (page === 'view' ? 'location' : 'page') : undefined;
 
         return isTournament && !['home', 'profile'].includes(item.key) ? (
             <button class={className} data-tab={item.key} type="button" title={item.label} aria-selected={selected}>
                 <span class="tab-icon" aria-hidden="true">{item.icon}</span>
-                <span class="tab-label">{item.label}</span>
+                <span>{item.label}</span>
             </button>
         ) : (
             <a class={className} href={item.href} title={item.label} aria-current={current}>
                 <span class="tab-icon" aria-hidden="true">{item.icon}</span>
-                <span class={isTournament ? 'tab-label' : undefined}>{item.label}</span>
+                <span>{item.label}</span>
             </a>
         );
     })}

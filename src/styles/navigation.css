@@ -1,7 +1,6 @@
 /* Shared styles for the persistent navigation on all app pages. */
 body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
 
-.tab-navigation,
 .persistent-navigation {
     position: fixed !important;
     z-index: 950;
@@ -25,8 +24,8 @@ body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bott
     -webkit-backdrop-filter: blur(22px) saturate(150%);
 }
 
-.tab-navigation .tab-navigation-btn,
-.persistent-navigation a {
+.persistent-navigation a,
+.persistent-navigation button {
     display: flex;
     min-width: 0;
     min-height: 62px;
@@ -41,6 +40,7 @@ body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bott
     color: #b1c6df !important;
     background: transparent !important;
     box-shadow: none !important;
+    font: inherit;
     font-size: 0.76rem;
     font-weight: 750;
     line-height: 1.1;
@@ -50,7 +50,6 @@ body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bott
     transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.tab-navigation .tab-navigation-btn .tab-icon,
 .persistent-navigation .tab-icon {
     width: auto;
     flex: 0 0 auto;
@@ -58,8 +57,8 @@ body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bott
     line-height: 1;
 }
 
-.tab-navigation .tab-navigation-btn:hover:not(:disabled),
-.tab-navigation .tab-navigation-btn:focus-visible,
+.persistent-navigation button:hover:not(:disabled),
+.persistent-navigation button:focus-visible,
 .persistent-navigation a:hover,
 .persistent-navigation a:focus-visible {
     color: #c4e0ff !important;
@@ -69,7 +68,7 @@ body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bott
     transform: translateY(-2px);
 }
 
-.tab-navigation .tab-navigation-btn.active,
+.persistent-navigation button.active,
 .persistent-navigation a.active,
 .persistent-navigation a[aria-current="page"] {
     color: #102a45 !important;
@@ -78,10 +77,8 @@ body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bott
     box-shadow: 0 5px 15px rgba(3, 11, 23, 0.28) !important;
 }
 
-.tab-navigation .tab-navigation-btn:disabled { opacity: 0.44; cursor: not-allowed; }
+.persistent-navigation button:disabled { opacity: 0.44; cursor: not-allowed; }
 
-:root.light-theme .tab-navigation,
-body.light-theme .tab-navigation,
 :root.light-theme .persistent-navigation,
 body.light-theme .persistent-navigation {
     border-color: rgba(255, 255, 255, 0.95) !important;
@@ -89,18 +86,18 @@ body.light-theme .persistent-navigation {
     box-shadow: 0 12px 34px rgba(84, 74, 48, 0.2), inset 0 1px 0 #fff !important;
 }
 
-:root.light-theme .tab-navigation .tab-navigation-btn,
-body.light-theme .tab-navigation .tab-navigation-btn,
+:root.light-theme .persistent-navigation button,
+body.light-theme .persistent-navigation button,
 :root.light-theme .persistent-navigation a,
 body.light-theme .persistent-navigation a {
     color: #526b5e !important;
     background: transparent !important;
 }
 
-:root.light-theme .tab-navigation .tab-navigation-btn:hover:not(:disabled),
-:root.light-theme .tab-navigation .tab-navigation-btn:focus-visible,
-body.light-theme .tab-navigation .tab-navigation-btn:hover:not(:disabled),
-body.light-theme .tab-navigation .tab-navigation-btn:focus-visible,
+:root.light-theme .persistent-navigation button:hover:not(:disabled),
+:root.light-theme .persistent-navigation button:focus-visible,
+body.light-theme .persistent-navigation button:hover:not(:disabled),
+body.light-theme .persistent-navigation button:focus-visible,
 :root.light-theme .persistent-navigation a:hover,
 :root.light-theme .persistent-navigation a:focus-visible,
 body.light-theme .persistent-navigation a:hover,
@@ -111,8 +108,8 @@ body.light-theme .persistent-navigation a:focus-visible {
     box-shadow: 0 5px 14px rgba(77, 148, 102, 0.2) !important;
 }
 
-:root.light-theme .tab-navigation .tab-navigation-btn.active,
-body.light-theme .tab-navigation .tab-navigation-btn.active,
+:root.light-theme .persistent-navigation button.active,
+body.light-theme .persistent-navigation button.active,
 :root.light-theme .persistent-navigation a.active,
 body.light-theme .persistent-navigation a.active,
 :root.light-theme .persistent-navigation a[aria-current="page"],
@@ -123,10 +120,8 @@ body.light-theme .persistent-navigation a[aria-current="page"] {
 }
 
 @media (max-width: 420px) {
-    .tab-navigation,
     .persistent-navigation { min-height: 72px; gap: 0.12rem; padding: 0.3rem; }
-    .tab-navigation .tab-navigation-btn,
-    .persistent-navigation a { min-height: 60px; padding-right: 0.12rem; padding-left: 0.12rem; font-size: 0.62rem; }
-    .tab-navigation .tab-navigation-btn .tab-icon,
+    .persistent-navigation a,
+    .persistent-navigation button { min-height: 60px; padding-right: 0.12rem; padding-left: 0.12rem; font-size: 0.62rem; }
     .persistent-navigation .tab-icon { font-size: 1.1rem; }
 }

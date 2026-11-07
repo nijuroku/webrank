@@ -210,7 +210,7 @@
     const headerQualified = document.getElementById('headerQualified');
     const storageStatusEl = document.getElementById('storageStatus');
     const themeToggleBtn = document.getElementById('themeToggleBtn');
-    const tabNavigationButtons = document.querySelectorAll('.tab-navigation-btn[data-tab]');
+    const tabNavigationButtons = document.querySelectorAll('.persistent-navigation [data-tab]');
     const tabPanels = document.querySelectorAll('[data-tab-panel]');
 
     function activateTab(tabName, scrollToContent = false) {
