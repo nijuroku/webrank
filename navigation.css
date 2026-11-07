@@ -1,30 +1,31 @@
-/* Shared bottom navigation used by the main app and secondary pages. */
-body.persistent-nav-page {
-    padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px));
-}
+/* Shared styles for the persistent navigation on all app pages. */
+body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
 
+.tab-navigation,
 .persistent-navigation {
-    position: fixed;
+    position: fixed !important;
     z-index: 950;
-    right: auto;
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-    left: 50%;
+    top: auto !important;
+    right: auto !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 50% !important;
     display: flex;
-    width: min(520px, calc(100% - 24px));
+    width: min(520px, calc(100% - 20px)) !important;
     min-height: 76px;
     align-items: stretch;
     justify-content: space-around;
     gap: 0.35rem;
-    padding: 0.45rem;
-    transform: translateX(-50%);
-    border: 1px solid rgba(255, 255, 255, 0.82);
-    border-radius: 24px;
-    background: rgba(239, 250, 243, 0.88);
-    box-shadow: 0 12px 36px rgba(14, 42, 29, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+    padding: 0.4rem;
+    transform: translateX(-50%) !important;
+    border: 1px solid rgba(174, 207, 246, 0.22) !important;
+    border-radius: 23px;
+    background: rgba(20, 36, 57, 0.84) !important;
+    box-shadow: 0 14px 36px rgba(2, 8, 18, 0.4), inset 0 1px 0 rgba(219, 234, 255, 0.1) !important;
     backdrop-filter: blur(22px) saturate(150%);
     -webkit-backdrop-filter: blur(22px) saturate(150%);
 }
 
+.tab-navigation .tab-navigation-btn,
 .persistent-navigation a {
     display: flex;
     min-width: 0;
@@ -34,54 +35,98 @@ body.persistent-nav-page {
     align-items: center;
     justify-content: center;
     gap: 0.22rem;
-    padding: 0.45rem 0.35rem;
-    border: 1px solid transparent;
+    padding: 0.42rem 0.35rem;
+    border: 1px solid transparent !important;
     border-radius: 18px;
-    color: #526b5e;
+    color: #b1c6df !important;
+    background: transparent !important;
+    box-shadow: none !important;
     font-size: 0.76rem;
     font-weight: 750;
     line-height: 1.1;
     text-align: center;
     text-decoration: none;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.persistent-navigation a:hover {
-    background: rgba(141, 211, 170, 0.22);
-    color: #173f2a;
-}
-
-.persistent-navigation a.active,
-.persistent-navigation a[aria-current="page"] {
-    border-color: rgba(107, 190, 139, 0.28);
-    background: linear-gradient(145deg, #d4f4df, #bce9cd);
-    color: #174b2d;
-    box-shadow: 0 4px 12px rgba(77, 148, 102, 0.16);
-}
-
+.tab-navigation .tab-navigation-btn .tab-icon,
 .persistent-navigation .tab-icon {
+    width: auto;
+    flex: 0 0 auto;
     font-size: 1.25rem;
     line-height: 1;
 }
 
-:root.light-theme .persistent-navigation,
-body.light-theme .persistent-navigation {
-    border-color: rgba(255, 255, 255, 0.95);
-    background: rgba(255, 250, 239, 0.9);
-    box-shadow: 0 12px 34px rgba(84, 74, 48, 0.2), inset 0 1px 0 #fff;
+.tab-navigation .tab-navigation-btn:hover:not(:disabled),
+.tab-navigation .tab-navigation-btn:focus-visible,
+.persistent-navigation a:hover,
+.persistent-navigation a:focus-visible {
+    color: #c4e0ff !important;
+    background: linear-gradient(135deg, rgba(50, 79, 116, 0.9), rgba(31, 52, 81, 0.88)) !important;
+    border-color: rgba(176, 211, 251, 0.28) !important;
+    box-shadow: 0 5px 16px rgba(3, 11, 23, 0.32), inset 0 1px 0 rgba(220, 237, 255, 0.12) !important;
+    transform: translateY(-2px);
 }
 
-@media (max-width: 820px) {
-    .persistent-navigation {
-        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-        width: min(520px, calc(100% - 20px));
-        padding: 0.4rem;
-        border-radius: 23px;
-    }
+.tab-navigation .tab-navigation-btn.active,
+.persistent-navigation a.active,
+.persistent-navigation a[aria-current="page"] {
+    color: #102a45 !important;
+    background: linear-gradient(145deg, #c6e4ff, #84b9ef) !important;
+    border-color: rgba(175, 216, 255, 0.76) !important;
+    box-shadow: 0 5px 15px rgba(3, 11, 23, 0.28) !important;
+}
+
+.tab-navigation .tab-navigation-btn:disabled { opacity: 0.44; cursor: not-allowed; }
+
+:root.light-theme .tab-navigation,
+body.light-theme .tab-navigation,
+:root.light-theme .persistent-navigation,
+body.light-theme .persistent-navigation {
+    border-color: rgba(255, 255, 255, 0.95) !important;
+    background: rgba(255, 250, 239, 0.9) !important;
+    box-shadow: 0 12px 34px rgba(84, 74, 48, 0.2), inset 0 1px 0 #fff !important;
+}
+
+:root.light-theme .tab-navigation .tab-navigation-btn,
+body.light-theme .tab-navigation .tab-navigation-btn,
+:root.light-theme .persistent-navigation a,
+body.light-theme .persistent-navigation a {
+    color: #526b5e !important;
+    background: transparent !important;
+}
+
+:root.light-theme .tab-navigation .tab-navigation-btn:hover:not(:disabled),
+:root.light-theme .tab-navigation .tab-navigation-btn:focus-visible,
+body.light-theme .tab-navigation .tab-navigation-btn:hover:not(:disabled),
+body.light-theme .tab-navigation .tab-navigation-btn:focus-visible,
+:root.light-theme .persistent-navigation a:hover,
+:root.light-theme .persistent-navigation a:focus-visible,
+body.light-theme .persistent-navigation a:hover,
+body.light-theme .persistent-navigation a:focus-visible {
+    color: #174b2d !important;
+    background: linear-gradient(145deg, #d4f4df, #bce9cd) !important;
+    border-color: rgba(107, 190, 139, 0.42) !important;
+    box-shadow: 0 5px 14px rgba(77, 148, 102, 0.2) !important;
+}
+
+:root.light-theme .tab-navigation .tab-navigation-btn.active,
+body.light-theme .tab-navigation .tab-navigation-btn.active,
+:root.light-theme .persistent-navigation a.active,
+body.light-theme .persistent-navigation a.active,
+:root.light-theme .persistent-navigation a[aria-current="page"],
+body.light-theme .persistent-navigation a[aria-current="page"] {
+    color: #235b39 !important;
+    background: linear-gradient(145deg, #e0f4df, #bfe6c7) !important;
+    border-color: rgba(116, 177, 129, 0.68) !important;
 }
 
 @media (max-width: 420px) {
+    .tab-navigation,
     .persistent-navigation { min-height: 68px; }
+    .tab-navigation .tab-navigation-btn,
     .persistent-navigation a { min-height: 56px; font-size: 0.68rem; }
+    .tab-navigation .tab-navigation-btn .tab-icon,
     .persistent-navigation .tab-icon { font-size: 1.1rem; }
 }

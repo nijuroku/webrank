@@ -2275,8 +2275,37 @@
         });
     }
 
-    function exportScoreTableXlsx() {
-        if (!window.XLSX) {
+    let xlsxLibraryPromise = null;
+
+    function loadXlsxLibrary() {
+        if (window.XLSX) return Promise.resolve(window.XLSX);
+        if (!xlsxLibraryPromise) {
+            xlsxLibraryPromise = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+                script.async = true;
+                script.onload = () => {
+                    if (window.XLSX) resolve(window.XLSX);
+                    else {
+                        xlsxLibraryPromise = null;
+                        reject(new Error('No se pudo iniciar XLSX.'));
+                    }
+                };
+                script.onerror = () => {
+                    xlsxLibraryPromise = null;
+                    reject(new Error('No se pudo cargar XLSX.'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+        return xlsxLibraryPromise;
+    }
+
+    async function exportScoreTableXlsx() {
+        let XLSX;
+        try {
+            XLSX = await loadXlsxLibrary();
+        } catch {
             alert('La librería XLSX no está cargada. Descargando como CSV...');
             exportScoreTableCSV();
             return;
