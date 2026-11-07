@@ -1,22 +1,21 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
 import BottomNavigation from '../../components/BottomNavigation.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
 import '../../styles/admin.css';
 import '../../styles/navigation.css';
 import '../../styles/loading.css';
 ---
 
 <AppLayout page="admin" title="Administración · LaMafia" description="Administración de LaMafia BEYBLADEX." themeColor="#0b1726">
-<main class="admin-shell">
-        <header class="admin-header">
-            <div>
-                <a class="back-link" href="/">← Volver a LaMafia</a>
-                <h1>Administración</h1>
-                <p>Alias de jugadores y gestión de torneos</p>
-            </div>
+    <SiteHeader>
+        <a slot="leading" class="back-link" href="/">← Inicio</a>
+        <div slot="meta" class="admin-header-context"><strong>Administración</strong><small>Alias y torneos</small></div>
+        <div slot="actions">
             <button id="logoutButton" class="button secondary" type="button" hidden>Cerrar sesión</button>
-        </header>
-
+        </div>
+    </SiteHeader>
+<main class="admin-shell">
         <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
 
         <section id="loginPanel" class="panel login-panel">

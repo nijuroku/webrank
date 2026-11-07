@@ -17,7 +17,7 @@ const usesNavigationSpacing = page !== 'home';
         <meta name="theme-color" content={themeColor}>
         <meta name="description" content={description}>
         <title>{title}</title>
-        {page === 'home' && (
+        {(page === 'home' || page === 'tournament') && (
             <>
                 <link rel="preconnect" href="https://fonts.googleapis.com">
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -1,23 +1,25 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
 import BottomNavigation from '../../components/BottomNavigation.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
 import '../../styles/viewer.css';
 import '../../styles/navigation.css';
 import '../../styles/loading.css';
 ---
 
 <AppLayout page="view" title="Torneo en vivo · LaMafia BEYBLADEX" description="Consulta en vivo las rondas y la tabla de un torneo LaMafia BEYBLADEX." themeColor="#10111c">
-<header class="viewer-header">
-        <a class="brand" href="/" aria-label="Volver a LaMafia"><span class="brand-mark" aria-hidden="true">⚔️</span><span>LaMafia <strong>BEYBLADEX</strong></span></a>
-        <div class="header-actions">
+<SiteHeader>
+        <div slot="meta" class="header-actions">
             <span class="readonly-label">Solo lectura</span>
+        </div>
+        <div slot="actions">
             <button class="theme-mode-toggle" id="themeToggleBtn" type="button" aria-pressed="false"
                 aria-label="Cambiar al modo claro" title="Cambiar al modo claro">
                 <span class="theme-mode-track" aria-hidden="true"><span class="theme-mode-thumb"></span></span>
                 <span class="theme-mode-label">Oscuro</span>
             </button>
         </div>
-    </header>
+</SiteHeader>
 
     <main class="viewer-main">
         <div class="live-status" aria-live="polite">

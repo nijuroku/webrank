@@ -1,0 +1,96 @@
+.site-header {
+    position: sticky;
+    z-index: 1000;
+    top: 0;
+    width: 100%;
+    min-height: 72px;
+    padding: 0.55rem max(1rem, calc((100vw - 1120px) / 2));
+    border-bottom: 1px solid rgba(160, 202, 237, 0.18);
+    background: rgba(13, 28, 46, 0.84);
+    box-shadow: 0 8px 30px rgba(3, 12, 24, 0.2), inset 0 1px rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(22px) saturate(145%);
+    -webkit-backdrop-filter: blur(22px) saturate(145%);
+}
+
+.site-header-content {
+    display: flex;
+    width: min(1120px, 100%);
+    min-height: 60px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem 1rem;
+    margin: 0 auto;
+}
+
+.site-header-leading,
+.site-header-brand,
+.site-header-brand-copy,
+.site-header-actions {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+}
+
+.site-header-leading { gap: 0.75rem; }
+.site-header-brand { gap: 0.7rem; color: #ecf5ff; text-decoration: none; }
+.site-header-logo {
+    display: grid;
+    width: 46px;
+    height: 46px;
+    flex: 0 0 46px;
+    place-items: center;
+    overflow: hidden;
+    border: 2px solid rgba(208, 235, 255, 0.88);
+    border-radius: 13px;
+    background: linear-gradient(145deg, #183a4d, #1a584d);
+    box-shadow: 0 3px 15px rgba(74, 177, 164, 0.22), inset 0 1px rgba(255,255,255,0.32);
+}
+.site-header-logo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.site-header-brand-copy { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
+.site-header-brand-copy strong { color: #91c5ff; font-size: 1.24rem; font-weight: 900; line-height: 1.1; letter-spacing: -0.025em; }
+.site-header-brand-copy small { padding-left: 0.42rem; border-left: 2px solid #7fb6ee; color: #b4c6dc; font-size: 0.7rem; line-height: 1.2; white-space: nowrap; }
+.site-header-meta { display: flex; min-width: 0; align-items: center; justify-content: center; }
+.site-header-actions { justify-content: flex-end; gap: 0.55rem; }
+.site-header-actions > * { flex: 0 0 auto; }
+.site-header .header-stats { flex-wrap: nowrap; }
+.site-header .header-right { flex-wrap: nowrap; }
+.site-header .header-title { display: none; }
+
+:root.light-theme .site-header {
+    border-bottom-color: rgba(255,255,255,0.9);
+    background: rgba(235, 248, 238, 0.86);
+    box-shadow: 0 8px 28px rgba(66, 125, 87, 0.12), inset 0 1px #fff;
+}
+:root.light-theme .site-header-brand-copy strong { color: #347d55; }
+:root.light-theme .site-header-brand-copy small { border-left-color: #69a77a; color: #617a68; }
+:root.light-theme .site-header-logo { border-color: rgba(255,255,255,0.94); box-shadow: 0 3px 15px rgba(74, 126, 85, 0.16), inset 0 1px rgba(255,255,255,0.7); }
+
+body.landing-page,
+body.tournament-page { padding-top: 0 !important; padding-left: 0 !important; }
+
+@media (max-width: 760px) {
+    .site-header { min-height: 66px; padding: 0.45rem 0.7rem; }
+    .site-header-content { min-height: 56px; flex-wrap: wrap; gap: 0.5rem; }
+    .site-header-leading { gap: 0.45rem; }
+    .site-header-logo { width: 40px; height: 40px; flex-basis: 40px; border-radius: 11px; }
+    .site-header-brand { gap: 0.55rem; }
+    .site-header-brand-copy strong { font-size: 1.08rem; }
+    .site-header-brand-copy small { font-size: 0.61rem; }
+    .site-header-actions { gap: 0.35rem; }
+    .site-header .header-stats { gap: 0.3rem; }
+    .site-header .header-stats > span { padding: 0.2rem 0.45rem; font-size: 0.68rem; }
+    .site-header .storage-status { padding: 0.2rem 0.5rem; font-size: 0.62rem; }
+    .site-header-meta { flex: 1 0 100%; justify-content: center; order: 3; }
+}
+
+@media (max-width: 560px) {
+    .site-header-content { justify-content: center; gap: 0.4rem; padding: 0.1rem 0; }
+    .site-header-leading { flex: 1 0 100%; justify-content: center; }
+    .site-header-actions { flex: 1 0 100%; justify-content: center; flex-wrap: wrap; }
+    .site-header .header-right { justify-content: center; flex-wrap: wrap; }
+    .site-header-brand-copy small { white-space: normal; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .site-header, .site-header * { scroll-behavior: auto !important; }
+}

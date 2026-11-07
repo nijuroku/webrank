@@ -10,7 +10,7 @@ body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bott
     bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
     left: 50% !important;
     display: flex;
-    width: min(520px, calc(100% - 20px)) !important;
+    width: min(620px, calc(100% - 16px)) !important;
     min-height: 76px;
     align-items: stretch;
     justify-content: space-around;
@@ -124,9 +124,9 @@ body.light-theme .persistent-navigation a[aria-current="page"] {
 
 @media (max-width: 420px) {
     .tab-navigation,
-    .persistent-navigation { min-height: 68px; }
+    .persistent-navigation { min-height: 72px; gap: 0.12rem; padding: 0.3rem; }
     .tab-navigation .tab-navigation-btn,
-    .persistent-navigation a { min-height: 56px; font-size: 0.68rem; }
+    .persistent-navigation a { min-height: 60px; padding-right: 0.12rem; padding-left: 0.12rem; font-size: 0.62rem; }
     .tab-navigation .tab-navigation-btn .tab-icon,
     .persistent-navigation .tab-icon { font-size: 1.1rem; }
 }
