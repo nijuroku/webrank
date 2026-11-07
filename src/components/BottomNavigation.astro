@@ -1,0 +1,37 @@
+---
+const { page = 'home', active = 'participants' } = Astro.props;
+const isHome = page === 'home';
+const items = [
+    { key: 'participants', label: 'Participantes', icon: '👥', href: '/?tab=participants' },
+    { key: 'matches', label: 'VS', icon: '⚔️', href: '/?tab=matches' },
+    { key: 'table', label: 'Tabla', icon: '📊', href: '/?tab=table' },
+    { key: 'profile', label: 'Perfil', icon: '👤', href: '/p/' }
+];
+
+if (page === 'view') {
+    items[1].href = '#matchesSection';
+    items[2].href = '#standingsSection';
+}
+---
+
+<nav class={isHome ? 'tab-navigation' : 'persistent-navigation'} aria-label="Navegación principal">
+    {items.map((item) => {
+        const selected = active === item.key;
+        const className = isHome
+            ? `tab-navigation-btn${selected ? ' active' : ''}${item.key === 'profile' ? ' profile-navigation-btn' : ''}`
+            : selected ? 'active' : '';
+        const current = selected ? (page === 'view' ? 'location' : 'page') : undefined;
+
+        return isHome && item.key !== 'profile' ? (
+            <button class={className} data-tab={item.key} type="button" title={item.label} aria-selected={selected}>
+                <span class="tab-icon" aria-hidden="true">{item.icon}</span>
+                <span class="tab-label">{item.label}</span>
+            </button>
+        ) : (
+            <a class={className} href={item.href} title={item.label} aria-current={current}>
+                <span class="tab-icon" aria-hidden="true">{item.icon}</span>
+                <span class={isHome ? 'tab-label' : undefined}>{item.label}</span>
+            </a>
+        );
+    })}
+</nav>

@@ -1,23 +1,13 @@
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#10111c">
-    <meta name="description" content="Consulta en vivo las rondas y la tabla de un torneo LaMafia BEYBLADEX.">
-    <title>Torneo en vivo · LaMafia BEYBLADEX</title>
-    <script>
-        try {
-            document.documentElement.classList.toggle('light-theme', localStorage.getItem('beybladex_theme') === 'light');
-        } catch { /* El tema oscuro es el predeterminado si el almacenamiento no está disponible. */ }
-    </script>
-    <link rel="stylesheet" href="/view/viewer.css">
-    <link rel="stylesheet" href="/navigation.css">
-    <link rel="stylesheet" href="/loading.css">
-    <script type="module" src="/view/viewer.js"></script>
-</head>
-<body class="persistent-nav-page">
-    <header class="viewer-header">
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import BottomNavigation from '../../components/BottomNavigation.astro';
+import '../../styles/viewer.css';
+import '../../styles/navigation.css';
+import '../../styles/loading.css';
+---
+
+<AppLayout page="view" title="Torneo en vivo · LaMafia BEYBLADEX" description="Consulta en vivo las rondas y la tabla de un torneo LaMafia BEYBLADEX." themeColor="#10111c">
+<header class="viewer-header">
         <a class="brand" href="/" aria-label="Volver a LaMafia"><span class="brand-mark" aria-hidden="true">⚔️</span><span>LaMafia <strong>BEYBLADEX</strong></span></a>
         <div class="header-actions">
             <span class="readonly-label">Solo lectura</span>
@@ -98,11 +88,8 @@
         </div>
     </main>
     <footer>LaMafia BEYBLADEX · Torneo compartido en vivo</footer>
-    <nav class="persistent-navigation" aria-label="Navegación principal">
-        <a href="/?tab=participants" title="Participantes"><span class="tab-icon" aria-hidden="true">👥</span><span>Participantes</span></a>
-        <a class="active" href="#matchesSection" aria-current="location" title="Enfrentamientos"><span class="tab-icon" aria-hidden="true">⚔️</span><span>VS</span></a>
-        <a href="#standingsSection" title="Tabla de puntuación"><span class="tab-icon" aria-hidden="true">📊</span><span>Tabla</span></a>
-        <a href="/p/" title="Perfil"><span class="tab-icon" aria-hidden="true">👤</span><span>Perfil</span></a>
-    </nav>
-</body>
-</html>
+    <BottomNavigation slot="navigation" page="view" active="matches" />
+    <script>
+        import '../../scripts/viewer.js';
+    </script>
+</AppLayout>
