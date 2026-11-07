@@ -3,6 +3,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 import BottomNavigation from './BottomNavigation.astro';
 import SiteHeader from './SiteHeader.astro';
 import '../styles/style.css';
+import '../styles/participants.css';
 import '../styles/navigation.css';
 import '../styles/loading.css';
 
@@ -43,32 +44,33 @@ const { activeTab = 'participants' } = Astro.props;
                         type="button" aria-expanded="true" aria-controls="participantCard">
                         ▲ Ocultar participantes
                     </button>
-                    <div class="tournament-actions">
-                        <button class="btn btn-sm btn-outline" id="createTournamentBtn" title="Crear nuevo torneo">
-                            🏗️ Crear torneo
+                    <div class="tournament-actions participant-action-grid" aria-label="Acciones de torneo">
+                        <button class="participant-action-tile action-create" id="createTournamentBtn" title="Crear nuevo torneo" type="button">
+                            <span class="participant-action-icon" aria-hidden="true">🏗️</span>
+                            <span>Crear torneo</span>
                         </button>
-                        <button class="btn btn-sm btn-outline" id="listTournamentsBtn"
-                            style="border-color: rgba(0, 212, 255, 0.15); color: #00D4FF;">
-                            📋 Mis Torneos
+                        <button class="participant-action-tile action-list" id="listTournamentsBtn" type="button">
+                            <span class="participant-action-icon" aria-hidden="true">📋</span>
+                            <span>Mis torneos</span>
                         </button>
-                        <button class="btn btn-sm btn-outline" id="loadUrlBtn"
-                            style="border-color: rgba(255, 136, 0, 0.15); color: #FF8800;">
-                            📂 Cargar desde URL
+                        <button class="participant-action-tile action-load" id="loadUrlBtn" type="button">
+                            <span class="participant-action-icon" aria-hidden="true">📂</span>
+                            <span>Cargar desde URL</span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            <div class="input-group">
-                <label for="newParticipantInput" class="titulo-moderno">👤 Participante</label>
+            <div class="input-group participant-input-group">
                 <div class="player-name-autocomplete">
-                    <input type="text" id="newParticipantInput" placeholder="Uno o varios nombres, separados por comas"
+                    <input type="text" id="newParticipantInput" placeholder="Participantes" aria-label="Participantes"
                         autocomplete="off" aria-autocomplete="list" aria-controls="playerSuggestions"
                         aria-expanded="false" />
                     <div id="playerSuggestions" class="player-suggestions" role="listbox"
                         aria-label="Jugadores guardados" hidden></div>
                 </div>
-                <button class="btn btn-primary" id="addParticipantBtn">➕ Agregar</button>
+                <button class="btn btn-primary add-participant-button" id="addParticipantBtn" type="button" aria-label="Agregar participantes" title="Agregar participantes">➕</button>
+                <small class="participant-input-hint">Separa los nombres por comas.</small>
             </div>
 
             <div class="participant-controls">
