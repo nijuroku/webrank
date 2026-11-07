@@ -77,7 +77,8 @@ body.persistent-nav-page { padding-bottom: calc(108px + env(safe-area-inset-bott
     box-shadow: 0 5px 15px rgba(3, 11, 23, 0.28) !important;
 }
 
-.persistent-navigation button:disabled { opacity: 0.44; cursor: not-allowed; }
+.persistent-navigation button:disabled,
+.persistent-navigation a[aria-disabled="true"] { opacity: 0.44; cursor: not-allowed; }
 
 :root.light-theme .persistent-navigation,
 body.light-theme .persistent-navigation {

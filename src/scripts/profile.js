@@ -446,6 +446,39 @@ async function loadRegisteredPlayerNames(config) {
     }
 }
 
+async function loadFinishedTournamentPlayerNames(config) {
+    const names = [];
+    const pageSize = 1000;
+    const columns = 'participants,standings,winner,podium';
+    for (let offset = 0; ; offset += pageSize) {
+        const params = new URLSearchParams({ select: columns, order: 'finished_at.desc' });
+        const response = await fetch(`${config.url}${tournamentsEndpoint}?${params}`, {
+            headers: {
+                apikey: config.anonKey,
+                Authorization: `Bearer ${config.anonKey}`,
+                Range: `${offset}-${offset + pageSize - 1}`
+            }
+        });
+        if (!response.ok) throw new Error('No se pudieron cargar los jugadores de los torneos finalizados.');
+        const tournaments = await response.json();
+        if (!Array.isArray(tournaments)) break;
+        tournaments.forEach(tournament => {
+            const addName = value => {
+                const name = typeof value === 'string' ? value : value?.name;
+                if (typeof name === 'string' && name.trim()) names.push(name.trim());
+            };
+            (Array.isArray(tournament.participants) ? tournament.participants : []).forEach(addName);
+            (Array.isArray(tournament.standings) ? tournament.standings : []).forEach(addName);
+            addName(tournament.winner);
+            if (tournament.podium && typeof tournament.podium === 'object') {
+                Object.values(tournament.podium).forEach(addName);
+            }
+        });
+        if (tournaments.length < pageSize) break;
+    }
+    return names;
+}
+
 async function loadPlayerAliases(config) {
     const params = new URLSearchParams({
         select: 'alias_key,alias_name,canonical_key,canonical_name',
@@ -544,7 +577,7 @@ function renderDirectoryResults() {
 }
 
 async function loadProfileDirectory(config) {
-    const [playerRows, aliases] = await Promise.all([
+    const [playerRows, aliases, tournamentPlayerNames] = await Promise.all([
         (async () => {
             const rows = [];
             const pageSize = 1000;
@@ -557,10 +590,11 @@ async function loadProfileDirectory(config) {
             }
             return rows;
         })(),
-        loadPlayerAliases(config)
+        loadPlayerAliases(config),
+        loadFinishedTournamentPlayerNames(config)
     ]);
     directoryPlayers = buildDirectoryPlayers(
-        playerRows.map(row => row.name),
+        [...playerRows.map(row => row.name), ...tournamentPlayerNames],
         aliases
     );
     profileDirectoryLoading.hidden = true;

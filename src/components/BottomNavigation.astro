@@ -3,9 +3,9 @@ const { page = 'landing', active = 'home' } = Astro.props;
 const isTournament = page === 'tournament';
 const items = [
     { key: 'home', label: 'Inicio', icon: '🏠', href: '/' },
-    { key: 'participants', label: 'Participantes', icon: '👥', href: '/app/?tab=participants' },
-    { key: 'matches', label: 'VS', icon: '⚔️', href: '/app/?tab=matches' },
-    { key: 'table', label: 'Tabla', icon: '📊', href: '/app/?tab=table' },
+    { key: 'participants', label: 'Participantes', icon: '👥', href: '/app/participants/' },
+    { key: 'matches', label: 'VS', icon: '⚔️', href: '/app/vs/' },
+    { key: 'table', label: 'Tabla', icon: '📊', href: '/app/table/' },
     { key: 'profile', label: 'Perfil', icon: '👤', href: '/p/' }
 ];
 
@@ -23,13 +23,8 @@ if (page === 'view') {
             : selected ? 'active' : '';
         const current = selected ? (page === 'view' ? 'location' : 'page') : undefined;
 
-        return isTournament && !['home', 'profile'].includes(item.key) ? (
-            <button class={className} data-tab={item.key} type="button" title={item.label} aria-selected={selected}>
-                <span class="tab-icon" aria-hidden="true">{item.icon}</span>
-                <span>{item.label}</span>
-            </button>
-        ) : (
-            <a class={className} href={item.href} title={item.label} aria-current={current}>
+        return (
+            <a class={className} href={item.href} title={item.label} aria-current={current} data-tab={isTournament && !['home', 'profile'].includes(item.key) ? item.key : undefined}>
                 <span class="tab-icon" aria-hidden="true">{item.icon}</span>
                 <span>{item.label}</span>
             </a>

@@ -166,8 +166,10 @@
     let currentPhaseView = 'groups';
     let selectedRound = 'all';
     let selectedPlayerFilterId = null;
-    let activeTab = 'participants';
-    const requestedNavigationTab = new URLSearchParams(window.location.search).get('tab');
+    const routeSegment = window.location.pathname.match(/^\/app\/(participants|vs|table)\/?$/)?.[1];
+    const routeTab = routeSegment === 'vs' ? 'matches' : routeSegment;
+    const requestedNavigationTab = routeTab || new URLSearchParams(window.location.search).get('tab');
+    let activeTab = requestedNavigationTab || 'participants';
     let supabaseConfig = null;
     let supabaseInitialization = null;
     let supabaseAuthClient = null;
@@ -219,7 +221,8 @@
         tabNavigationButtons.forEach(button => {
             const isActive = button.dataset.tab === tabName;
             button.classList.toggle('active', isActive);
-            button.setAttribute('aria-selected', String(isActive));
+            if (isActive) button.setAttribute('aria-current', 'page');
+            else button.removeAttribute('aria-current');
         });
         tabPanels.forEach(panel => {
             const isActive = panel.dataset.tabPanel === tabName;
@@ -237,7 +240,9 @@
 
     function updateTabAvailability() {
         tabNavigationButtons.forEach(button => {
-            button.disabled = button.dataset.tab !== 'participants' && button.dataset.tab !== 'table' && !tournamentVisible;
+            const unavailable = button.dataset.tab !== 'participants' && button.dataset.tab !== 'table' && !tournamentVisible;
+            button.setAttribute('aria-disabled', String(unavailable));
+            button.tabIndex = unavailable ? -1 : 0;
         });
         if (!tournamentVisible && activeTab !== 'participants' && activeTab !== 'table') {
             activateTab('participants');
@@ -3080,6 +3085,7 @@
 
         renderAll();
         saveToLocalStorage();
+        window.location.assign('/app/vs/');
     }
 
     function editTournamentName() {
@@ -3128,6 +3134,7 @@
         renderAll();
         saveToLocalStorage();
         alert('✅ Torneo reiniciado. Los participantes se mantienen.');
+        window.location.assign('/app/participants/');
     }
     // ============================================================
     // 14. FUNCIONES DE LISTA DE TORNEOS
@@ -3421,6 +3428,11 @@
                 renderAll();
             }
 
+            if ((routeTab || requestedNavigationTab) === 'matches' && !tournamentVisible) {
+                window.location.replace('/app/participants/');
+                return;
+            }
+
             if (tournamentVisible) setParticipantsCollapsed(true);
             if (['participants', 'matches', 'table'].includes(requestedNavigationTab)) {
                 activateTab(requestedNavigationTab);
@@ -3537,17 +3549,6 @@
     });
 
     // --- Participantes ---
-    tabNavigationButtons.forEach(button => {
-        button.addEventListener('click', function () {
-            if (this.dataset.tab !== 'table' && activeSavedScoreTable) {
-                activeSavedScoreTable = null;
-                if (savedScoreTableSelect) savedScoreTableSelect.value = '';
-                renderTotalScoreTable();
-            }
-            activateTab(this.dataset.tab, true);
-        });
-    });
-
     savedScoreTableSelect?.addEventListener('change', function () {
         loadSavedScoreTableById(this.value);
     });
