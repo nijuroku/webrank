@@ -1,0 +1,23 @@
+---
+import '../styles/site-header.css';
+
+const { brandHref = '/' } = Astro.props;
+const hasMeta = Astro.slots.has('meta');
+---
+
+<header class="site-header">
+    <div class="site-header-content">
+        <div class="site-header-leading">
+            <slot name="leading" />
+            <a class="site-header-brand" href={brandHref} aria-label="LaMafia BEYBLADEX, inicio">
+                <span class="site-header-logo"><img src="https://iili.io/C4uBqCX.jpg" alt=""></span>
+                <span class="site-header-brand-copy">
+                    <strong>LaMafia</strong>
+                    <small>Fase 1: grupos · Fase 2: eliminatorias</small>
+                </span>
+            </a>
+        </div>
+        {hasMeta && <div class="site-header-meta"><slot name="meta" /></div>}
+        <div class="site-header-actions"><slot name="actions" /></div>
+    </div>
+</header>

@@ -1,0 +1,165 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import BottomNavigation from '../components/BottomNavigation.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import '../styles/style.css';
+import '../styles/navigation.css';
+
+const features = [
+    { icon: '⚔️', title: 'Torneos', text: 'Organiza enfrentamientos, rondas y eliminatorias en un solo lugar.', href: '/app/?tab=participants', action: 'Abrir torneos' },
+    { icon: '📊', title: 'Resultados', text: 'Consulta las puntuaciones y el avance de cada competición.', href: '/app/?tab=table', action: 'Ver tabla' },
+    { icon: '👤', title: 'Perfiles', text: 'Revisa el historial de partidas y torneos de cada jugador.', href: '/p/', action: 'Explorar perfiles' }
+];
+---
+
+<AppLayout page="landing" bodyClass="landing-page" title="LaMafia BEYBLADEX" description="La comunidad y herramienta de torneos LaMafia BEYBLADEX." themeColor="#101a2a">
+    <SiteHeader>
+        <div slot="actions">
+        <button class="theme-mode-toggle landing-theme-toggle" id="landingThemeToggle" type="button" aria-pressed="false" aria-label="Cambiar al modo claro" title="Cambiar al modo claro">
+            <span class="theme-mode-track" aria-hidden="true"><span class="theme-mode-thumb"></span></span>
+            <span class="theme-mode-label">Oscuro</span>
+        </button>
+        </div>
+    </SiteHeader>
+
+    <main class="landing-main">
+        <section class="landing-hero" aria-labelledby="landingTitle">
+            <div class="landing-hero-copy">
+                <p class="landing-eyebrow"><span></span> Comunidad BeybladeX</p>
+                <h1 id="landingTitle">LaMafia <span>BEYBLADEX</span></h1>
+                <p class="landing-intro">Un espacio para organizar torneos, seguir resultados y conocer el recorrido de cada jugador.</p>
+                <div class="landing-actions">
+                    <a class="landing-primary-action" href="/app/?tab=participants">Entrar a los torneos <span aria-hidden="true">→</span></a>
+                    <a class="landing-secondary-action" href="/p/">Ver perfiles</a>
+                </div>
+            </div>
+            <div class="landing-orbit-art" aria-hidden="true">
+                <span class="landing-orbit landing-orbit-one"></span>
+                <span class="landing-orbit landing-orbit-two"></span>
+                <span class="landing-orbit-core">⚔️</span>
+                <span class="landing-orbit-dot landing-orbit-dot-one"></span>
+                <span class="landing-orbit-dot landing-orbit-dot-two"></span>
+            </div>
+        </section>
+
+        <section class="landing-features" aria-label="Secciones de LaMafia">
+            {features.map((feature) => (
+                <article class="landing-feature-card">
+                    <span class="landing-feature-icon" aria-hidden="true">{feature.icon}</span>
+                    <div>
+                        <h2>{feature.title}</h2>
+                        <p>{feature.text}</p>
+                        <a href={feature.href}>{feature.action} <span aria-hidden="true">↗</span></a>
+                    </div>
+                </article>
+            ))}
+        </section>
+
+        <footer class="landing-footer">LaMafia BEYBLADEX · Torneos y comunidad</footer>
+    </main>
+
+    <BottomNavigation slot="navigation" page="landing" active="home" />
+    <script is:inline>
+        const legacyTab = new URLSearchParams(window.location.search).get('tab');
+        if (['participants', 'matches', 'table'].includes(legacyTab)) {
+            window.location.replace(`/app/?tab=${encodeURIComponent(legacyTab)}`);
+        }
+
+        const toggle = document.getElementById('landingThemeToggle');
+        const themeLabel = toggle?.querySelector('.theme-mode-label');
+        const setLandingTheme = (theme) => {
+            const isLight = theme === 'light';
+            document.body.classList.toggle('light-theme', isLight);
+            if (toggle) {
+                toggle.setAttribute('aria-pressed', String(isLight));
+                toggle.setAttribute('aria-label', isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro');
+                toggle.title = isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro';
+            }
+            if (themeLabel) themeLabel.textContent = isLight ? 'Claro' : 'Oscuro';
+        };
+        setLandingTheme(localStorage.getItem('beybladex_theme') || 'dark');
+        toggle?.addEventListener('click', () => {
+            const nextTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
+            localStorage.setItem('beybladex_theme', nextTheme);
+            setLandingTheme(nextTheme);
+        });
+    </script>
+
+    <style>
+        :global(body.landing-page) {
+            min-height: 100vh;
+            padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+            background:
+                radial-gradient(ellipse at 78% 18%, rgba(0, 212, 255, 0.13), transparent 35%),
+                radial-gradient(ellipse at 16% 55%, rgba(33, 116, 157, 0.17), transparent 43%),
+                linear-gradient(155deg, #0c1727 0%, #152b46 54%, #101a2a 100%);
+            color: #e8f2ff;
+        }
+
+        .landing-theme-toggle { min-height: 42px; padding: 0.35rem 0.8rem; }
+        .landing-main { width: min(1120px, calc(100% - 36px)); margin: 0 auto; }
+        .landing-hero {
+            position: relative;
+            display: flex;
+            min-height: 410px;
+            align-items: center;
+            overflow: hidden;
+            margin-top: 30px;
+            padding: clamp(2rem, 6vw, 4.6rem);
+            border: 1px solid rgba(170, 206, 243, 0.22);
+            border-radius: 30px;
+            background: linear-gradient(115deg, rgba(30, 55, 83, 0.88), rgba(24, 48, 74, 0.62) 60%, rgba(22, 75, 91, 0.48));
+            box-shadow: 0 24px 70px rgba(2, 9, 19, 0.25), inset 0 1px rgba(255,255,255,0.13);
+            backdrop-filter: blur(22px);
+        }
+        .landing-hero-copy { position: relative; z-index: 2; max-width: 630px; }
+        .landing-eyebrow { display: flex; align-items: center; gap: 0.55rem; margin: 0 0 1rem; color: #a7c7e8; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+        .landing-eyebrow span { width: 8px; height: 8px; border-radius: 50%; background: #64e4b4; box-shadow: 0 0 14px rgba(100,228,180,0.75); }
+        .landing-hero h1 { margin: 0; color: #f0f7ff; font-size: clamp(2.4rem, 6.5vw, 5rem); font-weight: 950; letter-spacing: -0.055em; line-height: 0.98; }
+        .landing-hero h1 span { display: block; margin-top: 0.38rem; color: #8fc5ff; font-size: 0.58em; letter-spacing: 0.07em; }
+        .landing-intro { max-width: 520px; margin: 1.35rem 0 1.7rem; color: #bfd0e3; font-size: clamp(1rem, 2vw, 1.16rem); line-height: 1.65; }
+        .landing-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+        .landing-primary-action, .landing-secondary-action { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 0.7rem; padding: 0.75rem 1.15rem; border-radius: 15px; font-weight: 850; text-decoration: none; transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease; }
+        .landing-primary-action { color: #102941; background: linear-gradient(140deg, #c7e6ff, #81bdf0); box-shadow: 0 8px 24px rgba(78, 157, 219, 0.22), inset 0 1px rgba(255,255,255,0.8); }
+        .landing-secondary-action { color: #d4e7f9; border: 1px solid rgba(174, 207, 239, 0.24); background: rgba(13, 28, 45, 0.35); }
+        .landing-primary-action:hover, .landing-secondary-action:hover { transform: translateY(-2px); }
+        .landing-orbit-art { position: absolute; top: 50%; right: 7%; width: min(34vw, 330px); aspect-ratio: 1; transform: translateY(-50%); opacity: 0.8; }
+        .landing-orbit { position: absolute; inset: 8%; border: 1px solid rgba(161, 208, 245, 0.25); border-radius: 50%; transform: rotate(-28deg) scaleY(0.42); box-shadow: 0 0 28px rgba(97, 183, 231, 0.08); }
+        .landing-orbit-two { inset: 18%; transform: rotate(58deg) scaleY(0.56); border-color: rgba(101, 227, 191, 0.27); }
+        .landing-orbit-core { position: absolute; top: 50%; left: 50%; display: grid; width: 108px; height: 108px; place-items: center; transform: translate(-50%, -50%); border: 1px solid rgba(206, 234, 255, 0.5); border-radius: 34px; background: linear-gradient(145deg, rgba(185, 225, 255, 0.22), rgba(54, 107, 145, 0.2)); box-shadow: 0 0 55px rgba(96, 194, 222, 0.24), inset 0 1px rgba(255,255,255,0.38); font-size: 2.8rem; backdrop-filter: blur(12px); }
+        .landing-orbit-dot { position: absolute; width: 13px; height: 13px; border: 2px solid rgba(210, 241, 255, 0.8); border-radius: 50%; background: #69d9c1; box-shadow: 0 0 20px #59d5c0; }
+        .landing-orbit-dot-one { top: 19%; right: 21%; }
+        .landing-orbit-dot-two { bottom: 17%; left: 19%; width: 8px; height: 8px; background: #8fc5ff; }
+        .landing-features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem; }
+        .landing-feature-card { display: flex; gap: 1rem; min-height: 160px; padding: 1.25rem; border: 1px solid rgba(169, 206, 243, 0.17); border-radius: 22px; background: rgba(27, 49, 74, 0.62); box-shadow: inset 0 1px rgba(255,255,255,0.08); backdrop-filter: blur(16px); }
+        .landing-feature-icon { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; border: 1px solid rgba(168, 208, 245, 0.2); border-radius: 15px; background: rgba(123, 180, 224, 0.12); font-size: 1.2rem; }
+        .landing-feature-card h2 { margin: 0 0 0.45rem; color: #edf6ff; font-size: 1.04rem; }
+        .landing-feature-card p { min-height: 2.7em; margin: 0 0 0.7rem; color: #adbed2; font-size: 0.88rem; line-height: 1.5; }
+        .landing-feature-card a { color: #8fc5ff; font-size: 0.84rem; font-weight: 800; text-decoration: none; }
+        .landing-feature-card a:hover { color: #b8e2ff; }
+        .landing-footer { padding: 2.4rem 0 1rem; color: #859bb3; font-size: 0.8rem; text-align: center; }
+        :global(body.light-theme.landing-page) { color: #254333; background: radial-gradient(ellipse at 75% 15%, rgba(88, 196, 165, 0.25), transparent 38%), linear-gradient(155deg, #eaf7ef, #d7eee2 55%, #e4f2ec); }
+        :global(body.light-theme .landing-feature-card a) { color: #28774f; }
+        :global(body.light-theme .landing-hero) { border-color: rgba(255,255,255,0.88); background: linear-gradient(115deg, rgba(248, 255, 249, 0.82), rgba(220, 244, 229, 0.76) 62%, rgba(177, 224, 205, 0.56)); box-shadow: 0 24px 70px rgba(60, 127, 94, 0.13), inset 0 1px #fff; }
+        :global(body.light-theme .landing-eyebrow), :global(body.light-theme .landing-intro), :global(body.light-theme .landing-feature-card p) { color: #587666; }
+        :global(body.light-theme .landing-hero h1), :global(body.light-theme .landing-feature-card h2) { color: #294b3a; }
+        :global(body.light-theme .landing-hero h1 span) { color: #348b68; }
+        :global(body.light-theme .landing-secondary-action) { color: #315d49; border-color: rgba(74, 153, 111, 0.28); background: rgba(255,255,255,0.48); }
+        :global(body.light-theme .landing-feature-card) { border-color: rgba(255,255,255,0.88); background: rgba(250,255,251,0.58); box-shadow: 0 12px 30px rgba(77, 141, 106, 0.08), inset 0 1px #fff; }
+        :global(body.light-theme .landing-feature-icon) { border-color: rgba(90, 171, 123, 0.24); background: rgba(152, 220, 175, 0.2); }
+        :global(body.light-theme .landing-footer) { color: #658574; }
+        @media (max-width: 760px) {
+            .landing-main { width: min(100% - 24px, 1120px); }
+            .landing-hero { min-height: 370px; margin-top: 16px; padding: 2rem 1.35rem; border-radius: 25px; }
+            .landing-hero-copy { max-width: 100%; }
+            .landing-orbit-art { top: auto; right: -12%; bottom: -29%; width: 230px; transform: none; opacity: 0.32; }
+            .landing-features { grid-template-columns: 1fr; gap: 0.7rem; margin-top: 0.75rem; }
+            .landing-feature-card { min-height: 0; padding: 1rem; }
+            .landing-feature-card p { min-height: 0; }
+            .landing-footer { padding-bottom: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .landing-primary-action, .landing-secondary-action { transition: none; }
+        }
+    </style>
+</AppLayout>

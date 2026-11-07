@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from '@supabase/supabase-js';
 
 const shareId = new URLSearchParams(window.location.search).get('id');
 const loadingState = document.getElementById('loadingState');

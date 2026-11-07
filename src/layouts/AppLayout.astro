@@ -1,0 +1,52 @@
+---
+const {
+    title = 'LaMafia BEYBLADEX',
+    description = 'Gestión de torneos LaMafia BEYBLADEX.',
+    themeColor = '#101a2a',
+    page = 'home',
+    bodyClass = ''
+} = Astro.props;
+const usesNavigationSpacing = page !== 'home';
+---
+
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content={themeColor}>
+        <meta name="description" content={description}>
+        <title>{title}</title>
+        {(page === 'home' || page === 'tournament') && (
+            <>
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link
+                    rel="stylesheet"
+                    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap"
+                    media="print"
+                    onload="this.onload=null;this.media='all'"
+                >
+                <noscript>
+                    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap">
+                </noscript>
+            </>
+        )}
+        {page !== 'admin' && (
+            <script is:inline>
+                try {
+                    if (localStorage.getItem('beybladex_theme') === 'light') {
+                        document.documentElement.classList.add('light-theme');
+                        document.addEventListener('DOMContentLoaded', () => document.body?.classList.add('light-theme'), { once: true });
+                    }
+                } catch { /* El tema oscuro es el predeterminado si el almacenamiento no está disponible. */ }
+            </script>
+        )}
+        <slot name="head" />
+    </head>
+    <body class={`${bodyClass} ${usesNavigationSpacing ? 'persistent-nav-page' : ''}`.trim()}>
+        <slot />
+        <slot name="navigation" />
+        <slot name="scripts" />
+    </body>
+</html>

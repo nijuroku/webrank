@@ -1,37 +1,15 @@
-<!DOCTYPE html>
-<html lang="es">
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import BottomNavigation from '../../components/BottomNavigation.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import '../../styles/style.css';
+import '../../styles/navigation.css';
+import '../../styles/loading.css';
+---
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LaMafia</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap"
-        media="print" onload="this.onload=null;this.media='all'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap"></noscript>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="/navigation.css">
-    <link rel="stylesheet" href="/loading.css">
-</head>
-
-<body>
-
-    <!-- HEADER STICKY -->
-    <header class="header-sticky">
-        <div class="header-left">
-            <div class="header-logo">
-                <a href="https://www.instagram.com/la_mafia_beyblade/" target="_blank">
-                    <img src="https://iili.io/C4uBqCX.jpg" alt="LaMafia BEYBLADEX">
-                </a>
-            </div>
-            <div class="header-title">
-                <h1> <span id="siteTitle" class="titulo-futurista">LaMafia</span></h1>
-                <div class="subhead">Fase 1: grupos · Fase 2: eliminatorias</div>
-            </div>
-        </div>
-        <div class="header-right">
+<AppLayout page="tournament" bodyClass="tournament-page" title="LaMafia · Torneos" description="Gestión de torneos LaMafia BEYBLADEX." themeColor="#101a2a">
+    <SiteHeader>
+        <div slot="actions" class="header-right">
             <div class="header-stats">
                 <span>👥 <strong id="headerParticipants">0</strong></span>
                 <span>⚔️ <strong id="headerMatches">0</strong></span>
@@ -45,22 +23,7 @@
                 <span class="theme-mode-label">Oscuro</span>
             </button>
         </div>
-    </header>
-
-    <nav class="tab-navigation" aria-label="Secciones del torneo">
-        <button class="tab-navigation-btn active" data-tab="participants" type="button" title="Participantes">
-            <span class="tab-icon" aria-hidden="true">👥</span><span class="tab-label">Participantes</span>
-        </button>
-        <button class="tab-navigation-btn" data-tab="matches" type="button" title="Enfrentamientos">
-            <span class="tab-icon" aria-hidden="true">⚔️</span><span class="tab-label">VS</span>
-        </button>
-        <button class="tab-navigation-btn" data-tab="table" type="button" title="Tabla de puntuación">
-            <span class="tab-icon" aria-hidden="true">📊</span><span class="tab-label">Tabla</span>
-        </button>
-        <a class="tab-navigation-btn profile-navigation-btn" href="/p/" title="Perfil, iniciar sesión o registrarse" aria-label="Perfil, iniciar sesión o registrarse">
-            <span class="tab-icon" aria-hidden="true">👤</span><span class="tab-label">Perfil</span>
-        </a>
-    </nav>
+    </SiteHeader>
 
     <!-- CONTENIDO PRINCIPAL -->
     <div class="app-container">
@@ -444,8 +407,8 @@
             <div class="modal-body" id="playerHistoryContent"></div>
         </div>
     </div>
-
-    <script src="script.js"></script>
-</body>
-
-</html>
+    <BottomNavigation slot="navigation" page="tournament" active="participants" />
+    <script>
+        import '../../scripts/main.js';
+    </script>
+</AppLayout>

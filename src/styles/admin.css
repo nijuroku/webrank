@@ -25,6 +25,11 @@ button { cursor: pointer; }
 .admin-header, .section-heading, .list-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .admin-header { margin-bottom: 24px; }
 .back-link { color: #a8c9e8; text-decoration: none; font-size: .9rem; }
+.admin-header-context { display: grid; gap: 2px; color: #e5edf8; }
+.admin-header-context strong { font-size: 1rem; }
+.admin-header-context small { color: #a7bad4; font-size: .72rem; }
+:root.light-theme .admin-header-context { color: #2e4438; }
+:root.light-theme .admin-header-context small { color: #587064; }
 h1 { margin: 8px 0 2px; font-size: clamp(1.8rem, 6vw, 2.6rem); }
 h2 { margin: 0; font-size: 1.2rem; }
 p { margin: 6px 0 0; color: #a8b9cc; line-height: 1.5; }
