@@ -126,3 +126,32 @@ body.light-theme .persistent-navigation a[aria-current="page"] {
     .persistent-navigation button { min-height: 60px; padding-right: 0.12rem; padding-left: 0.12rem; font-size: 0.62rem; }
     .persistent-navigation .tab-icon { font-size: 1.1rem; }
 }
+
+@media (max-width: 560px) {
+    body.tournament-page.persistent-nav-page { padding-bottom: calc(116px + env(safe-area-inset-bottom, 0px)); }
+    .tournament-page .persistent-navigation {
+        bottom: max(14px, env(safe-area-inset-bottom, 0px)) !important;
+        width: min(560px, calc(100% - 20px)) !important;
+        min-height: 68px;
+        gap: 0.08rem;
+        padding: 0.28rem;
+        border-radius: 20px;
+    }
+    .tournament-page .persistent-navigation a,
+    .tournament-page .persistent-navigation button {
+        min-height: 56px;
+        gap: 0.16rem;
+        padding: 0.25rem 0.04rem;
+        border-radius: 15px;
+        font-size: 0.55rem;
+        white-space: nowrap;
+    }
+    .tournament-page .persistent-navigation .tab-icon { font-size: 1.05rem; }
+}
+
+@media (max-width: 380px) {
+    .tournament-page .persistent-navigation { width: calc(100% - 16px) !important; gap: 0.04rem; }
+    .tournament-page .persistent-navigation a,
+    .tournament-page .persistent-navigation button { font-size: 0.51rem; }
+    .tournament-page .persistent-navigation .tab-icon { font-size: 1rem; }
+}
