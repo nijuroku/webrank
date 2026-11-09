@@ -197,18 +197,13 @@ body {
 }
 
 .live-status {
-    display: flex;
-    min-height: 34px;
-    align-items: center;
-    gap: 0.55rem;
     color: var(--muted);
-    font-size: 0.78rem;
 }
 
 .live-dot { width: 9px; height: 9px; border-radius: 50%; background: #eab656; box-shadow: 0 0 10px rgba(234, 182, 86, 0.45); }
 .live-dot.connected { background: #55d99a; box-shadow: 0 0 10px rgba(85, 217, 154, 0.58); }
 .live-dot.disconnected { background: #ff7180; box-shadow: 0 0 10px rgba(255, 113, 128, 0.52); }
-.updated-at { margin-left: auto; color: var(--subtle); text-align: right; }
+.updated-at { color: var(--subtle); }
 
 .tournament-heading, .rounds-card, .standings-card, .message-card {
     min-width: 0;

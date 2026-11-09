@@ -59,14 +59,14 @@ import '../../styles/loading.css';
         </section>
         <section class="profile-card" id="profileCard" hidden aria-labelledby="playerName">
             <div class="profile-banner" id="profileBanner" role="img" aria-label="Banner del perfil">
-                <img id="playerBanner" alt="" hidden>
+                <img id="playerBanner" alt="" decoding="async" fetchpriority="high" hidden>
                 <button class="profile-link-button" id="profileLinkButton" type="button" aria-label="Iniciar sesión o solicitar vinculación del perfil" title="Iniciar sesión o solicitar vinculación">
                     <span aria-hidden="true">＋</span>
                 </button>
             </div>
             <div class="profile-content">
                 <div class="profile-identity">
-                    <img class="profile-avatar" id="playerAvatar" alt="Imagen de perfil">
+                    <img class="profile-avatar" id="playerAvatar" alt="Imagen de perfil" decoding="async" fetchpriority="high">
                     <div class="profile-name-wrap">
                         <p class="eyebrow">Perfil de jugador</p>
                         <h1 id="playerName"><button id="playerNameToggle" class="profile-name-toggle" type="button" aria-expanded="false" aria-controls="playerAliasList"><span id="playerNameLabel">Jugador</span><span class="profile-name-chevron" aria-hidden="true">⌄</span></button></h1>
@@ -166,3 +166,4 @@ import '../../styles/loading.css';
         import '../../scripts/profile.js';
     </script>
 </AppLayout>
+

@@ -1,8 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout';
+import { getBestTournamentProfile, getPlayerMatches, getProfileCareerStats, getTournamentPlayer, resolvePlayerIdentity } from '../lib/profile-history';
+import { buildDirectoryPlayers, searchProfileDirectory } from '../lib/profile-directory';
+import {
+    loadFinishedTournamentPlayerNames,
+    loadFinishedTournaments,
+    loadPlayerAliases,
+    loadRegisteredPlayerNames,
+    loadSupabaseConfig
+} from '../lib/profile-data';
 
 const configEndpoint = '/api/supabase-config';
-const tournamentsEndpoint = '/rest/v1/finished_tournaments';
-const aliasesEndpoint = '/rest/v1/player_aliases';
 const loadingState = document.getElementById('loadingState');
 const errorState = document.getElementById('errorState');
 const profileCard = document.getElementById('profileCard');
@@ -100,14 +108,6 @@ function applyPlayerProfileAssets(profile) {
         profileBanner.removeAttribute('src');
         profileBanner.hidden = true;
     }
-}
-
-async function getSupabaseConfig() {
-    const response = await fetch(configEndpoint, { cache: 'no-store' });
-    if (!response.ok) throw new Error('No se pudo cargar la conexión a la base de datos.');
-    const config = await response.json();
-    if (!config.url || !config.anonKey) throw new Error('La base de datos todavía no está configurada.');
-    return { url: config.url.replace(/\/$/, ''), anonKey: config.anonKey };
 }
 
 function applyTheme(theme) {
@@ -411,150 +411,10 @@ document.getElementById('signOutButton')?.addEventListener('click', async () => 
     setAuthNotice('Sesión cerrada.', 'success');
 });
 
-async function loadFinishedTournaments(config) {
-    const allRows = [];
-    const columns = 'id,name,finished_at,participants,standings,matches,tournament_format,swiss_byes,winner,podium';
-    const pageSize = 1000;
-    for (let offset = 0; ; offset += pageSize) {
-        const params = new URLSearchParams({ select: columns, order: 'finished_at.desc' });
-        const response = await fetch(`${config.url}${tournamentsEndpoint}?${params}`, {
-            headers: {
-                apikey: config.anonKey,
-                Authorization: `Bearer ${config.anonKey}`,
-                Range: `${offset}-${offset + pageSize - 1}`
-            }
-        });
-        if (!response.ok) throw new Error('No se pudieron cargar los torneos guardados.');
-        const rows = await response.json();
-        allRows.push(...(Array.isArray(rows) ? rows : []));
-        if (!Array.isArray(rows) || rows.length < pageSize) break;
-    }
-    return allRows;
-}
-
-async function loadRegisteredPlayerNames(config) {
-    const params = new URLSearchParams({ select: 'name', order: 'name.asc', limit: '1000' });
-    try {
-        const response = await fetch(`${config.url}/rest/v1/players?${params}`, {
-            headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` }
-        });
-        if (!response.ok) return [];
-        const rows = await response.json();
-        return Array.isArray(rows) ? rows.map(row => row.name).filter(Boolean) : [];
-    } catch {
-        return [];
-    }
-}
-
-async function loadFinishedTournamentPlayerNames(config) {
-    const names = [];
-    const pageSize = 1000;
-    const columns = 'participants,standings,winner,podium';
-    for (let offset = 0; ; offset += pageSize) {
-        const params = new URLSearchParams({ select: columns, order: 'finished_at.desc' });
-        const response = await fetch(`${config.url}${tournamentsEndpoint}?${params}`, {
-            headers: {
-                apikey: config.anonKey,
-                Authorization: `Bearer ${config.anonKey}`,
-                Range: `${offset}-${offset + pageSize - 1}`
-            }
-        });
-        if (!response.ok) throw new Error('No se pudieron cargar los jugadores de los torneos finalizados.');
-        const tournaments = await response.json();
-        if (!Array.isArray(tournaments)) break;
-        tournaments.forEach(tournament => {
-            const addName = value => {
-                const name = typeof value === 'string' ? value : value?.name;
-                if (typeof name === 'string' && name.trim()) names.push(name.trim());
-            };
-            (Array.isArray(tournament.participants) ? tournament.participants : []).forEach(addName);
-            (Array.isArray(tournament.standings) ? tournament.standings : []).forEach(addName);
-            addName(tournament.winner);
-            if (tournament.podium && typeof tournament.podium === 'object') {
-                Object.values(tournament.podium).forEach(addName);
-            }
-        });
-        if (tournaments.length < pageSize) break;
-    }
-    return names;
-}
-
-async function loadPlayerAliases(config) {
-    const params = new URLSearchParams({
-        select: 'alias_key,alias_name,canonical_key,canonical_name',
-        order: 'alias_key.asc'
-    });
-    const rows = [];
-    const pageSize = 1000;
-    for (let offset = 0; ; offset += pageSize) {
-        const response = await fetch(`${config.url}${aliasesEndpoint}?${params}`, {
-            headers: {
-                apikey: config.anonKey,
-                Authorization: `Bearer ${config.anonKey}`,
-                Range: `${offset}-${offset + pageSize - 1}`
-            }
-        });
-        if (!response.ok) throw new Error('No se pudieron cargar los alias de jugadores.');
-        const page = await response.json();
-        if (Array.isArray(page)) rows.push(...page);
-        if (!Array.isArray(page) || page.length < pageSize) break;
-    }
-    return rows;
-}
-
-function normalizeDirectoryTerm(value) {
-    return normalizeName(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-
-function buildDirectoryPlayers(playerNames, aliases) {
-    const byCanonicalKey = new Map();
-    const getEntry = (canonicalKey, canonicalName) => {
-        let entry = byCanonicalKey.get(canonicalKey);
-        if (!entry) {
-            entry = { canonicalKey, canonicalName: canonicalName.trim(), searchTerms: new Set() };
-            byCanonicalKey.set(canonicalKey, entry);
-        } else if (canonicalName && canonicalName.length > entry.canonicalName.length) {
-            entry.canonicalName = canonicalName.trim();
-        }
-        entry.searchTerms.add(entry.canonicalName);
-        entry.searchTerms.add(entry.canonicalKey);
-        return entry;
-    };
-
-    aliases.forEach(alias => {
-        const canonicalKey = normalizeName(alias.canonical_key || alias.canonical_name);
-        const canonicalName = String(alias.canonical_name || '').trim();
-        if (!canonicalKey || !canonicalName) return;
-        const entry = getEntry(canonicalKey, canonicalName);
-        if (alias.alias_name) entry.searchTerms.add(String(alias.alias_name).trim());
-        if (alias.alias_key) entry.searchTerms.add(String(alias.alias_key).trim());
-    });
-
-    playerNames.forEach(rawName => {
-        const name = String(rawName || '').trim();
-        if (!name) return;
-        const nameKey = normalizeName(name);
-        const alias = aliases.find(row => normalizeName(row.alias_key) === nameKey || normalizeName(row.alias_name) === nameKey);
-        const canonicalName = String(alias?.canonical_name || name).trim();
-        const canonicalKey = normalizeName(alias?.canonical_key || canonicalName);
-        if (!canonicalKey) return;
-        const entry = getEntry(canonicalKey, canonicalName);
-        entry.searchTerms.add(name);
-        if (alias?.alias_name) entry.searchTerms.add(String(alias.alias_name).trim());
-        if (alias?.alias_key) entry.searchTerms.add(String(alias.alias_key).trim());
-    });
-
-    return [...byCanonicalKey.values()].sort((a, b) =>
-        a.canonicalName.localeCompare(b.canonicalName, 'es', { sensitivity: 'base', numeric: true })
-    );
-}
-
 function renderDirectoryResults() {
     if (!profileDirectoryGrid) return;
-    const query = normalizeDirectoryTerm(profileDirectorySearch?.value || '');
-    const filteredPlayers = directoryPlayers.filter(player => !query ||
-        [...player.searchTerms].some(term => normalizeDirectoryTerm(term).includes(query))
-    );
+    const query = profileDirectorySearch?.value || '';
+    const filteredPlayers = searchProfileDirectory(directoryPlayers, query);
     profileDirectoryGrid.replaceChildren();
     filteredPlayers.forEach(player => {
         const card = makeElement('a', 'profile-directory-card');
@@ -578,23 +438,12 @@ function renderDirectoryResults() {
 
 async function loadProfileDirectory(config) {
     const [playerRows, aliases, tournamentPlayerNames] = await Promise.all([
-        (async () => {
-            const rows = [];
-            const pageSize = 1000;
-            for (let offset = 0; ; offset += pageSize) {
-                const { data, error } = await supabase.from('players').select('name')
-                    .order('name', { ascending: true }).range(offset, offset + pageSize - 1);
-                if (error) throw error;
-                rows.push(...(Array.isArray(data) ? data : []));
-                if (!Array.isArray(data) || data.length < pageSize) break;
-            }
-            return rows;
-        })(),
+        loadRegisteredPlayerNames(config, undefined, true),
         loadPlayerAliases(config),
         loadFinishedTournamentPlayerNames(config)
     ]);
     directoryPlayers = buildDirectoryPlayers(
-        [...playerRows.map(row => row.name), ...tournamentPlayerNames],
+        [...playerRows, ...tournamentPlayerNames],
         aliases
     );
     profileDirectoryLoading.hidden = true;
@@ -608,23 +457,6 @@ function showProfileDirectoryError() {
     profileDirectoryStatus.textContent = 'No pudimos cargar los perfiles. Actualiza la página para volver a intentarlo.';
 }
 
-function resolvePlayerIdentity(requestedName, aliases) {
-    const requestedKey = normalizeName(requestedName);
-    const alias = aliases.find(row => normalizeName(row.alias_key) === requestedKey || normalizeName(row.alias_name) === requestedKey);
-    const canonicalKey = alias ? normalizeName(alias.canonical_key) : requestedKey;
-    const canonicalName = alias?.canonical_name || requestedName;
-    const nameKeys = new Set([requestedKey, canonicalKey]);
-    aliases.forEach(row => {
-        if (normalizeName(row.canonical_key) === canonicalKey) nameKeys.add(normalizeName(row.alias_key));
-    });
-    const aliasNames = aliases
-        .filter(row => normalizeName(row.canonical_key) === canonicalKey)
-        .filter(row => normalizeName(row.alias_key) !== canonicalKey)
-        .sort((a, b) => String(a.alias_name || '').localeCompare(String(b.alias_name || ''), 'es', { sensitivity: 'base' }))
-        .map(row => row.alias_name);
-    return { canonicalKey, canonicalName, nameKeys, aliasNames: [...new Set(aliasNames)] };
-}
-
 function renderPlayerAliases(aliasNames) {
     playerAliasList.replaceChildren();
     if (!aliasNames.length) {
@@ -632,59 +464,6 @@ function renderPlayerAliases(aliasNames) {
         return;
     }
     aliasNames.forEach(alias => playerAliasList.appendChild(makeElement('span', 'profile-alias-chip', alias)));
-}
-
-function getTournamentPlayer(tournament, nameKeys, canonicalKey) {
-    const participants = Array.isArray(tournament.participants) ? tournament.participants : [];
-    const standings = Array.isArray(tournament.standings) ? tournament.standings : [];
-    const matchedParticipants = participants.filter(player => nameKeys.has(normalizeName(player.name)));
-    const matchedStandings = standings.filter(player => nameKeys.has(normalizeName(player.name)));
-    const participant = matchedParticipants[0] || matchedStandings[0];
-    if (!participant) return null;
-    const participantIds = new Set(matchedParticipants.map(player => String(player.id || '')).filter(Boolean));
-    const standingRows = matchedStandings;
-    const preferredStanding = standingRows.find(player => normalizeName(player.name) === canonicalKey) || standingRows[0] || null;
-    const standing = preferredStanding ? {
-        ...preferredStanding,
-        points: standingRows.reduce((total, row) => total + (Number(row.points) || 0), 0)
-    } : null;
-    const position = standingRows.length
-        ? Math.min(...standingRows.map(row => standings.indexOf(row)).filter(index => index >= 0)) + 1
-        : 0;
-    const playerIds = new Set([...participantIds, ...(participant.id ? [String(participant.id)] : [])]);
-    return { participant, standing, standings, playerIds, position };
-}
-
-function getPlayerMatches(tournament, playerInfo, nameKeys) {
-    const matches = Array.isArray(tournament.matches) ? tournament.matches : [];
-    const { playerIds } = playerInfo;
-    const isPlayer = (id, name) => (id && playerIds.has(String(id))) || nameKeys.has(normalizeName(name));
-    return matches
-        .filter(match => {
-            const isA = isPlayer(match.playerAId, match.playerA);
-            const isB = isPlayer(match.playerBId, match.playerB);
-            return isA || isB;
-        })
-        .map(match => {
-            const isA = isPlayer(match.playerAId, match.playerA);
-            const opponent = isA ? match.playerB : match.playerA;
-            const scoreFor = Number(isA ? match.scoreA : match.scoreB) || 0;
-            const scoreAgainst = Number(isA ? match.scoreB : match.scoreA) || 0;
-            const played = Boolean(match.drawResult || match.jugado || scoreFor !== 0 || scoreAgainst !== 0);
-            const isDraw = Boolean(match.drawResult || (played && scoreFor === scoreAgainst));
-            const result = !played ? 'Pendiente' : isDraw ? 'Empate' : scoreFor > scoreAgainst ? 'Victoria' : 'Derrota';
-            const roundLabel = match.view_label || (match.stage === 'final' ? 'Final' : match.stage === 'pre-final'
-                ? 'Pre-final' : Number(match.round) > 0 ? `Ronda ${match.round}`
-                    : Number(match.bracketRound) > 0 ? `Eliminatorias · Ronda ${match.bracketRound}` : 'Eliminatorias');
-            return {
-                order: Number(match.view_order) || Number(match.round) || Number(match.bracketRound) || 0,
-                roundLabel,
-                opponent: opponent || '—',
-                score: played ? `${scoreFor}–${scoreAgainst}` : 'Por jugar',
-                result
-            };
-        })
-        .sort((a, b) => a.order - b.order);
 }
 
 function renderMatch(match) {
@@ -703,8 +482,12 @@ function renderTournament(tournament, nameKeys, canonicalKey, canonicalName) {
     const playerInfo = getTournamentPlayer(tournament, nameKeys, canonicalKey);
     if (!playerInfo) return null;
 
-    const { participant, standing, position } = playerInfo;
-    const playerMatches = getPlayerMatches(tournament, playerInfo, nameKeys);
+    const { standing, position } = playerInfo;
+    const playerMatches = getPlayerMatches(
+        Array.isArray(tournament.matches) ? tournament.matches : [],
+        playerInfo.playerIds,
+        nameKeys
+    );
     const wins = playerMatches.filter(match => match.result === 'Victoria').length;
     const draws = playerMatches.filter(match => match.result === 'Empate').length;
     const losses = playerMatches.filter(match => match.result === 'Derrota').length;
@@ -793,19 +576,14 @@ function showResultMatches(result, profiles) {
 }
 
 function renderBestTournament(profiles) {
-    if (!profiles.length) {
+    const best = getBestTournamentProfile(profiles);
+    if (!best) {
         bestTournamentCard.replaceChildren(
             makeElement('span', 'best-tournament-icon', '🏆'),
             makeElement('div', 'best-tournament-copy', 'Todavía no hay torneos finalizados.')
         );
         return;
     }
-    const ranked = profiles.slice().sort((a, b) => {
-        const aRank = a.position || Number.MAX_SAFE_INTEGER;
-        const bRank = b.position || Number.MAX_SAFE_INTEGER;
-        return aRank - bRank || b.points - a.points || Date.parse(b.tournamentDate || '') - Date.parse(a.tournamentDate || '');
-    });
-    const best = ranked[0];
     bestTournamentCard.replaceChildren();
     const icon = makeElement('span', 'best-tournament-icon', '🏆');
     icon.setAttribute('aria-hidden', 'true');
@@ -831,9 +609,10 @@ async function initializeProfile() {
 
     if (targetName) playerNameHeading.textContent = requestedName;
     try {
-        const config = await getSupabaseConfig();
+        const config = await loadSupabaseConfig(configEndpoint);
         supabase = createClient(config.url, config.anonKey, {
-            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+            global: { fetch: (input, init) => fetchWithTimeout(input, init, 15_000) }
         });
         const { data: sessionData } = await supabase.auth.getSession();
         currentUser = sessionData.session?.user || null;
@@ -890,11 +669,7 @@ async function initializeProfile() {
             return;
         }
 
-        const summary = profiles.reduce((total, profile) => ({
-            wins: total.wins + profile.wins,
-            losses: total.losses + profile.losses,
-            draws: total.draws + profile.draws
-        }), { wins: 0, losses: 0, draws: 0 });
+        const summary = getProfileCareerStats(profiles);
         playerSummary.replaceChildren(
             renderStatButton('Victorias', summary.wins, 'Victoria', 'wins'),
             renderStatButton('Derrotas', summary.losses, 'Derrota', 'losses'),
@@ -933,6 +708,10 @@ document.getElementById('backButton')?.addEventListener('click', () => {
     else window.location.assign('/');
 });
 
-profileDirectorySearch?.addEventListener('input', renderDirectoryResults);
+let directorySearchTimer = 0;
+profileDirectorySearch?.addEventListener('input', () => {
+    window.clearTimeout(directorySearchTimer);
+    directorySearchTimer = window.setTimeout(renderDirectoryResults, 140);
+});
 
 initializeProfile();

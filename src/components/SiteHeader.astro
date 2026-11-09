@@ -10,7 +10,7 @@ const hasMeta = Astro.slots.has('meta');
         <div class="site-header-leading">
             <slot name="leading" />
             <a class="site-header-brand" href={brandHref} aria-label="LaMafia BEYBLADEX, inicio">
-                <span class="site-header-logo"><img src="https://iili.io/C4uBqCX.jpg" alt=""></span>
+                <span class="site-header-logo"><img src="https://iili.io/C4uBqCX.jpg" alt="" decoding="async" fetchpriority="high"></span>
                 <span class="site-header-brand-copy">
                     <strong>LaMafia</strong>
                     <small>Fase 1: grupos · Fase 2: eliminatorias</small>

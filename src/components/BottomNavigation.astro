@@ -9,14 +9,17 @@ const items = [
     { key: 'profile', label: 'Perfil', icon: '👤', href: '/p/' }
 ];
 
-if (page === 'view') {
-    items.find(item => item.key === 'matches').href = '#matchesSection';
-    items.find(item => item.key === 'table').href = '#standingsSection';
-}
+const navigationItems = page === 'view'
+    ? items.map(item => item.key === 'matches'
+        ? { ...item, href: '#matchesSection' }
+        : item.key === 'table'
+            ? { ...item, href: '#standingsSection' }
+            : item)
+    : items;
 ---
 
 <nav class="persistent-navigation" aria-label="Navegación principal">
-    {items.map((item) => {
+    {navigationItems.map((item) => {
         const selected = active === item.key;
         const className = isTournament && !['home', 'profile'].includes(item.key)
             ? `persistent-navigation-tab${selected ? ' active' : ''}`

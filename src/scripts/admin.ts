@@ -1,70 +1,109 @@
+import { fetchWithTimeout } from '../lib/fetch-with-timeout';
+
 const CONFIG_ENDPOINT = '/api/supabase-config';
 const SESSION_KEY = 'lamafia_admin_session';
-const loginPanel = document.getElementById('loginPanel');
-const adminPanel = document.getElementById('adminPanel');
-const loginForm = document.getElementById('loginForm');
-const notice = document.getElementById('notice');
-const logoutButton = document.getElementById('logoutButton');
-const aliasForm = document.getElementById('aliasForm');
-const aliasInput = document.getElementById('aliasName');
-const canonicalSelect = document.getElementById('canonicalName');
-const aliasList = document.getElementById('aliasList');
-const profileRequestsList = document.getElementById('profileRequestsList');
-const tournamentList = document.getElementById('tournamentList');
-const activeTournamentList = document.getElementById('activeTournamentList');
-const tournamentSubmissionList = document.getElementById('tournamentSubmissionList');
-const activityLog = document.getElementById('activityLog');
-const refreshButton = document.getElementById('refreshButton');
+function requiredElement<T extends HTMLElement>(id: string): T {
+    const element = document.getElementById(id);
+    if (!element) throw new Error(`Falta el elemento #${id} en el panel de administración.`);
+    return element as T;
+}
 
-let config = null;
-let session = null;
-let tournamentRows = [];
+interface SupabaseConfig { url: string; anonKey: string }
+interface AdminSession { access_token: string; refresh_token: string; expires_at: number }
+interface AdminUser { app_metadata?: { role?: string } }
+interface AuthPayload extends Partial<AdminSession> { expires_in?: number; msg?: string; message?: string; error_description?: string; error?: string }
+interface Player { name: string }
+interface AdminAlias { alias_key: string; alias_name: string; canonical_key: string; canonical_name: string }
+interface FinishedTournament { id: string; name: string; finished_at?: string | null; participants?: Player[]; standings?: Player[]; created_by?: string | null }
+interface ProfileRequest { user_id: string; email: string; player_name: string; status: string; created_at?: string | null }
+interface ActiveTournament { id: string; tournament_name: string; phase_label?: string; current_round?: number; participants?: Player[]; expires_at?: string | null }
+interface TournamentSubmission { id: string; tournament_name: string; submission_type: string; submitter_name?: string | null; submitted_at?: string | null; payload?: { participants?: Player[] } }
+interface ActivityEntry { id: string; event_type: string; created_at?: string | null; actor_name?: string | null; tournament_name?: string | null; details?: { round?: number; participants?: number; matches?: number } | null }
 
-function showNotice(message, kind = '') {
+const loginPanel = requiredElement<HTMLElement>('loginPanel');
+const adminPanel = requiredElement<HTMLElement>('adminPanel');
+const loginForm = requiredElement<HTMLFormElement>('loginForm');
+const notice = requiredElement<HTMLElement>('notice');
+const logoutButton = requiredElement<HTMLButtonElement>('logoutButton');
+const aliasForm = requiredElement<HTMLFormElement>('aliasForm');
+const aliasInput = requiredElement<HTMLInputElement>('aliasName');
+const canonicalSelect = requiredElement<HTMLSelectElement>('canonicalName');
+const aliasList = requiredElement<HTMLElement>('aliasList');
+const profileRequestsList = requiredElement<HTMLElement>('profileRequestsList');
+const tournamentList = requiredElement<HTMLElement>('tournamentList');
+const activeTournamentList = requiredElement<HTMLElement>('activeTournamentList');
+const tournamentSubmissionList = requiredElement<HTMLElement>('tournamentSubmissionList');
+const activityLog = requiredElement<HTMLElement>('activityLog');
+const refreshButton = requiredElement<HTMLButtonElement>('refreshButton');
+
+let config: SupabaseConfig | null = null;
+let session: AdminSession | null = null;
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
+}
+
+function getConfig(): SupabaseConfig {
+    if (!config) throw new Error('No está configurada la conexión a Supabase.');
+    return config;
+}
+
+function showNotice(message: string, kind = '') {
     notice.textContent = message;
     notice.className = `notice ${kind}`.trim();
     notice.hidden = !message;
 }
 
-function saveSession(value) {
+function saveSession(value: AdminSession | null) {
     session = value;
     if (value) sessionStorage.setItem(SESSION_KEY, JSON.stringify(value));
     else sessionStorage.removeItem(SESSION_KEY);
 }
 
-function readSession() {
-    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); }
+function readSession(): AdminSession | null {
+    try {
+        const value: unknown = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+        if (typeof value !== 'object' || value === null) return null;
+        const candidate = value as Partial<AdminSession>;
+        return typeof candidate.access_token === 'string' && typeof candidate.refresh_token === 'string'
+            && typeof candidate.expires_at === 'number' ? candidate as AdminSession : null;
+    }
     catch { return null; }
 }
 
-async function loadConfig() {
-    const response = await fetch(CONFIG_ENDPOINT, { cache: 'no-store' });
+async function loadConfig(): Promise<SupabaseConfig> {
+    const response = await fetchWithTimeout(CONFIG_ENDPOINT, { cache: 'no-store' });
     const data = await response.json();
     if (!response.ok || !data.url || !data.anonKey) throw new Error(data.error || 'No está configurada la conexión a Supabase.');
     return { url: data.url.replace(/\/$/, ''), anonKey: data.anonKey };
 }
 
-async function authRequest(path, body, token) {
-    const response = await fetch(`${config.url}/auth/v1/${path}`, {
+async function authRequest(path: string, body: unknown = {}, token?: string): Promise<AuthPayload> {
+    const activeConfig = getConfig();
+    const response = await fetchWithTimeout(`${activeConfig.url}/auth/v1/${path}`, {
         method: 'POST',
         headers: {
-            apikey: config.anonKey,
+            apikey: activeConfig.anonKey,
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify(body || {})
     });
-    const result = await response.json().catch(() => ({}));
+    const result = await response.json().catch(() => ({})) as AuthPayload;
     if (!response.ok) throw new Error(result.msg || result.message || result.error_description || result.error || 'Falló la autenticación.');
     return result;
 }
 
-async function refreshSession() {
+async function refreshSession(): Promise<void> {
     if (!session?.refresh_token) throw new Error('La sesión expiró. Inicia sesión de nuevo.');
     const refreshed = await authRequest('token?grant_type=refresh_token', { refresh_token: session.refresh_token });
-    saveSession({ ...refreshed, expires_at: Date.now() + (Number(refreshed.expires_in) - 30) * 1000 });
-    const response = await fetch(`${config.url}/auth/v1/user`, {
-        headers: { apikey: config.anonKey, Authorization: `Bearer ${session.access_token}` }
+    if (!refreshed.access_token || !refreshed.refresh_token) throw new Error('No se pudo renovar la sesión.');
+    saveSession({ access_token: refreshed.access_token, refresh_token: refreshed.refresh_token, expires_at: Date.now() + (Number(refreshed.expires_in || 0) - 30) * 1000 });
+    const activeConfig = getConfig();
+    const currentSession = session;
+    if (!currentSession) throw new Error('La sesión expiró. Inicia sesión de nuevo.');
+    const response = await fetchWithTimeout(`${activeConfig.url}/auth/v1/user`, {
+        headers: { apikey: activeConfig.anonKey, Authorization: `Bearer ${currentSession.access_token}` }
     });
     const user = response.ok ? await response.json() : null;
     if (user?.app_metadata?.role !== 'admin') {
@@ -73,21 +112,23 @@ async function refreshSession() {
     }
 }
 
-async function ensureFreshSession() {
+async function ensureFreshSession(): Promise<void> {
     if (!session?.access_token) throw new Error('Inicia sesión para continuar.');
     if (Number(session.expires_at) <= Date.now()) await refreshSession();
 }
 
-async function currentUser() {
+async function currentUser(): Promise<AdminUser> {
     await ensureFreshSession();
-    const response = await fetch(`${config.url}/auth/v1/user`, {
-        headers: { apikey: config.anonKey, Authorization: `Bearer ${session.access_token}` }
+    const activeConfig = getConfig();
+    if (!session) throw new Error('Inicia sesión para continuar.');
+    const response = await fetchWithTimeout(`${activeConfig.url}/auth/v1/user`, {
+        headers: { apikey: activeConfig.anonKey, Authorization: `Bearer ${session.access_token}` }
     });
     if (!response.ok) throw new Error('La sesión expiró. Inicia sesión de nuevo.');
     return response.json();
 }
 
-async function requireAdmin() {
+async function requireAdmin(): Promise<void> {
     const user = await currentUser();
     if (user.app_metadata?.role !== 'admin') {
         saveSession(null);
@@ -95,12 +136,14 @@ async function requireAdmin() {
     }
 }
 
-async function dataRequest(path, options = {}) {
+async function dataRequest<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
     await ensureFreshSession();
-    const response = await fetch(`${config.url}/rest/v1/${path}`, {
+    const activeConfig = getConfig();
+    if (!session) throw new Error('Inicia sesión para continuar.');
+    const response = await fetchWithTimeout(`${activeConfig.url}/rest/v1/${path}`, {
         ...options,
         headers: {
-            apikey: config.anonKey,
+            apikey: activeConfig.anonKey,
             Authorization: `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
             ...(options.headers || {})
@@ -112,26 +155,26 @@ async function dataRequest(path, options = {}) {
         try { detail = JSON.parse(body).message || JSON.parse(body).details || body; } catch { /* response is not JSON */ }
         throw new Error(`Supabase ${response.status}: ${detail || response.statusText}`);
     }
-    return body ? JSON.parse(body) : null;
+    return (body ? JSON.parse(body) : null) as T;
 }
 
-function normalizeName(value) {
+function normalizeName(value: unknown): string {
     return String(value || '').trim().normalize('NFKC').toLocaleLowerCase();
 }
 
-function capitalizeName(value) {
+function capitalizeName(value: unknown): string {
     const chars = Array.from(String(value || '').trim());
     return chars.length ? chars[0].toLocaleUpperCase() + chars.slice(1).join('') : '';
 }
 
-function appendEmpty(container, message) {
+function appendEmpty(container: HTMLElement, message: string): void {
     const empty = document.createElement('p');
-    empty.className = 'empty';
+    empty.className = 'py-3.5 px-1 text-[#a8b9cc]';
     empty.textContent = message;
     container.replaceChildren(empty);
 }
 
-function renderAliases(rows) {
+function renderAliases(rows: AdminAlias[]): void {
     aliasList.replaceChildren();
     if (!rows.length) return appendEmpty(aliasList, 'Todavía no hay alias vinculados.');
     rows.forEach(alias => {
@@ -164,9 +207,9 @@ function renderAliases(rows) {
     });
 }
 
-function collectCanonicalNames(players, tournaments, aliases) {
+function collectCanonicalNames(players: Player[], tournaments: FinishedTournament[], aliases: AdminAlias[]): string[] {
     const names = new Map();
-    const add = name => {
+    const add = (name: string) => {
         const key = normalizeName(name);
         if (key && !names.has(key)) names.set(key, capitalizeName(name));
     };
@@ -178,14 +221,14 @@ function collectCanonicalNames(players, tournaments, aliases) {
     return [...names.values()].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
 }
 
-function renderCanonicalOptions(names) {
+function renderCanonicalOptions(names: string[]): void {
     const selected = canonicalSelect.value;
     canonicalSelect.replaceChildren(new Option('Selecciona un jugador', ''));
     names.forEach(name => canonicalSelect.add(new Option(name, name)));
     if (names.includes(selected)) canonicalSelect.value = selected;
 }
 
-function renderTournaments(rows) {
+function renderTournaments(rows: FinishedTournament[]): void {
     tournamentList.replaceChildren();
     if (!rows.length) return appendEmpty(tournamentList, 'No hay torneos guardados.');
     rows.forEach(tournament => {
@@ -212,7 +255,7 @@ function renderTournaments(rows) {
     });
 }
 
-function renderProfileRequests(rows) {
+function renderProfileRequests(rows: ProfileRequest[]): void {
     profileRequestsList.replaceChildren();
     if (!rows.length) return appendEmpty(profileRequestsList, 'No hay solicitudes pendientes.');
     rows.forEach(request => {
@@ -250,7 +293,7 @@ function renderProfileRequests(rows) {
     });
 }
 
-function renderActiveTournaments(rows) {
+function renderActiveTournaments(rows: ActiveTournament[]): void {
     activeTournamentList.replaceChildren();
     if (!rows.length) return appendEmpty(activeTournamentList, 'No hay torneos activos compartidos.');
     rows.forEach(tournament => {
@@ -289,7 +332,7 @@ function renderActiveTournaments(rows) {
     });
 }
 
-function renderTournamentSubmissions(rows) {
+function renderTournamentSubmissions(rows: TournamentSubmission[]): void {
     tournamentSubmissionList.replaceChildren();
     if (!rows.length) return appendEmpty(tournamentSubmissionList, 'No hay torneos en espera de aprobación.');
     rows.forEach(submission => {
@@ -326,13 +369,13 @@ function renderTournamentSubmissions(rows) {
     });
 }
 
-function renderActivityLog(rows) {
+function renderActivityLog(rows: ActivityEntry[]): void {
     activityLog.replaceChildren();
     if (!rows.length) {
         activityLog.textContent = 'Sin actividad registrada.';
         return;
     }
-    const descriptions = {
+    const descriptions: Record<string, string> = {
         created: 'creó un torneo',
         approval_requested: 'envió un torneo a revisión',
         approved: 'aprobó un torneo',
@@ -360,7 +403,7 @@ function renderActivityLog(rows) {
     activityLog.scrollTop = 0;
 }
 
-function setAdminListsLoading(loading) {
+function setAdminListsLoading(loading: boolean): void {
     const lists = [aliasList, tournamentList, activeTournamentList, tournamentSubmissionList, profileRequestsList];
     if (!loading) {
         lists.forEach(list => list.setAttribute('aria-busy', 'false'));
@@ -392,15 +435,15 @@ async function loadAdminData() {
     });
     try {
         const [aliases, tournaments, players, profileRequests, activeTournaments, submissions, logs] = await Promise.all([
-            dataRequest('player_aliases?select=alias_key,alias_name,canonical_key,canonical_name&order=canonical_name.asc,alias_name.asc'),
-            dataRequest(`finished_tournaments?${params}`),
-            dataRequest('players?select=name&order=name.asc&limit=1000'),
-            dataRequest('player_profile_requests?select=user_id,email,player_key,player_name,status,created_at&order=created_at.desc&limit=1000'),
-            dataRequest(`shared_tournaments?${activeParams}`),
-            dataRequest('tournament_submissions?select=id,tournament_id,tournament_name,submission_type,payload,share_id,submitter_name,submitted_at&status=eq.pending&order=submitted_at.asc&limit=500'),
-            dataRequest('admin_activity_log?select=id,event_type,tournament_id,tournament_name,actor_name,details,created_at&order=created_at.desc&limit=200')
+            dataRequest<AdminAlias[]>('player_aliases?select=alias_key,alias_name,canonical_key,canonical_name&order=canonical_name.asc,alias_name.asc'),
+            dataRequest<FinishedTournament[]>(`finished_tournaments?${params}`),
+            dataRequest<Player[]>('players?select=name&order=name.asc&limit=1000'),
+            dataRequest<ProfileRequest[]>('player_profile_requests?select=user_id,email,player_key,player_name,status,created_at&order=created_at.desc&limit=1000'),
+            dataRequest<ActiveTournament[]>(`shared_tournaments?${activeParams}`),
+            dataRequest<TournamentSubmission[]>('tournament_submissions?select=id,tournament_id,tournament_name,submission_type,payload,share_id,submitter_name,submitted_at&status=eq.pending&order=submitted_at.asc&limit=500'),
+            dataRequest<ActivityEntry[]>('admin_activity_log?select=id,event_type,tournament_id,tournament_name,actor_name,details,created_at&order=created_at.desc&limit=200')
         ]);
-        tournamentRows = Array.isArray(tournaments) ? tournaments : [];
+        const tournamentRows = Array.isArray(tournaments) ? tournaments : [];
         renderAliases(Array.isArray(aliases) ? aliases : []);
         renderCanonicalOptions(collectCanonicalNames(players, tournamentRows, aliases));
         renderProfileRequests(Array.isArray(profileRequests) ? profileRequests : []);
@@ -422,7 +465,7 @@ async function loadAdminData() {
     }
 }
 
-async function reviewTournamentSubmission(submission, approve) {
+async function reviewTournamentSubmission(submission: TournamentSubmission, approve: boolean): Promise<void> {
     const action = approve ? 'aprobar y publicar' : 'rechazar';
     if (!confirm(`¿${action} “${submission.tournament_name}” (${submission.submission_type === 'shared_live' ? 'enlace en vivo' : 'tabla final'})?`)) return;
     try {
@@ -431,10 +474,10 @@ async function reviewTournamentSubmission(submission, approve) {
         });
         showNotice(`Torneo ${approve ? 'aprobado y publicado' : 'rechazado'}.`, 'success');
         await loadAdminData();
-    } catch (error) { showNotice(`No se pudo ${action} el torneo: ${error.message}`, 'error'); }
+    } catch (error) { showNotice(`No se pudo ${action} el torneo: ${getErrorMessage(error)}`, 'error'); }
 }
 
-async function closeActiveTournament(tournament) {
+async function closeActiveTournament(tournament: ActiveTournament): Promise<void> {
     const name = tournament.tournament_name || 'Torneo sin nombre';
     if (!confirm(`¿Cerrar “${name}”? El enlace público dejará de funcionar y el torneo no podrá volver a publicarse.`)) return;
     try {
@@ -444,10 +487,10 @@ async function closeActiveTournament(tournament) {
         });
         showNotice(`Torneo “${name}” cerrado.`, 'success');
         await loadAdminData();
-    } catch (error) { showNotice(`No se pudo cerrar el torneo: ${error.message}`, 'error'); }
+    } catch (error) { showNotice(`No se pudo cerrar el torneo: ${getErrorMessage(error)}`, 'error'); }
 }
 
-async function reviewProfileRequest(request, approve) {
+async function reviewProfileRequest(request: ProfileRequest, approve: boolean): Promise<void> {
     const action = approve ? 'aprobar' : 'rechazar';
     const message = approve
         ? `¿Aprobar la vinculación de ${request.player_name} con ${request.email}? El usuario no podrá solicitar otro perfil.`
@@ -460,19 +503,19 @@ async function reviewProfileRequest(request, approve) {
         });
         showNotice(`Solicitud ${approve ? 'aprobada' : 'rechazada'}.`, 'success');
         await loadAdminData();
-    } catch (error) { showNotice(`No se pudo ${action} la solicitud: ${error.message}`, 'error'); }
+    } catch (error) { showNotice(`No se pudo ${action} la solicitud: ${getErrorMessage(error)}`, 'error'); }
 }
 
-async function removeAlias(alias) {
+async function removeAlias(alias: AdminAlias): Promise<void> {
     if (!confirm(`¿Desvincular “${alias.alias_name}” del perfil de ${alias.canonical_name}?`)) return;
     try {
         await dataRequest(`player_aliases?alias_key=eq.${encodeURIComponent(alias.alias_key)}`, { method: 'DELETE' });
         showNotice(`Alias “${alias.alias_name}” desvinculado.`, 'success');
         await loadAdminData();
-    } catch (error) { showNotice(error.message, 'error'); }
+    } catch (error) { showNotice(getErrorMessage(error), 'error'); }
 }
 
-async function promoteAlias(alias) {
+async function promoteAlias(alias: AdminAlias): Promise<void> {
     if (!confirm(`¿Usar “${alias.alias_name}” como nombre principal? “${alias.canonical_name}” pasará a ser alias y el historial se conservará unido.`)) return;
     try {
         await dataRequest('rpc/admin_promote_player_alias', {
@@ -480,10 +523,10 @@ async function promoteAlias(alias) {
         });
         showNotice(`“${alias.alias_name}” ahora es el nombre principal.`, 'success');
         await loadAdminData();
-    } catch (error) { showNotice(error.message, 'error'); }
+    } catch (error) { showNotice(getErrorMessage(error), 'error'); }
 }
 
-async function removeTournament(tournament) {
+async function removeTournament(tournament: FinishedTournament): Promise<void> {
     const name = tournament.name || 'Torneo sin nombre';
     if (!confirm(`¿Eliminar permanentemente “${name}” y toda su tabla e historial guardados?`)) return;
     try {
@@ -492,20 +535,22 @@ async function removeTournament(tournament) {
         });
         showNotice(`Torneo “${name}” eliminado.`, 'success');
         await loadAdminData();
-    } catch (error) { showNotice(error.message, 'error'); }
+    } catch (error) { showNotice(getErrorMessage(error), 'error'); }
 }
 
 loginForm.addEventListener('submit', async event => {
     event.preventDefault();
-    const submit = loginForm.querySelector('[type="submit"]');
+    const submit = loginForm.querySelector<HTMLButtonElement>('[type="submit"]');
+    if (!submit) return showNotice('No se encontró el botón de acceso.', 'error');
     submit.disabled = true;
     showNotice('Iniciando sesión…');
     try {
         const auth = await authRequest('token?grant_type=password', {
-            email: document.getElementById('loginEmail').value.trim(),
-            password: document.getElementById('loginPassword').value
+            email: requiredElement<HTMLInputElement>('loginEmail').value.trim(),
+            password: requiredElement<HTMLInputElement>('loginPassword').value
         });
-        saveSession({ ...auth, expires_at: Date.now() + (Number(auth.expires_in) - 30) * 1000 });
+        if (!auth.access_token || !auth.refresh_token) throw new Error('Supabase no devolvió una sesión válida.');
+        saveSession({ access_token: auth.access_token, refresh_token: auth.refresh_token, expires_at: Date.now() + (Number(auth.expires_in || 0) - 30) * 1000 });
         await requireAdmin();
         loginPanel.hidden = true;
         adminPanel.hidden = false;
@@ -516,7 +561,7 @@ loginForm.addEventListener('submit', async event => {
         loginPanel.hidden = false;
         adminPanel.hidden = true;
         logoutButton.hidden = true;
-        showNotice(error.message, 'error');
+        showNotice(getErrorMessage(error), 'error');
     } finally { submit.disabled = false; }
 });
 
@@ -537,10 +582,10 @@ aliasForm.addEventListener('submit', async event => {
         aliasInput.value = '';
         showNotice(`“${aliasName}” ahora está vinculado a ${canonicalName}.`, 'success');
         await loadAdminData();
-    } catch (error) { showNotice(error.message, 'error'); }
+    } catch (error) { showNotice(getErrorMessage(error), 'error'); }
 });
 
-refreshButton.addEventListener('click', () => loadAdminData().catch(error => showNotice(error.message, 'error')));
+refreshButton.addEventListener('click', () => loadAdminData().catch(error => showNotice(getErrorMessage(error), 'error')));
 
 logoutButton.addEventListener('click', async () => {
     try {
@@ -568,7 +613,7 @@ async function initialize() {
         saveSession(null);
         loginPanel.hidden = false;
         adminPanel.hidden = true;
-        showNotice(error.message, 'error');
+        showNotice(getErrorMessage(error), 'error');
     }
 }
 

@@ -11,6 +11,8 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Método no permitido' });
     }
+
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     
     try {
         const username = req.query.user || 'nijuroku';
@@ -18,6 +20,7 @@ export default async function handler(req, res) {
         console.log(`📡 Buscando Gists de ${username}...`);
         
         const response = await fetch(`https://api.github.com/users/${username}/gists`, {
+            signal: AbortSignal.timeout(8_000),
             headers: {
                 'Accept': 'application/vnd.github.v3+json',
                 'User-Agent': 'LaMafia-BeybladeX-App'
@@ -62,6 +65,7 @@ export default async function handler(req, res) {
         
     } catch (error) {
         console.error('❌ Error en API de Gists:', error);
+        res.setHeader('Cache-Control', 'no-store');
         return res.status(500).json({
             success: false,
             error: error.message,
