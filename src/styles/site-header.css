@@ -91,6 +91,62 @@ body.tournament-page { padding-top: 0 !important; padding-left: 0 !important; }
     .site-header-brand-copy small { white-space: normal; }
 }
 
+@media (max-width: 560px) {
+    .tournament-page .site-header { padding: 0.45rem 0.7rem; }
+    .tournament-page .site-header-content {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "brand theme"
+            "stats stats"
+            "saved saved";
+        gap: 0.42rem 0.55rem;
+        padding: 0;
+    }
+    .tournament-page .site-header-leading {
+        grid-area: brand;
+        width: auto;
+        flex: initial;
+        justify-content: flex-start;
+    }
+    .tournament-page .site-header-actions,
+    .tournament-page .header-right { display: contents; }
+    .tournament-page #themeToggleBtn { grid-area: theme; justify-self: end; }
+    .tournament-page .site-header .header-stats {
+        display: grid;
+        grid-area: stats;
+        width: 100%;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        justify-content: stretch;
+        gap: 0.28rem;
+    }
+    .tournament-page .site-header .header-stats > span {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        justify-content: center;
+        gap: 0.18rem;
+        padding: 0.22rem 0.28rem;
+        font-size: 0.64rem;
+        white-space: nowrap;
+    }
+    .tournament-page .site-header .storage-status {
+        grid-area: saved;
+        justify-self: center;
+        padding: 0.2rem 0.58rem;
+        font-size: 0.61rem;
+    }
+    .tournament-page .site-header-brand-copy small {
+        max-width: 10.2rem;
+        white-space: normal;
+        line-height: 1.12;
+    }
+}
+
+@media (max-width: 380px) {
+    .tournament-page .site-header-brand-copy small { max-width: 8.6rem; font-size: 0.56rem; }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .site-header, .site-header * { scroll-behavior: auto !important; }
 }

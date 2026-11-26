@@ -1,3 +1,15 @@
+import { fetchWithTimeout } from '../lib/fetch-with-timeout';
+import {
+    generatePairings as createPairings,
+    generateSwissPairings as createSwissPairings,
+    getPreviousGroupPairKeys as collectPreviousGroupPairKeys,
+} from '../lib/pairings';
+import { calculateAccumulatedPoints, calculateGroupRanking } from '../lib/tournament-scoring';
+import { activateAppTab, applyAppTheme, getNextAppTheme, updateAppTabAvailability } from './app-ui';
+import { ParticipantAutocomplete } from './participant-autocomplete';
+import { SavedPlayerService, fetchAllSupabaseRows } from '../lib/saved-player-service';
+import { createBracketRound, getCrossBracketFinals, resolveBracketRound } from '../lib/upper-lower-bracket';
+
 (function () {
     "use strict";
 
@@ -73,9 +85,13 @@
         })[char]);
     }
 
-    function getParticipantNameById(id) {
-        const p = getParticipantById(id);
-        return p ? p.name : null;
+    function safeExternalUrl(value) {
+        try {
+            const url = new URL(String(value || ''));
+            return url.protocol === 'https:' ? url.href : '';
+        } catch {
+            return '';
+        }
     }
 
     function getParticipantIdByName(name) {
@@ -163,22 +179,29 @@
     let currentPhase = 1;
     let groupRound = 0;
     let knockoutRound = 0;
+    let lowerBracketRound = 0;
+    let eliminationMode = 'single';
+    let upperByePlayers = [];
+    let lowerByePlayers = [];
+    let upperWaitingPlayers = [];
+    let lowerWaitingPlayers = [];
+    let activeEliminationBracket = 'upper';
+    let upperFinalists = { winner: null, runnerUp: null };
+    let lowerFinalists = { winner: null, runnerUp: null };
     let currentPhaseView = 'groups';
     let selectedRound = 'all';
     let selectedPlayerFilterId = null;
-    let activeTab = 'participants';
-    const requestedNavigationTab = new URLSearchParams(window.location.search).get('tab');
+    const routeSegment = window.location.pathname.match(/^\/app\/(participants|vs|table)\/?$/)?.[1];
+    const routeTab = routeSegment === 'vs' ? 'matches' : routeSegment;
+    const requestedNavigationTab = routeTab || new URLSearchParams(window.location.search).get('tab');
+    let activeTab = requestedNavigationTab || 'participants';
     let supabaseConfig = null;
     let supabaseInitialization = null;
     let supabaseAuthClient = null;
-    let appAuthSession = null;
     let savedScoreTables = [];
     let activeSavedScoreTable = null;
-    let playerSuggestionTimer = null;
     let championProfileRequestId = 0;
     const championProfileCache = new Map();
-    let playerSuggestionRequestId = 0;
-    let activePlayerSuggestionIndex = -1;
 
     // Configuración
     let customQualifiedCount = 8;
@@ -199,6 +222,18 @@
         fourth: null
     };
 
+    function resetBracketFormat() {
+        lowerBracketRound = 0;
+        eliminationMode = 'single';
+        upperByePlayers = [];
+        lowerByePlayers = [];
+        upperWaitingPlayers = [];
+        lowerWaitingPlayers = [];
+        activeEliminationBracket = 'upper';
+        upperFinalists = { winner: null, runnerUp: null };
+        lowerFinalists = { winner: null, runnerUp: null };
+    }
+
     // ============================================================
     // 3. DOM REFS
     // ============================================================
@@ -210,56 +245,31 @@
     const headerQualified = document.getElementById('headerQualified');
     const storageStatusEl = document.getElementById('storageStatus');
     const themeToggleBtn = document.getElementById('themeToggleBtn');
-    const tabNavigationButtons = document.querySelectorAll('.tab-navigation-btn[data-tab]');
+    const tabNavigationButtons = document.querySelectorAll('.persistent-navigation [data-tab]');
     const tabPanels = document.querySelectorAll('[data-tab-panel]');
 
     function activateTab(tabName, scrollToContent = false) {
-        if (tabName !== 'participants' && tabName !== 'table' && !tournamentVisible) return;
-        activeTab = tabName;
-        tabNavigationButtons.forEach(button => {
-            const isActive = button.dataset.tab === tabName;
-            button.classList.toggle('active', isActive);
-            button.setAttribute('aria-selected', String(isActive));
-        });
-        tabPanels.forEach(panel => {
-            const isActive = panel.dataset.tabPanel === tabName;
-            panel.hidden = !isActive;
-            panel.classList.toggle('active', isActive);
-        });
-        const tournamentSection = document.getElementById('tournamentSection');
-        if (tournamentSection) {
-            tournamentSection.style.display = tabName === 'participants' || (tabName !== 'table' && !tournamentVisible) ? 'none' : 'block';
-        }
-        if (scrollToContent) {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+        const active = activateAppTab(tabName, tournamentVisible, {
+            buttons: tabNavigationButtons,
+            panels: tabPanels,
+            tournamentSection: document.getElementById('tournamentSection')
+        }, scrollToContent);
+        if (active) activeTab = active;
     }
 
     function updateTabAvailability() {
-        tabNavigationButtons.forEach(button => {
-            button.disabled = button.dataset.tab !== 'participants' && button.dataset.tab !== 'table' && !tournamentVisible;
-        });
-        if (!tournamentVisible && activeTab !== 'participants' && activeTab !== 'table') {
-            activateTab('participants');
-        }
+        const availableTab = updateAppTabAvailability(activeTab, tournamentVisible, tabNavigationButtons);
+        if (availableTab !== activeTab) activateTab(availableTab);
     }
 
     // Tema
     function applyTheme(theme) {
-        const isLight = theme === 'light';
-        document.body.classList.toggle('light-theme', isLight);
-        if (themeToggleBtn) {
-            const modeLabel = themeToggleBtn.querySelector('.theme-mode-label');
-            if (modeLabel) modeLabel.textContent = isLight ? 'Claro' : 'Oscuro';
-            themeToggleBtn.setAttribute('aria-pressed', String(isLight));
-            themeToggleBtn.setAttribute('aria-label', isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro');
-            themeToggleBtn.title = isLight ? 'Cambiar al modo oscuro' : 'Cambiar al modo claro';
-        }
+        applyAppTheme(theme, document.body, themeToggleBtn);
     }
 
     applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
     themeToggleBtn?.addEventListener('click', function () {
-        const nextTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
+        const nextTheme = getNextAppTheme(document.body.classList.contains('light-theme') ? 'light' : 'dark');
         localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
         applyTheme(nextTheme);
     });
@@ -320,19 +330,18 @@
 
     async function initializeSupabase() {
         try {
-            const response = await fetch(SUPABASE_CONFIG_ENDPOINT, { cache: 'no-store' });
+            const response = await fetchWithTimeout(SUPABASE_CONFIG_ENDPOINT, { cache: 'no-store' });
             if (!response.ok) throw new Error(`Configuración Supabase no disponible (${response.status})`);
             const config = await response.json();
             if (!config.url || !config.anonKey) throw new Error('Faltan variables públicas de Supabase en Vercel.');
             supabaseConfig = { url: config.url.replace(/\/$/, ''), anonKey: config.anonKey };
+            revealAdminDashboardLink();
             try {
-                const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+                const { createClient } = await import('@supabase/supabase-js');
                 supabaseAuthClient = createClient(supabaseConfig.url, supabaseConfig.anonKey, {
-                    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+                    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+                    global: { fetch: (input, init) => fetchWithTimeout(input, init, 15_000) }
                 });
-                const { data: sessionResult } = await supabaseAuthClient.auth.getSession();
-                appAuthSession = sessionResult.session || null;
-                supabaseAuthClient.auth.onAuthStateChange((_event, session) => { appAuthSession = session || null; });
             } catch (authError) { console.warn('No se pudo cargar la sesión del perfil:', authError.message); }
             await loadSavedScoreTables();
         } catch (error) {
@@ -344,9 +353,30 @@
         }
     }
 
+    async function revealAdminDashboardLink() {
+        const link = document.getElementById('adminDashboardLink');
+        if (!link || !supabaseConfig) return;
+        link.hidden = true;
+        try {
+            const session = JSON.parse(sessionStorage.getItem('lamafia_admin_session') || 'null');
+            if (!session?.access_token || !session?.expires_at || session.expires_at <= Date.now()) return;
+            const response = await fetchWithTimeout(`${supabaseConfig.url}/auth/v1/user`, {
+                headers: {
+                    apikey: supabaseConfig.anonKey,
+                    Authorization: `Bearer ${session.access_token}`
+                }
+            });
+            if (!response.ok) return;
+            const user = await response.json();
+            link.hidden = user?.app_metadata?.role !== 'admin';
+        } catch (error) {
+            link.hidden = true;
+        }
+    }
+
     async function supabaseRequest(path, options = {}, accessToken = null) {
         if (!supabaseConfig) throw new Error('Supabase no está conectado. Configura las variables SUPABASE_URL y SUPABASE_ANON_KEY en Vercel.');
-        const response = await fetch(`${supabaseConfig.url}${path}`, {
+        const response = await fetchWithTimeout(`${supabaseConfig.url}${path}`, {
             ...options,
             headers: {
                 apikey: supabaseConfig.anonKey,
@@ -364,13 +394,26 @@
         return responseBody ? JSON.parse(responseBody) : null;
     }
 
+    const savedPlayerService = new SavedPlayerService(supabaseRequest);
+    const participantAutocomplete = new ParticipantAutocomplete(newParticipantInput, playerSuggestionsEl, {
+        search: {
+            async search(query) {
+                if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
+                return supabaseConfig ? savedPlayerService.search(query) : [];
+            }
+        },
+        getCurrentParticipantNames: () => participants.map(player => String(player?.name || player || '').trim()),
+        onSubmit: () => addBtn?.click(),
+        onError: error => console.warn('No se pudieron buscar jugadores guardados:', error instanceof Error ? error.message : error)
+    });
+    participantAutocomplete.bind();
+
     async function getTournamentAccessToken() {
         if (supabaseInitialization) await supabaseInitialization;
         if (!supabaseAuthClient || !tournamentCreatorUserId) return null;
         const { data, error } = await supabaseAuthClient.auth.getSession();
         if (error) throw error;
         const session = data.session || null;
-        appAuthSession = session;
         if (!session || session.user.id !== tournamentCreatorUserId) {
             throw new Error(`Inicia sesión con la cuenta creadora (${tournamentCreatorName || 'usuario identificado'}) para publicar este torneo.`);
         }
@@ -382,7 +425,6 @@
         if (supabaseInitialization) await supabaseInitialization;
         const { data } = supabaseAuthClient ? await supabaseAuthClient.auth.getSession() : { data: { session: null } };
         const session = data.session || null;
-        appAuthSession = session;
         tournamentCreatorUserId = session?.user?.id || null;
         tournamentCreatorName = session?.user?.user_metadata?.nickname || null;
         tournamentCreationLogged = true;
@@ -410,7 +452,9 @@
         };
         const signature = JSON.stringify([
             tournamentId, tournamentName, participants, versus, matchHistory, accumulatedPoints,
-            currentPhase, groupRound, knockoutRound, tournamentFinished, preFinalMatch,
+            currentPhase, groupRound, knockoutRound, lowerBracketRound, eliminationMode,
+            upperByePlayers, lowerByePlayers, upperWaitingPlayers, lowerWaitingPlayers, activeEliminationBracket,
+            upperFinalists, lowerFinalists, tournamentFinished, preFinalMatch,
             preFinalPlayed, finalMatch, finalPlayed, podium, swissByes, tournamentVisible
         ]);
         return { details, signature };
@@ -430,7 +474,6 @@
                 if (supabaseAuthClient) {
                     const { data } = await supabaseAuthClient.auth.getSession();
                     accessToken = data.session?.access_token || null;
-                    appAuthSession = data.session || null;
                 }
                 await supabaseRequest('/rest/v1/rpc/log_tournament_activity', {
                     method: 'POST',
@@ -450,7 +493,7 @@
         savedScoreTableSelect.disabled = true;
         savedScoreTableSelect.innerHTML = '<option value="">Cargando tablas…</option>';
         try {
-            const rows = await supabaseRequest(`${SUPABASE_TABLES_ENDPOINT}?select=id,name,finished_at&order=finished_at.desc`);
+            const rows = await fetchAllSupabaseRows(supabaseRequest, `${SUPABASE_TABLES_ENDPOINT}?select=id,name,finished_at&order=finished_at.desc`);
             savedScoreTables = Array.isArray(rows) ? rows : [];
             const selectedId = activeSavedScoreTable?.id || savedScoreTableSelect.value || '';
             savedScoreTableSelect.innerHTML = '<option value="">Tabla del torneo actual</option>' + savedScoreTables.map(row => {
@@ -469,144 +512,6 @@
             console.error('No se pudieron cargar las tablas guardadas:', error);
             savedScoreTableSelect.innerHTML = '<option value="">No se pudieron cargar las tablas</option>';
             savedScoreTableSelect.disabled = false;
-        }
-    }
-
-    function hidePlayerSuggestions() {
-        if (!playerSuggestionsEl) return;
-        playerSuggestionsEl.hidden = true;
-        playerSuggestionsEl.replaceChildren();
-        newParticipantInput?.setAttribute('aria-expanded', 'false');
-        newParticipantInput?.removeAttribute('aria-activedescendant');
-        activePlayerSuggestionIndex = -1;
-    }
-
-    function selectPlayerSuggestion(name) {
-        if (!name || !newParticipantInput) return;
-        const currentValue = newParticipantInput.value;
-        const lastComma = currentValue.lastIndexOf(',');
-        const prefix = lastComma >= 0 ? `${currentValue.slice(0, lastComma + 1).trimEnd()} ` : '';
-        newParticipantInput.value = `${prefix}${name}`;
-        newParticipantInput.focus();
-        hidePlayerSuggestions();
-    }
-
-    function setActivePlayerSuggestion(index) {
-        const options = [...(playerSuggestionsEl?.querySelectorAll('[role="option"]') || [])];
-        if (!options.length) return;
-        activePlayerSuggestionIndex = (index + options.length) % options.length;
-        options.forEach((option, optionIndex) => {
-            const active = optionIndex === activePlayerSuggestionIndex;
-            option.setAttribute('aria-selected', String(active));
-            option.classList.toggle('active', active);
-        });
-        const activeOption = options[activePlayerSuggestionIndex];
-        newParticipantInput?.setAttribute('aria-activedescendant', activeOption.id);
-        activeOption.scrollIntoView({ block: 'nearest' });
-    }
-
-    function renderPlayerSuggestions(rows, query) {
-        if (!playerSuggestionsEl || !newParticipantInput) return;
-        const seen = new Set();
-        const currentNames = new Set(participants.map(player => String(player.name || '').trim().toLocaleLowerCase()));
-        const matches = (Array.isArray(rows) ? rows : [])
-            .filter(row => row?.name)
-            .filter(row => {
-                const normalized = String(row.name).trim().toLocaleLowerCase();
-                if (!normalized || seen.has(normalized) || currentNames.has(normalized)) return false;
-                seen.add(normalized);
-                return true;
-            })
-            .sort((a, b) => {
-                const aStarts = a.name.toLocaleLowerCase().startsWith(query.toLocaleLowerCase());
-                const bStarts = b.name.toLocaleLowerCase().startsWith(query.toLocaleLowerCase());
-                return Number(bStarts) - Number(aStarts) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-            });
-
-        playerSuggestionsEl.replaceChildren();
-        activePlayerSuggestionIndex = -1;
-        if (!matches.length) {
-            hidePlayerSuggestions();
-            return;
-        }
-
-        matches.forEach((player, index) => {
-            const option = document.createElement('button');
-            option.type = 'button';
-            option.id = `player-suggestion-${index}`;
-            option.className = 'player-suggestion-option';
-            option.setAttribute('role', 'option');
-            option.setAttribute('aria-selected', 'false');
-            option.dataset.playerName = player.name;
-            option.textContent = player.name;
-            playerSuggestionsEl.appendChild(option);
-        });
-        playerSuggestionsEl.hidden = false;
-        newParticipantInput.setAttribute('aria-expanded', 'true');
-    }
-
-    async function searchSavedPlayers(query, requestId) {
-        if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
-        if (!supabaseConfig || requestId !== playerSuggestionRequestId || !query) return;
-        const params = new URLSearchParams({
-            select: 'id,name',
-            name: `ilike.*${query}*`,
-            order: 'name.asc',
-            limit: '12'
-        });
-        try {
-            const players = await supabaseRequest(`/rest/v1/players?${params.toString()}`);
-            const aliasParams = new URLSearchParams({
-                select: 'alias_key,alias_name,canonical_name',
-                alias_name: `ilike.*${query}*`,
-                order: 'alias_name.asc',
-                limit: '12'
-            });
-            const aliases = await supabaseRequest(`/rest/v1/player_aliases?${aliasParams.toString()}`);
-            if (requestId !== playerSuggestionRequestId) return;
-            const aliasNames = new Map((Array.isArray(aliases) ? aliases : []).map(alias => [
-                String(alias.alias_name || '').normalize('NFKC').toLocaleLowerCase(), alias.canonical_name
-            ]));
-            const suggestions = [
-                ...(Array.isArray(players) ? players.map(player => ({
-                    ...player,
-                    name: aliasNames.get(String(player.name || '').normalize('NFKC').toLocaleLowerCase()) || player.name
-                })) : []),
-                ...(Array.isArray(aliases) ? aliases.map(alias => ({ name: alias.canonical_name })) : [])
-            ];
-            renderPlayerSuggestions(suggestions, query);
-        } catch (error) {
-            console.warn('No se pudieron buscar jugadores guardados:', error.message);
-            if (requestId === playerSuggestionRequestId) hidePlayerSuggestions();
-        }
-    }
-
-    async function getSavedPlayerName(name) {
-        const typedName = String(name || '').trim();
-        if (!typedName) return typedName;
-        if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
-        if (!supabaseConfig) return typedName;
-
-        try {
-            const aliasKey = typedName.normalize('NFKC').toLocaleLowerCase();
-            const aliasRows = await supabaseRequest(`/rest/v1/player_aliases?select=canonical_name&alias_key=eq.${encodeURIComponent(aliasKey)}&limit=1`);
-            if (Array.isArray(aliasRows) && aliasRows[0]?.canonical_name) return aliasRows[0].canonical_name.trim();
-            const escapedName = typedName.replace(/[\\%_*]/g, '\\$&');
-            const params = new URLSearchParams({
-                select: 'name',
-                name: `ilike.${escapedName}`,
-                order: 'created_at.asc',
-                limit: '100'
-            });
-            const rows = await supabaseRequest(`/rest/v1/players?${params.toString()}`);
-            const typedNameKey = typedName.toLocaleLowerCase();
-            const savedPlayer = (Array.isArray(rows) ? rows : []).find(player =>
-                String(player.name || '').trim().toLocaleLowerCase() === typedNameKey
-            );
-            return savedPlayer?.name?.trim() || typedName;
-        } catch (error) {
-            console.warn('No se pudo normalizar el nombre con Supabase:', error.message);
-            return typedName;
         }
     }
 
@@ -690,15 +595,20 @@
         }
     }
 
-    async function savePlayerToSupabase(player) {
+    async function savePlayersToSupabase(players) {
         try {
             if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
-            if (!supabaseConfig || !player?.id || !player?.name) return;
-            await supabaseRequest('/rest/v1/players', {
+            if (!supabaseConfig) return;
+            const rows = (Array.isArray(players) ? players : [players])
+                .filter(player => player?.id && player?.name)
+                .map(player => ({ id: player.id, name: capitalizePlayerName(player.name) }));
+            if (!rows.length) return;
+            await supabaseRequest('/rest/v1/players?on_conflict=id', {
                 method: 'POST',
-                headers: { Prefer: 'return=minimal' },
-                body: JSON.stringify({ id: player.id, name: capitalizePlayerName(player.name) })
+                headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+                body: JSON.stringify(rows)
             });
+            savedPlayerService.invalidate();
         } catch (error) {
             console.warn('No se pudo guardar el participante en Supabase:', error.message);
         }
@@ -719,12 +629,15 @@
     }
 
     function buildSharedTournamentSnapshot() {
-        const rawMatches = [
+        const rawMatches = [...new Map([
             ...matchHistory,
             ...versus,
             ...(preFinalMatch ? [{ ...preFinalMatch, stage: 'pre-final' }] : []),
             ...(finalMatch ? [{ ...finalMatch, stage: 'final' }] : [])
-        ];
+        ].map(match => [String(match.id), match])).values()];
+        const activeUpperLabel = versus.some(match => match.bracket === 'upper') ? `Upper A · R${knockoutRound}` : '';
+        const activeLowerLabel = versus.some(match => match.bracket === 'lower') ? `Lower B · R${lowerBracketRound}` : '';
+        const activeBracketLabel = [activeUpperLabel, activeLowerLabel].filter(Boolean).join(' + ') || 'Cuadros A/B';
         const matches = rawMatches.map(match => {
             const round = Number(match.round) || 0;
             if (round > 0) {
@@ -740,14 +653,33 @@
             if (stage === 'pre-final' || stage === 'final') {
                 return {
                     ...match,
-                    view_key: `special-${stage}`,
-                    view_label: stage === 'pre-final' ? 'Pre-final · 3.º y 4.º lugar' : 'Final',
-                    view_order: stage === 'pre-final' ? 200 : 201
+                    view_key: eliminationMode === 'upper-lower' ? 'special-cross-finals' : `special-${stage}`,
+                    view_label: eliminationMode === 'upper-lower'
+                        ? 'Finales A y B'
+                        : (stage === 'pre-final' ? 'Pre-final · 3.º y 4.º lugar' : 'Final'),
+                    view_order: eliminationMode === 'upper-lower' ? 200 : (stage === 'pre-final' ? 200 : 201)
                 };
             }
 
             const bracketRound = Number(match.bracketRound) ||
                 (versus.includes(match) && currentPhase === 2 ? knockoutRound : 1);
+            if (match.bracket === 'upper' || match.bracket === 'lower') {
+                if (versus.includes(match)) {
+                    return {
+                        ...match,
+                        view_key: 'knockout-current',
+                        view_label: activeBracketLabel,
+                        view_order: 100 + Math.max(knockoutRound, lowerBracketRound) * 2
+                    };
+                }
+                const bracketName = match.bracket === 'upper' ? 'Upper · A' : 'Lower · B';
+                return {
+                    ...match,
+                    view_key: `knockout-${match.bracket}-${bracketRound}`,
+                    view_label: `${bracketName} · Ronda ${bracketRound}`,
+                    view_order: 100 + bracketRound * 2 + (match.bracket === 'lower' ? 1 : 0)
+                };
+            }
             return {
                 ...match,
                 view_key: `knockout-${bracketRound}`,
@@ -757,9 +689,14 @@
         });
 
         let currentRoundKey = currentPhase === 2
-            ? `knockout-${Math.max(1, knockoutRound)}`
+            ? (eliminationMode === 'upper-lower' && versus.some(match => match.bracket)
+                ? 'knockout-current'
+                : versus[0]?.bracket
+                ? `knockout-${versus[0].bracket}-${versus[0].bracketRound || knockoutRound}`
+                : `knockout-${Math.max(1, knockoutRound)}`)
             : `group-${groupRound}`;
-        if (preFinalMatch && !preFinalPlayed) currentRoundKey = 'special-pre-final';
+        if (eliminationMode === 'upper-lower' && (preFinalMatch || finalMatch || tournamentFinished)) currentRoundKey = 'special-cross-finals';
+        else if (preFinalMatch && !preFinalPlayed) currentRoundKey = 'special-pre-final';
         else if (finalMatch && !finalPlayed) currentRoundKey = 'special-final';
         else if (tournamentFinished && podium?.first) currentRoundKey = 'special-final';
 
@@ -768,6 +705,7 @@
             tournament_id: tournamentId,
             tournament_name: tournamentName,
             tournament_format: tournamentFormat,
+            elimination_mode: eliminationMode,
             current_phase: currentPhase,
             phase_label: currentPhase === 2 ? 'Eliminatorias' : 'Fase de grupos',
             current_round: currentPhase === 2 ? knockoutRound : groupRound,
@@ -900,6 +838,15 @@
                 currentPhase,
                 tournamentWinner,
                 knockoutRound,
+                lowerBracketRound,
+                eliminationMode,
+                upperByePlayers,
+                lowerByePlayers,
+                upperWaitingPlayers,
+                lowerWaitingPlayers,
+                activeEliminationBracket,
+                upperFinalists,
+                lowerFinalists,
                 groupRound,
                 accumulatedPoints,
                 customQualifiedCount,
@@ -974,6 +921,15 @@
             currentPhase = data.currentPhase || 1;
             tournamentWinner = data.tournamentWinner || null;
             knockoutRound = data.knockoutRound || 0;
+            lowerBracketRound = data.lowerBracketRound || 0;
+            eliminationMode = data.eliminationMode || 'single';
+            upperByePlayers = data.upperByePlayers || [];
+            lowerByePlayers = data.lowerByePlayers || [];
+            upperWaitingPlayers = data.upperWaitingPlayers || [];
+            lowerWaitingPlayers = data.lowerWaitingPlayers || [];
+            activeEliminationBracket = data.activeEliminationBracket || 'upper';
+            upperFinalists = data.upperFinalists || { winner: null, runnerUp: null };
+            lowerFinalists = data.lowerFinalists || { winner: null, runnerUp: null };
             groupRound = data.groupRound || 0;
             accumulatedPoints = data.accumulatedPoints || {};
             customQualifiedCount = data.customQualifiedCount || 8;
@@ -1098,6 +1054,15 @@
             currentPhase = data.currentPhase || 1;
             tournamentWinner = data.tournamentWinner || null;
             knockoutRound = data.knockoutRound || 0;
+            lowerBracketRound = data.lowerBracketRound || 0;
+            eliminationMode = data.eliminationMode || 'single';
+            upperByePlayers = data.upperByePlayers || [];
+            lowerByePlayers = data.lowerByePlayers || [];
+            upperWaitingPlayers = data.upperWaitingPlayers || [];
+            lowerWaitingPlayers = data.lowerWaitingPlayers || [];
+            activeEliminationBracket = data.activeEliminationBracket || 'upper';
+            upperFinalists = data.upperFinalists || { winner: null, runnerUp: null };
+            lowerFinalists = data.lowerFinalists || { winner: null, runnerUp: null };
             groupRound = data.groupRound || 0;
             accumulatedPoints = data.accumulatedPoints || {};
             customQualifiedCount = data.customQualifiedCount || 8;
@@ -1134,7 +1099,7 @@
     // 6. FUNCIONES DE PARTICIPANTES
     // ============================================================
 
-    function addParticipant(name) {
+    function addParticipant(name, { persist = true } = {}) {
         const trimmed = capitalizePlayerName(name);
         if (!trimmed) return null;
         if (participantExistsByName(trimmed)) return null;
@@ -1142,7 +1107,7 @@
         const obj = { id, name: trimmed };
         participants.push(obj);
         accumulatedPoints[id] = accumulatedPoints[id] || 0;
-        savePlayerToSupabase(obj);
+        if (persist) savePlayersToSupabase([obj]);
         saveToLocalStorage();
         return obj;
     }
@@ -1177,7 +1142,7 @@
         const oldName = p.name;
         newName = capitalizePlayerName(newName);
         p.name = newName;
-        savePlayerToSupabase(p);
+        savePlayersToSupabase([p]);
 
         versus.forEach(v => {
             if (v.playerAId === id || v.playerA === oldName) {
@@ -1252,109 +1217,29 @@
 
     function recalculateAccumulatedPoints() {
         ensureParticipantsObjects();
-
-        participants.forEach(p => {
-            if (p && p.id) accumulatedPoints[p.id] = 0;
+        accumulatedPoints = calculateAccumulatedPoints({
+            participants,
+            matchHistory,
+            currentMatches: versus,
+            format: tournamentFormat,
+            swissByes,
+            totalRounds: getTotalRounds(),
+            getParticipantIdByName
         });
-
-        const POINTS_PER_WIN = tournamentFormat === 'swiss' ? 1 : 3;
-        const POINTS_PER_DRAW = tournamentFormat === 'swiss' ? 0.5 : 0;
-
-        for (let v of matchHistory) {
-            if (v.round && v.round > 0) {
-                const aId = v.playerAId || getParticipantIdByName(v.playerA);
-                const bId = v.playerBId || getParticipantIdByName(v.playerB);
-                if (v.scoreA > v.scoreB) {
-                    if (aId) accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_WIN;
-                } else if (v.scoreB > v.scoreA) {
-                    if (bId) accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_WIN;
-                } else if (POINTS_PER_DRAW && aId && bId && ((v.scoreA !== 0 || v.scoreB !== 0) || v.drawResult)) {
-                    accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_DRAW;
-                    accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_DRAW;
-                }
-            }
-        }
-
-        for (let v of versus) {
-            if (v.round && v.round > 0) {
-                const existsInHistory = matchHistory.some(h =>
-                    h.id === v.id &&
-                    (h.playerAId === v.playerAId || h.playerA === v.playerA) &&
-                    (h.playerBId === v.playerBId || h.playerB === v.playerB)
-                );
-                if (!existsInHistory) {
-                    const aId = v.playerAId || getParticipantIdByName(v.playerA);
-                    const bId = v.playerBId || getParticipantIdByName(v.playerB);
-                    if (v.scoreA > v.scoreB) {
-                        if (aId) accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_WIN;
-                    } else if (v.scoreB > v.scoreA) {
-                        if (bId) accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_WIN;
-                    } else if (POINTS_PER_DRAW && aId && bId && ((v.scoreA !== 0 || v.scoreB !== 0) || v.drawResult)) {
-                        accumulatedPoints[aId] = (accumulatedPoints[aId] || 0) + POINTS_PER_DRAW;
-                        accumulatedPoints[bId] = (accumulatedPoints[bId] || 0) + POINTS_PER_DRAW;
-                    }
-                }
-            }
-        }
-        if (tournamentFormat === 'swiss') {
-            // Un bye equivale a una victoria para la puntuación del torneo.
-            const playedByes = swissByes.slice(0, getTotalRounds());
-            playedByes.forEach(id => { accumulatedPoints[id] = (accumulatedPoints[id] || 0) + POINTS_PER_WIN; });
-        }
     }
 
     function getGroupRanking() {
-        const groupMatches = [...matchHistory, ...versus].filter(v => v.round && v.round > 0);
-        const ranking = participants.map(p => {
-            const pid = p.id || getParticipantIdByName(p.name || p);
-            const points = getAccumulatedScore(pid);
-
-            const playerMatches = groupMatches.filter(v => {
-                const aId = v.playerAId || getParticipantIdByName(v.playerA);
-                const bId = v.playerBId || getParticipantIdByName(v.playerB);
-                return aId === pid || bId === pid || v.playerA === p.name || v.playerB === p.name;
-            });
-
-            const wins = playerMatches.filter(v => {
-                const aId = v.playerAId || getParticipantIdByName(v.playerA);
-                const bId = v.playerBId || getParticipantIdByName(v.playerB);
-                if (aId === pid) return v.scoreA > v.scoreB;
-                if (bId === pid) return v.scoreB > v.scoreA;
-                if (v.playerA === p.name) return v.scoreA > v.scoreB;
-                if (v.playerB === p.name) return v.scoreB > v.scoreA;
-                return false;
-            }).length;
-
-            let pointsFor = 0, pointsAgainst = 0;
-            playerMatches.forEach(v => {
-                if ((v.playerAId && v.playerAId === pid) || v.playerA === p.name) {
-                    pointsFor += v.scoreA || 0;
-                    pointsAgainst += v.scoreB || 0;
-                } else {
-                    pointsFor += v.scoreB || 0;
-                    pointsAgainst += v.scoreA || 0;
-                }
-            });
-            const pointDifference = pointsFor - pointsAgainst;
-
-            const opponents = playerMatches.map(v => {
-                const a = v.playerAId || getParticipantIdByName(v.playerA);
-                const b = v.playerBId || getParticipantIdByName(v.playerB);
-                return a === pid ? b : a;
-            }).filter(Boolean);
-            const buchholz = opponents.reduce((sum, id) => sum + getAccumulatedScore(id), 0);
-            const byes = tournamentFormat === 'swiss' ? swissByes.filter(id => String(id) === String(pid)).length : 0;
-            return { id: pid, name: p.name, points, wins: wins + byes, pointDifference, buchholz };
+        return calculateGroupRanking({
+            participants: participants.map(player => ({
+                id: player?.id,
+                name: String(player?.name || player || '')
+            })),
+            matches: [...matchHistory, ...versus],
+            accumulatedPoints,
+            format: tournamentFormat,
+            swissByes,
+            getParticipantIdByName
         });
-
-        ranking.sort((a, b) => {
-            if (b.points !== a.points) return b.points - a.points;
-            if (tournamentFormat === 'swiss' && b.buchholz !== a.buchholz) return b.buchholz - a.buchholz;
-            if (b.wins !== a.wins) return b.wins - a.wins;
-            if (b.pointDifference !== a.pointDifference) return b.pointDifference - a.pointDifference;
-            return 0;
-        });
-        return ranking;
     }
 
     function getQualifiedCount() {
@@ -1398,76 +1283,18 @@
     // 8. FUNCIONES DE GENERACIÓN DE PARTIDOS
     // ============================================================
 
-    function getPairKey(playerAId, playerBId, playerAName = '', playerBName = '') {
-        const a = String(playerAId || playerAName).trim().toLocaleLowerCase();
-        const b = String(playerBId || playerBName).trim().toLocaleLowerCase();
-        return [a, b].sort().join('|');
-    }
-
     function getPreviousGroupPairKeys(matches = [...matchHistory, ...versus]) {
-        return new Set(matches
-            .filter(match => match.round && match.round > 0)
-            .map(match => getPairKey(match.playerAId, match.playerBId, match.playerA, match.playerB)));
+        return collectPreviousGroupPairKeys(matches);
     }
 
     function generatePairings(players, excludedKeys = new Set()) {
-        const normalized = players.map(player => {
-            const name = (typeof player === 'string') ? player : (player && player.name) || '';
-            const id = (typeof player === 'object' && player && player.id) ? player.id : getParticipantIdByName(name);
-            return { id, name };
-        });
-
-        // Buscar la combinación con más cruces válidos. Así nunca se repite A-B
-        // como B-A y, si ya se agotaron algunos rivales, descansan los mínimos posibles.
-        let best = [];
-        function search(remaining, current) {
-            if (current.length > best.length) best = [...current];
-            if (remaining.length < 2 || current.length + Math.floor(remaining.length / 2) <= best.length) return;
-
-            const first = remaining[0];
-            const opponents = remaining.slice(1).sort(() => Math.random() - 0.5);
-            for (const opponent of opponents) {
-                const key = getPairKey(first.id, opponent.id, first.name, opponent.name);
-                if (excludedKeys.has(key)) continue;
-                const next = remaining.filter(player => player !== first && player !== opponent);
-                search(next, current.concat({
-                    playerA: first.name,
-                    playerB: opponent.name,
-                    playerAId: first.id,
-                    playerBId: opponent.id
-                }));
-            }
-            search(remaining.slice(1), current);
-        }
-
-        search(normalized.sort(() => Math.random() - 0.5), []);
-        return best;
+        return createPairings(players, excludedKeys, getParticipantIdByName);
     }
 
     function generateSwissPairings() {
         const ranking = getGroupRanking();
         const previous = getPreviousGroupPairKeys();
-        const byeIds = new Set(swissByes);
-        let bye = null;
-        if (participants.length % 2) {
-            bye = [...ranking].reverse().find(p => !byeIds.has(String(p.id))) || ranking[ranking.length - 1];
-            if (bye) byeIds.add(String(bye.id));
-        }
-        const players = ranking.filter(p => !bye || p.id !== bye.id).map(p => ({ id: p.id, name: p.name, points: p.points }));
-        let best = null;
-        function search(rest, pairs, gap) {
-            if (!rest.length) {
-                if (!best || gap < best.gap) best = { pairs: [...pairs], gap };
-                return;
-            }
-            if (best && gap >= best.gap) return;
-            const first = rest[0];
-            const opponents = rest.slice(1).filter(p => !previous.has(getPairKey(first.id, p.id)));
-            opponents.sort((a, b) => Math.abs(first.points-b.points)-Math.abs(first.points-a.points) || Math.random()-.5);
-            opponents.forEach(opponent => search(rest.filter(p => p !== first && p !== opponent), pairs.concat([{ playerA:first.name, playerB:opponent.name, playerAId:first.id, playerBId:opponent.id }]), gap + Math.abs(first.points-opponent.points)));
-        }
-        search(players, [], 0);
-        return { pairings: best?.pairs || [], bye };
+        return createSwissPairings(ranking, previous, new Set(swissByes));
     }
 
     function getKnockoutRoundName(round) {
@@ -1488,6 +1315,11 @@
         } else if (currentPhase === 2 && tournamentFinished) {
             return '🏆 TORNEO FINALIZADO';
         } else if (currentPhase === 2) {
+            if (eliminationMode === 'upper-lower' && (preFinalMatch || finalMatch)) return '🏆 Final A · Final B';
+            if (eliminationMode === 'upper-lower') {
+                const activeRound = activeEliminationBracket === 'upper' ? knockoutRound : lowerBracketRound;
+                return `Eliminatoria ${activeEliminationBracket === 'upper' ? 'A · Upper' : 'B · Lower'} · R${activeRound}`;
+            }
             if (preFinalMatch && !preFinalPlayed) {
                 return '🥉 PRE-FINAL (3er y 4to Lugar)';
             }
@@ -1643,7 +1475,7 @@
     function renderPodium() {
         return `
             <div class="podium-container">
-                <div class="podium-title">🏆 ${tournamentName} 🏆</div>
+                <div class="podium-title">🏆 ${escapeHtml(tournamentName)} 🏆</div>
                 <div class="podium-grid">
                     <div class="podium-place place-2">
                         <div class="medal">🥈</div>
@@ -1671,7 +1503,7 @@
                     </div>
                 </div>
                 <div class="podium-footer">
-                    <span class="tourney-name">🏆 ${tournamentName}</span>
+                    <span class="tourney-name">🏆 ${escapeHtml(tournamentName)}</span>
                     ${podium.third ? `<span style="color:#00FF88;"> · 🥉 3er Lugar: ${playerProfileLinkMarkup(podium.third)}</span>` : ''}
                     ${podium.fourth ? `<span style="color:#4A4A6A;"> · 4️⃣ 4to Lugar: ${playerProfileLinkMarkup(podium.fourth)}</span>` : ''}
                 </div>
@@ -1698,7 +1530,7 @@
         return `<a class="champion-profile-card" data-champion-name="${escapeHtml(name)}" href="${escapeHtml(getPlayerProfilePath(name))}" aria-label="Ver perfil de ${escapeHtml(name)}, campeón del torneo">
             <div class="champion-profile-banner" aria-hidden="true"></div>
             <div class="champion-profile-identity">
-                <span class="champion-profile-avatar"><span class="champion-profile-initial">${escapeHtml(initial)}</span><img class="champion-profile-photo" alt="Foto de perfil de ${escapeHtml(name)}"></span>
+                <span class="champion-profile-avatar"><span class="champion-profile-initial">${escapeHtml(initial)}</span><img class="champion-profile-photo" loading="lazy" decoding="async" alt="Foto de perfil de ${escapeHtml(name)}"></span>
                 <span class="champion-profile-copy"><span class="champion-profile-eyebrow">🏆 Campeón del torneo</span><strong>${escapeHtml(name)}</strong><span class="champion-profile-tournament">${escapeHtml(tournamentName)}</span></span>
                 <span class="champion-profile-medal" aria-hidden="true">🥇</span>
             </div>
@@ -1759,7 +1591,7 @@
             return `<tr><td>${index + 1}</td><td class="name-cell">${playerTournamentHistoryLinkMarkup(player.name, player.id)}</td><td>${wins + byes} - ${losses} - ${draws}</td><td class="points-cell">${player.points.toFixed(1)}</td><td>${player.buchholz.toFixed(1)}</td><td>${player.pointDifference > 0 ? '+' : ''}${player.pointDifference}</td></tr>`;
         }).join('');
         return `<div class="podium-container swiss-final-standings">
-            <div class="podium-title">🏆 ${tournamentName} · Clasificación final</div>
+            <div class="podium-title">🏆 ${escapeHtml(tournamentName)} · Clasificación final</div>
             <div class="table-scroll"><table class="total-score-table"><thead><tr><th>Rango</th><th>Participante</th><th>Partido G-P-E</th><th>1. Puntuación</th><th>2. Buchholz</th><th>3. Dif. de ptos.</th></tr></thead><tbody>${rows}</tbody></table></div>
             <div class="podium-footer">Formato suizo · ${groupRound} rondas · ${participants.length} participantes · desempate Buchholz</div>
         </div>`;
@@ -1809,8 +1641,13 @@
             });
         } else {
             matchesToShow = [...versus];
-            if (preFinalMatch && !preFinalPlayed) matchesToShow.push(preFinalMatch);
-            if (finalMatch && !finalPlayed) matchesToShow.push(finalMatch);
+            if (eliminationMode === 'upper-lower') {
+                if (preFinalMatch) matchesToShow.push(preFinalMatch);
+                if (finalMatch) matchesToShow.push(finalMatch);
+            } else {
+                if (preFinalMatch && !preFinalPlayed) matchesToShow.push(preFinalMatch);
+                if (finalMatch && !finalPlayed) matchesToShow.push(finalMatch);
+            }
             if (selectedRound !== 'all') matchesToShow = matchesToShow.filter(v => v.round === selectedRound);
         }
 
@@ -1848,9 +1685,9 @@
 
                 if (isPreFinal) {
                     extraClass = 'prefinal-match';
-                    badgeText = '🥉 3er/4to Lugar';
+                    badgeText = eliminationMode === 'upper-lower' ? '🏆 Final B · 3.º/4.º' : '🥉 3er/4to Lugar';
                     badgeColor = '#7C3AED';
-                    controlButtons = `
+                    controlButtons = preFinalPlayed ? '<div class="match-controls"><span class="archived-match-label">✅ Final B jugada</span></div>' : `
                         <div class="match-controls">
                             <button class="btn-sm play-btn" data-action="play-pre-final">✅ Marcar como jugado</button>
                             <button class="btn-sm auto-btn" data-action="auto-pre-final">⚡ Finalizar automático</button>
@@ -1858,48 +1695,53 @@
                     `;
                 } else if (isFinal) {
                     extraClass = 'final-match';
-                    badgeText = '🏆 FINAL';
+                    badgeText = eliminationMode === 'upper-lower' ? '🏆 Final A · 1.º/2.º' : '🏆 FINAL';
                     badgeColor = '#FFD700';
-                    const disabled = !preFinalPlayed ? 'disabled' : '';
-                    const disabledStyle = !preFinalPlayed ? 'opacity:0.5; cursor:not-allowed;' : '';
-                    controlButtons = `
+                    const disabled = eliminationMode !== 'upper-lower' && !preFinalPlayed ? 'disabled' : '';
+                    const disabledStyle = disabled ? 'opacity:0.5; cursor:not-allowed;' : '';
+                    controlButtons = finalPlayed ? '<div class="match-controls"><span class="archived-match-label">✅ Final A jugada</span></div>' : `
                         <div class="match-controls">
                             <button class="btn-sm play-btn" data-action="play-final" ${disabled} style="${disabledStyle}">✅ Marcar como jugado</button>
                             <button class="btn-sm auto-btn" data-action="auto-final" ${disabled} style="${disabledStyle}">⚡ Finalizar automático</button>
                         </div>
-                        ${!preFinalPlayed ? '<span style="font-size:0.6rem; color:#4A4A6A; margin-left:0.5rem;">⏳ Esperando PRE-FINAL...</span>' : ''}
+                        ${disabled ? '<span style="font-size:0.6rem; color:#4A4A6A; margin-left:0.5rem;">⏳ Esperando PRE-FINAL...</span>' : ''}
                     `;
                 }
 
+                if (eliminationMode === 'upper-lower' && v.bracket && !isPreFinal && !isFinal) {
+                    badgeText = v.bracket === 'upper' ? `A · Upper R${v.bracketRound || 1}` : `B · Lower R${v.bracketRound || 1}`;
+                    badgeColor = v.bracket === 'upper' ? '#69b8ff' : '#c18aff';
+                }
+
                 if (tournamentFormat === 'swiss' && v.round > 0 && !isArchived && !isPlayed) {
-                    controlButtons += `<div class="match-controls"><button class="btn-sm play-btn" data-action="mark-swiss-draw" data-vsid="${v.id}">🤝 Registrar empate</button></div>`;
+                    controlButtons += `<div class="match-controls"><button class="btn-sm play-btn" data-action="mark-swiss-draw" data-vsid="${Number(v.id)}">🤝 Registrar empate</button></div>`;
                 }
 
                 html += `
                     <div class="versus-item ${extraClass} ${statusClass} ${isArchived ? 'archived-match' : ''}" data-vsindex="${index}">
-                        ${isArchived ? `<div class="archived-match-label">📅 ${v.round ? `Ronda ${v.round}` : 'Eliminatorias'}${lockedSwissHistory ? ' · historial bloqueado' : ' · editable'}</div>` : ''}
-                        ${isPreFinal ? `<div class="prefinal-badge">🥉 PRE-FINAL</div>` : ''}
-                        ${isFinal ? `<div class="final-badge">🏆 FINAL</div>` : ''}
+                        ${isArchived ? `<div class="archived-match-label">📅 ${v.bracket === 'upper' ? 'Upper A' : v.bracket === 'lower' ? 'Lower B' : (v.round ? `Ronda ${Number(v.round)}` : 'Eliminatorias')}${v.bracketRound ? ` · R${Number(v.bracketRound)}` : ''}${lockedSwissHistory ? ' · historial bloqueado' : ' · editable'}</div>` : ''}
+                        ${isPreFinal ? `<div class="prefinal-badge">${eliminationMode === 'upper-lower' ? '🏆 FINAL B · 3.º/4.º' : '🥉 PRE-FINAL'}</div>` : ''}
+                        ${isFinal ? `<div class="final-badge">${eliminationMode === 'upper-lower' ? '🏆 FINAL A · 1.º/2.º' : '🏆 FINAL'}</div>` : ''}
                         <div class="match-content">
                             <div class="match-players">
                                 <div class="player-score-block">
                                     <div class="score-control">
-                                        ${lockedSwissHistory ? '' : `<button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerA}" data-vsid="${v.id}" data-dir="-1">−</button>`}
-                                        <div class="score-display">${v.scoreA}</div>
-                                        ${lockedSwissHistory ? '' : `<button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>`}
+                                        ${lockedSwissHistory ? '' : `<button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${escapeHtml(v.playerA)}" data-vsid="${Number(v.id)}" data-dir="-1">−</button>`}
+                                        <div class="score-display">${Number(v.scoreA) || 0}</div>
+                                        ${lockedSwissHistory ? '' : `<button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${escapeHtml(v.playerA)}" data-vsid="${Number(v.id)}" data-dir="1">+</button>`}
                                     </div>
-                                    <button class="player-name player-filter-trigger" data-player-filter-id="${playerAId}" type="button" title="Ver partidos de ${v.playerA}">${v.playerA}</button>
+                                    <button class="player-name player-filter-trigger" data-player-filter-id="${escapeHtml(playerAId)}" type="button" title="Ver partidos de ${escapeHtml(v.playerA)}">${escapeHtml(v.playerA)}</button>
                                 </div>
 
                                 <span class="vs-badge" style="color:${badgeColor};">${badgeText}</span>
 
                                 <div class="player-score-block">
                                     <div class="score-control">
-                                        ${lockedSwissHistory ? '' : `<button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>`}
-                                        <div class="score-display">${v.scoreB}</div>
-                                        ${lockedSwissHistory ? '' : `<button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>`}
+                                        ${lockedSwissHistory ? '' : `<button class="dec-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${escapeHtml(v.playerB)}" data-vsid="${Number(v.id)}" data-dir="-1">−</button>`}
+                                        <div class="score-display">${Number(v.scoreB) || 0}</div>
+                                        ${lockedSwissHistory ? '' : `<button class="inc-score" ${isArchived ? 'data-archived="true"' : ''} data-player="${escapeHtml(v.playerB)}" data-vsid="${Number(v.id)}" data-dir="1">+</button>`}
                                     </div>
-                                    <button class="player-name player-filter-trigger" data-player-filter-id="${playerBId}" type="button" title="Ver partidos de ${v.playerB}">${v.playerB}</button>
+                                    <button class="player-name player-filter-trigger" data-player-filter-id="${escapeHtml(playerBId)}" type="button" title="Ver partidos de ${escapeHtml(v.playerB)}">${escapeHtml(v.playerB)}</button>
                                 </div>
                             </div>
                             ${controlButtons}
@@ -1938,12 +1780,12 @@
             });
             document.querySelectorAll('[data-action="play-final"]').forEach(btn => {
                 btn.addEventListener('click', function () {
-                    if (preFinalPlayed) markFinalPlayed();
+                    if (preFinalPlayed || eliminationMode === 'upper-lower') markFinalPlayed();
                 });
             });
             document.querySelectorAll('[data-action="auto-final"]').forEach(btn => {
                 btn.addEventListener('click', function () {
-                    if (preFinalPlayed) autoFinishFinal();
+                    if (preFinalPlayed || eliminationMode === 'upper-lower') autoFinishFinal();
                 });
             });
             document.querySelectorAll('[data-action="mark-swiss-draw"]').forEach(btn => {
@@ -1963,20 +1805,20 @@
                             <div class="match-players">
                             <div class="player-score-block">
                                 <div class="score-control">
-                                    ${tournamentFormat === 'swiss' ? '' : `<button class="dec-score" data-archived="true" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="-1">−</button>`}
-                                    <div class="score-display">${v.scoreA}</div>
-                                    ${tournamentFormat === 'swiss' ? '' : `<button class="inc-score" data-archived="true" data-player="${v.playerA}" data-vsid="${v.id}" data-dir="1">+</button>`}
+                                    ${tournamentFormat === 'swiss' ? '' : `<button class="dec-score" data-archived="true" data-player="${escapeHtml(v.playerA)}" data-vsid="${Number(v.id)}" data-dir="-1">−</button>`}
+                                    <div class="score-display">${Number(v.scoreA) || 0}</div>
+                                    ${tournamentFormat === 'swiss' ? '' : `<button class="inc-score" data-archived="true" data-player="${escapeHtml(v.playerA)}" data-vsid="${Number(v.id)}" data-dir="1">+</button>`}
                                 </div>
-                                <button class="player-name player-filter-trigger" data-player-filter-id="${v.playerAId || getParticipantIdByName(v.playerA)}" type="button" title="Ver partidos de ${v.playerA}">${v.playerA}</button>
+                                <button class="player-name player-filter-trigger" data-player-filter-id="${escapeHtml(v.playerAId || getParticipantIdByName(v.playerA))}" type="button" title="Ver partidos de ${escapeHtml(v.playerA)}">${escapeHtml(v.playerA)}</button>
                             </div>
                             <span class="vs-badge" style="color:#4A4A6A;">✅ VS <span class="round-tag">${roundLabel}</span></span>
                             <div class="player-score-block">
                                 <div class="score-control">
-                                    ${tournamentFormat === 'swiss' ? '' : `<button class="dec-score" data-archived="true" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="-1">−</button>`}
-                                    <div class="score-display">${v.scoreB}</div>
-                                    ${tournamentFormat === 'swiss' ? '' : `<button class="inc-score" data-archived="true" data-player="${v.playerB}" data-vsid="${v.id}" data-dir="1">+</button>`}
+                                    ${tournamentFormat === 'swiss' ? '' : `<button class="dec-score" data-archived="true" data-player="${escapeHtml(v.playerB)}" data-vsid="${Number(v.id)}" data-dir="-1">−</button>`}
+                                    <div class="score-display">${Number(v.scoreB) || 0}</div>
+                                    ${tournamentFormat === 'swiss' ? '' : `<button class="inc-score" data-archived="true" data-player="${escapeHtml(v.playerB)}" data-vsid="${Number(v.id)}" data-dir="1">+</button>`}
                                 </div>
-                                <button class="player-name player-filter-trigger" data-player-filter-id="${v.playerBId || getParticipantIdByName(v.playerB)}" type="button" title="Ver partidos de ${v.playerB}">${v.playerB}</button>
+                                <button class="player-name player-filter-trigger" data-player-filter-id="${escapeHtml(v.playerBId || getParticipantIdByName(v.playerB))}" type="button" title="Ver partidos de ${escapeHtml(v.playerB)}">${escapeHtml(v.playerB)}</button>
                             </div>
                             </div>
                         </div>
@@ -2011,7 +1853,12 @@
             phaseDisplayEl.style.color = '#000704';
             roundDisplayEl.textContent = `Ronda ${groupRound}`;
         } else if (currentPhase === 2 && !tournamentFinished) {
-            if (preFinalMatch && !preFinalPlayed) {
+            if (eliminationMode === 'upper-lower' && (preFinalMatch || finalMatch)) {
+                phaseDisplayEl.textContent = '🏆 Finales cruzadas';
+                phaseDisplayEl.style.background = 'rgba(124, 58, 237, 0.15)';
+                phaseDisplayEl.style.color = '#c18aff';
+                roundDisplayEl.textContent = `Final A ${finalPlayed ? '✅' : '⏳'} · Final B ${preFinalPlayed ? '✅' : '⏳'}`;
+            } else if (preFinalMatch && !preFinalPlayed) {
                 phaseDisplayEl.textContent = '🥉 PRE-FINAL';
                 phaseDisplayEl.style.background = 'rgba(124, 58, 237, 0.15)';
                 phaseDisplayEl.style.color = '#7C3AED';
@@ -2055,7 +1902,7 @@
             const cls = pts > 0 ? 'positive' : pts < 0 ? 'negative' : '';
             const isQualified = idx < qualifiedCount && currentPhase === 1 && !tournamentFinished;
             const qualifiedBadge = isQualified ? '<span class="qualified-badge">✅ Clasificado</span>' : '';
-            html += `<div class="stat-badge ${cls}"><strong>${medal} ${item.name}</strong>  ${pts} pts ${qualifiedBadge}</div>`;
+            html += `<div class="stat-badge ${cls}"><strong>${medal} ${escapeHtml(item.name)}</strong>  ${Number(pts) || 0} pts ${qualifiedBadge}</div>`;
         });
         html += `</div>`;
 
@@ -2124,7 +1971,7 @@
             html += `
                 <tr class="${cls}">
                     <td><span class="medal-icon">${medal}</span></td>
-                    <td class="name-cell"><a class="score-player-profile" href="${escapeHtml(getPlayerProfilePath(item.name))}">${escapeHtml(item.name)}</a></td>
+                    <td class="name-cell">${playerTournamentHistoryLinkMarkup(item.name, item.id)}</td>
                     ${tournamentFormat === 'swiss'
                         ? `<td class="matches-cell">${wins + byes} - ${losses} - ${draws}</td><td class="points-cell ${ptsClass}">${item.points.toFixed(1)}</td><td class="matches-cell">${item.buchholz.toFixed(1)}</td><td class="matches-cell" style="color:#0099FF;">${item.pointDifference > 0 ? '+' : ''}${item.pointDifference}</td>`
                         : `<td class="points-cell ${ptsClass}">${item.points}</td><td class="matches-cell" style="color:#0099FF;">${item.pointDifference > 0 ? '+' : ''}${item.pointDifference}</td><td class="matches-cell">${completedPlayerMatches.length}</td><td class="matches-cell" style="color:#00FF88;">${wins}</td><td class="matches-cell" style="color:#FF1744;">${losses}</td><td class="matches-cell">${roundsPlayed.size}</td>`}
@@ -2213,7 +2060,10 @@
             const played = match.drawResult || match.jugado || scoreFor !== 0 || scoreAgainst !== 0;
             const result = !played ? 'Pendiente' : match.drawResult || scoreFor === scoreAgainst ? 'Empate' : scoreFor > scoreAgainst ? 'Victoria' : 'Derrota';
             const resultClass = result === 'Victoria' ? 'history-result-win' : result === 'Derrota' ? 'history-result-loss' : result === 'Empate' ? 'history-result-draw' : '';
-            return `<tr><td>${match.round > 0 ? `Ronda ${match.round}` : 'Eliminatorias'}</td><td>${escapeHtml(opponent || '—')}</td><td>${played ? `${Number(scoreFor) || 0}–${Number(scoreAgainst) || 0}` : '—'}</td><td class="${resultClass}">${result}</td></tr>`;
+            const roundLabel = match.label || (match.bracket && match.bracketRound
+                ? `${match.bracket === 'upper' ? 'Upper A' : 'Lower B'} · R${match.bracketRound}`
+                : match.round > 0 ? `Ronda ${match.round}` : 'Eliminatorias');
+            return `<tr><td>${escapeHtml(roundLabel)}</td><td>${escapeHtml(opponent || '—')}</td><td>${played ? `${Number(scoreFor) || 0}–${Number(scoreAgainst) || 0}` : '—'}</td><td class="${resultClass}">${result}</td></tr>`;
         });
 
         if ((currentTournamentOnly ? tournamentFormat : activeSavedScoreTable?.tournament_format || tournamentFormat) === 'swiss') {
@@ -2284,7 +2134,13 @@
                 const script = document.createElement('script');
                 script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
                 script.async = true;
+                const timeoutId = window.setTimeout(() => {
+                    script.remove();
+                    xlsxLibraryPromise = null;
+                    reject(new Error('La descarga de XLSX excedió el tiempo de espera.'));
+                }, 12_000);
                 script.onload = () => {
+                    window.clearTimeout(timeoutId);
                     if (window.XLSX) resolve(window.XLSX);
                     else {
                         xlsxLibraryPromise = null;
@@ -2292,6 +2148,7 @@
                     }
                 };
                 script.onerror = () => {
+                    window.clearTimeout(timeoutId);
                     xlsxLibraryPromise = null;
                     reject(new Error('No se pudo cargar XLSX.'));
                 };
@@ -2399,14 +2256,21 @@
         if (groupBadge) groupBadge.textContent = isSwiss ? 'Rondas Suizas' : 'Fase de Grupos';
 
         if (currentPhase === 2 && !tournamentFinished) {
-            const activePlayers = new Set();
-            versus.forEach(v => {
-                activePlayers.add(v.playerA);
-                activePlayers.add(v.playerB);
-            });
-            const count = activePlayers.size;
-            const roundName = getKnockoutRoundName(count);
-            document.getElementById('knockoutRoundInfo').textContent = roundName;
+            if (eliminationMode === 'upper-lower') {
+                const activeCount = new Set(versus.flatMap(match => [match.playerA, match.playerB])).size
+                    + (activeEliminationBracket === 'upper' ? upperByePlayers.length : lowerByePlayers.length);
+                const activeRound = activeEliminationBracket === 'upper' ? knockoutRound : lowerBracketRound;
+                document.getElementById('knockoutRoundInfo').textContent = `Eliminatoria ${activeEliminationBracket === 'upper' ? 'A · Upper' : 'B · Lower'} · R${activeRound} (${activeCount} jugadores)`;
+            } else {
+                const activePlayers = new Set();
+                versus.forEach(v => {
+                    activePlayers.add(v.playerA);
+                    activePlayers.add(v.playerB);
+                });
+                const count = activePlayers.size;
+                const roundName = getKnockoutRoundName(count);
+                document.getElementById('knockoutRoundInfo').textContent = roundName;
+            }
         } else if (tournamentFinished) {
             document.getElementById('knockoutRoundInfo').textContent = '🏆 Torneo Finalizado';
         } else {
@@ -2417,7 +2281,9 @@
             knockoutSpecial.style.display = 'block';
 
             let statusText = '';
-            if (preFinalMatch && !preFinalPlayed) {
+            if (eliminationMode === 'upper-lower') {
+                statusText = `A: ${upperFinalists.winner?.name || '—'} · B: ${lowerFinalists.winner?.name || '—'}${preFinalPlayed ? ' · Final B ✅' : ''}${finalPlayed ? ' · Final A ✅' : ''}`;
+            } else if (preFinalMatch && !preFinalPlayed) {
                 statusText = `🥉 PRE-FINAL: ${preFinalMatch.playerA} vs ${preFinalMatch.playerB}`;
             } else if (preFinalMatch && preFinalPlayed) {
                 statusText = `✅ PRE-FINAL jugada · 🥉 ${podium.third} · 4️⃣ ${podium.fourth}`;
@@ -2433,7 +2299,12 @@
             const playFinal = document.getElementById('playFinalBtn');
             const autoFinal = document.getElementById('autoFinalBtn');
 
-            if (preFinalMatch && !preFinalPlayed) {
+            if (eliminationMode === 'upper-lower') {
+                playPreFinal.style.display = preFinalMatch && !preFinalPlayed ? 'block' : 'none';
+                autoPreFinal.style.display = preFinalMatch && !preFinalPlayed ? 'block' : 'none';
+                playFinal.style.display = finalMatch && !finalPlayed ? 'block' : 'none';
+                autoFinal.style.display = finalMatch && !finalPlayed ? 'block' : 'none';
+            } else if (preFinalMatch && !preFinalPlayed) {
                 playPreFinal.style.display = 'block';
                 autoPreFinal.style.display = 'block';
                 playFinal.style.display = 'none';
@@ -2468,6 +2339,9 @@
             startBtn.disabled = true;
             nextBtn.style.display = 'block';
             nextBtn.disabled = false;
+            if (eliminationMode === 'upper-lower' && (preFinalMatch || finalMatch)) {
+                nextBtn.style.display = 'none';
+            }
         } else if (tournamentFinished) {
             startBtn.textContent = '🏆 Finalizado';
             startBtn.style.opacity = '0.6';
@@ -2505,11 +2379,15 @@
         const mobileNextBtn = document.getElementById('mobileNextRoundBtn');
         const mobileKnockoutBtn = document.getElementById('mobileKnockoutBtn');
         if (mobileRoundInfo) {
-            mobileRoundInfo.textContent = currentPhase === 2 ? getRoundTitle() : `Ronda ${groupRound}`;
+            mobileRoundInfo.textContent = currentPhase === 2
+                ? (eliminationMode === 'upper-lower' && !preFinalMatch && !finalMatch
+                    ? `Eliminatoria ${activeEliminationBracket === 'upper' ? 'A' : 'B'} · R${activeEliminationBracket === 'upper' ? knockoutRound : lowerBracketRound}`
+                    : getRoundTitle())
+                : `Ronda ${groupRound}`;
         }
         if (mobileNextBtn) {
             mobileNextBtn.textContent = currentPhase === 2 ? '➡️ Siguiente eliminatoria' : '➡️ Siguiente ronda';
-            mobileNextBtn.disabled = tournamentFinished;
+            mobileNextBtn.disabled = tournamentFinished || (eliminationMode === 'upper-lower' && Boolean(preFinalMatch || finalMatch));
         }
         if (mobileKnockoutBtn) {
             if (isSwiss) {
@@ -2659,6 +2537,12 @@
             tournamentWinner = null;
             tournamentFinished = false;
             knockoutRound = 0;
+            resetBracketFormat();
+            preFinalMatch = null;
+            preFinalPlayed = false;
+            finalMatch = null;
+            finalPlayed = false;
+            knockoutRound = 0;
             preFinalMatch = null;
             preFinalPlayed = false;
             finalMatch = null;
@@ -2716,7 +2600,132 @@
         saveToLocalStorage();
     }
 
-    function startKnockout() {
+    function buildUpperLowerRound(players, bracket, round) {
+        const result = createBracketRound(players, bracket, round, nextVersusId);
+        nextVersusId = result.nextId;
+        if (bracket === 'upper') upperByePlayers = result.byes;
+        else lowerByePlayers = result.byes;
+        return result.matches.map(match => ({
+            ...match,
+            round: 0,
+            bracketRound: round,
+            bracket: match.bracket
+        }));
+    }
+
+    function scheduleCrossBracketFinals(finals) {
+        finalMatch = { ...finals.championship, bracket: 'upper', label: 'Final A · 1.º/2.º lugar' };
+        preFinalMatch = { ...finals.placement, bracket: 'lower', label: 'Final B · 3.º/4.º lugar' };
+        preFinalPlayed = false;
+        finalPlayed = false;
+        versus = [];
+        currentPhaseView = 'knockout';
+        selectedRound = 'all';
+        recalculateAccumulatedPoints();
+        renderAll();
+        saveToLocalStorage();
+    }
+
+    function advanceUpperLowerBrackets() {
+        const roundMatches = versus.filter(match => match.bracket === activeEliminationBracket);
+        if (!roundMatches.length) {
+            alert('No se encontraron los enfrentamientos de la fase activa.');
+            return;
+        }
+        const result = resolveBracketRound(roundMatches);
+        const wasFinal = roundMatches.some(match => match.bracketFinal);
+        archiveAndClearVersus();
+
+        const asActiveMatches = round => round.matches.map(match => ({
+            ...match,
+            round: 0,
+            bracketRound: match.round
+        }));
+        const scheduleLowerPhase = (players, allowFinal) => {
+            if (players.length < 2) return [];
+            lowerBracketRound += 1;
+            const round = createBracketRound(players, 'lower', lowerBracketRound, nextVersusId);
+            nextVersusId = round.nextId;
+            lowerByePlayers = round.byes;
+            if (!allowFinal) round.matches.forEach(match => { delete match.bracketFinal; });
+            return asActiveMatches(round);
+        };
+        const scheduleUpperPhase = () => {
+            if (upperFinalists.winner) return [];
+            if (upperWaitingPlayers.length < 2) return [];
+            knockoutRound += 1;
+            const round = createBracketRound(upperWaitingPlayers, 'upper', knockoutRound, nextVersusId);
+            nextVersusId = round.nextId;
+            upperByePlayers = round.byes;
+            upperWaitingPlayers = [];
+            return asActiveMatches(round);
+        };
+
+        if (activeEliminationBracket === 'upper') {
+            if (wasFinal) {
+                upperFinalists = {
+                    winner: result.winners[0] || null,
+                    runnerUp: result.losers[0] || null
+                };
+                // La segunda oportunidad termina cuando quedan fijados los finalistas A.
+                activeEliminationBracket = 'lower';
+                versus = scheduleLowerPhase(lowerWaitingPlayers, true);
+            } else {
+                upperWaitingPlayers = [...upperByePlayers, ...result.winners];
+                lowerWaitingPlayers = [...lowerWaitingPlayers, ...result.losers];
+                upperByePlayers = [];
+                activeEliminationBracket = 'lower';
+                if (lowerWaitingPlayers.length >= 2) {
+                    versus = scheduleLowerPhase(lowerWaitingPlayers, false);
+                    lowerWaitingPlayers = [];
+                } else {
+                    versus = [];
+                }
+                if (!versus.length) {
+                    activeEliminationBracket = 'upper';
+                    versus = scheduleUpperPhase();
+                }
+            }
+        } else {
+            lowerWaitingPlayers = [...lowerByePlayers, ...result.winners];
+            lowerByePlayers = [];
+            if (wasFinal) {
+                lowerFinalists = {
+                    winner: result.winners[0] || null,
+                    runnerUp: result.losers[0] || null
+                };
+                scheduleCrossBracketFinals(getCrossBracketFinals(
+                    upperFinalists.winner,
+                    upperFinalists.runnerUp,
+                    lowerFinalists.winner,
+                    lowerFinalists.runnerUp,
+                    nextVersusId
+                ));
+                nextVersusId += 2;
+                return;
+            }
+
+            if (upperFinalists.winner) {
+                activeEliminationBracket = 'lower';
+                versus = scheduleLowerPhase(lowerWaitingPlayers, true);
+                lowerWaitingPlayers = [];
+            } else {
+                activeEliminationBracket = 'upper';
+                versus = scheduleUpperPhase();
+            }
+        }
+
+        if (!versus.length) {
+            alert('No se pudieron generar más enfrentamientos para los cuadros. Revisa la cantidad de clasificados.');
+            return;
+        }
+        selectedRound = 'all';
+        recalculateAccumulatedPoints();
+        renderAll();
+        saveToLocalStorage();
+    }
+
+    function startKnockout(mode = 'single') {
         if (participants.length < 2) {
             alert('Necesitas al menos 2 participantes.');
             return;
@@ -2730,9 +2739,19 @@
 
         const ranking = getGroupRanking();
         const qualified = ranking.slice(0, qualifiedCount).map(p => ({ id: p.id, name: p.name }));
+        const nonQualified = ranking.slice(qualifiedCount).map(p => ({ id: p.id, name: p.name }));
 
         if (qualified.length < 2) {
             alert('No hay suficientes participantes con puntos para eliminatorias.');
+            return;
+        }
+
+        if (mode === 'upper-lower' && participants.length < 4) {
+            alert('El formato upper/lower requiere al menos 4 participantes para crear ambos cuadros y jugar las finales cruzadas.');
+            return;
+        }
+        if (mode === 'upper-lower' && nonQualified.length < 2) {
+            alert('El formato upper/lower requiere al menos 2 jugadores no clasificados para competir por los puestos 3.º y 4.º.');
             return;
         }
 
@@ -2749,6 +2768,9 @@
         tournamentFinished = false;
         currentPhase = 2;
         knockoutRound = 1;
+        resetBracketFormat();
+        eliminationMode = mode === 'upper-lower' ? 'upper-lower' : 'single';
+        knockoutRound = 1;
         preFinalMatch = null;
         preFinalPlayed = false;
         finalMatch = null;
@@ -2757,25 +2779,31 @@
         semifinalWinners = [];
         podium = { first: null, second: null, third: null, fourth: null };
 
-        const shuffled = [...qualified];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
+        if (eliminationMode === 'upper-lower') {
+            activeEliminationBracket = 'upper';
+            lowerWaitingPlayers = nonQualified;
+            versus = buildUpperLowerRound(qualified, 'upper', knockoutRound);
+        } else {
+            const shuffled = [...qualified];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
 
-        for (let i = 0; i < shuffled.length; i += 2) {
-            if (i + 1 < shuffled.length) {
-                versus.push({
-                    playerA: shuffled[i].name,
-                    playerB: shuffled[i + 1].name,
-                    playerAId: shuffled[i].id,
-                    playerBId: shuffled[i + 1].id,
-                    scoreA: 0,
-                    scoreB: 0,
-                    id: nextVersusId++,
-                    round: 0,
-                    bracketRound: knockoutRound
-                });
+            for (let i = 0; i < shuffled.length; i += 2) {
+                if (i + 1 < shuffled.length) {
+                    versus.push({
+                        playerA: shuffled[i].name,
+                        playerB: shuffled[i + 1].name,
+                        playerAId: shuffled[i].id,
+                        playerBId: shuffled[i + 1].id,
+                        scoreA: 0,
+                        scoreB: 0,
+                        id: nextVersusId++,
+                        round: 0,
+                        bracketRound: knockoutRound
+                    });
+                }
             }
         }
 
@@ -2793,7 +2821,7 @@
         renderAll();
         saveToLocalStorage();
 
-        alert(`✅ Eliminatorias iniciadas con ${versus.length} enfrentamientos.\n\n📊 ${qualified.length} jugadores clasificados.`);
+        alert(`✅ Eliminatorias ${eliminationMode === 'upper-lower' ? 'upper/lower' : 'clásicas'} iniciadas con ${versus.length} enfrentamientos.\n\n📊 ${qualified.length} clasificados · ${nonQualified.length} no clasificados.${eliminationMode === 'upper-lower' ? '\n\nPrimero se jugará la fase A; después se organizará la fase B con los jugadores que bajen del cuadro.' : ''}`);
     }
 
     function finishSwissTournament() {
@@ -2828,11 +2856,11 @@
             return;
         }
 
-        if (preFinalMatch && !preFinalPlayed) {
+        if (eliminationMode !== 'upper-lower' && preFinalMatch && !preFinalPlayed) {
             alert('⚠️ Primero debes jugar la PRE-FINAL (3er y 4to lugar).');
             return;
         }
-        if (finalMatch && !finalPlayed) {
+        if (eliminationMode !== 'upper-lower' && finalMatch && !finalPlayed) {
             alert('⚠️ Primero debes jugar la FINAL.');
             return;
         }
@@ -2851,6 +2879,11 @@
                 alert('Hay un empate en un enfrentamiento. Debe haber un ganador para avanzar.');
                 return;
             }
+        }
+
+        if (eliminationMode === 'upper-lower') {
+            advanceUpperLowerBrackets();
+            return;
         }
 
         const winners = [];
@@ -2980,12 +3013,26 @@
             stage: 'pre-final',
             archivedAt: Date.now()
         };
-        matchHistory.push(preFinalCopy);
-        preFinalMatch = null;
+        if (!matchHistory.some(match => String(match.id) === String(preFinalCopy.id))) matchHistory.push(preFinalCopy);
+        if (eliminationMode !== 'upper-lower') preFinalMatch = null;
 
         renderAll();
         saveToLocalStorage();
+        if (eliminationMode === 'upper-lower') {
+            finishUpperLowerTournamentIfReady();
+            alert(`✅ Final B finalizada.\n🥉 ${podium.third} · 3.º lugar\n4️⃣ ${podium.fourth} · 4.º lugar`);
+            return;
+        }
         alert(`✅ PRE-FINAL finalizada!\n🥉 ${podium.third} es el 3er Lugar.\n4️⃣ ${podium.fourth} es el 4to Lugar.\n\n🏆 ¡Ahora la FINAL!`);
+    }
+
+    function finishUpperLowerTournamentIfReady() {
+        if (eliminationMode !== 'upper-lower' || !preFinalPlayed || !finalPlayed || tournamentFinished) return;
+        tournamentWinner = podium.first;
+        tournamentFinished = true;
+        renderAll();
+        saveToLocalStorage();
+        saveFinishedTournamentToSupabase();
     }
 
     function markFinalPlayed() {
@@ -3026,7 +3073,7 @@
 
         podium.first = tournamentWinner;
         podium.second = loser;
-        tournamentFinished = true;
+        tournamentFinished = eliminationMode !== 'upper-lower';
 
         const finalCopy = {
             ...finalMatch,
@@ -3035,12 +3082,13 @@
             stage: 'final',
             archivedAt: Date.now()
         };
-        matchHistory.push(finalCopy);
-        finalMatch = null;
+        if (!matchHistory.some(match => String(match.id) === String(finalCopy.id))) matchHistory.push(finalCopy);
+        if (eliminationMode !== 'upper-lower') finalMatch = null;
 
         renderAll();
         saveToLocalStorage();
-        saveFinishedTournamentToSupabase();
+        if (eliminationMode === 'upper-lower') finishUpperLowerTournamentIfReady();
+        else saveFinishedTournamentToSupabase();
 
         let message = `🏆 ¡CAMPEÓN: ${tournamentWinner}! 🏆\n🥈 Subcampeón: ${loser}`;
         if (podium.third) {
@@ -3080,6 +3128,7 @@
 
         renderAll();
         saveToLocalStorage();
+        window.location.assign('/app/vs/');
     }
 
     function editTournamentName() {
@@ -3103,6 +3152,7 @@
         tournamentWinner = null;
         tournamentFinished = false;
         knockoutRound = 0;
+        resetBracketFormat();
         groupRound = 0;
         swissByes = [];
         selectedRound = 'all';
@@ -3128,6 +3178,7 @@
         renderAll();
         saveToLocalStorage();
         alert('✅ Torneo reiniciado. Los participantes se mantienen.');
+        window.location.assign('/app/participants/');
     }
     // ============================================================
     // 14. FUNCIONES DE LISTA DE TORNEOS
@@ -3145,7 +3196,7 @@
             console.log('📡 Solicitando Gists al servidor...');
 
             // Llamar a nuestra API de Vercel
-            const response = await fetch('/api/gists');
+            const response = await fetchWithTimeout('/api/gists');
 
             if (!response.ok) {
                 throw new Error(`Error ${response.status}: ${response.statusText}`);
@@ -3173,7 +3224,7 @@
                 container.innerHTML = `
                 <div style="text-align:center; padding:1rem; color:#FF1744;">
                     <div style="font-size:2rem; margin-bottom:0.5rem;">⚠️</div>
-                    <p>No se pudieron cargar los Gists: ${error.message}</p>
+                    <p>No se pudieron cargar los Gists: ${escapeHtml(error.message)}</p>
                     <p style="font-size:0.8rem; color:#4A4A6A; margin-top:0.5rem;">
                         💡 Verifica que tu usuario de GitHub tenga Gists públicos con archivos .json
                     </p>
@@ -3234,12 +3285,13 @@
                 const fechaStr = fecha.toLocaleDateString('es-ES', {
                     day: '2-digit', month: 'short', year: 'numeric'
                 });
+                const safeTournamentId = escapeHtml(t.id);
 
                 html += `
                 <div class="tournament-list-item ${esActual ? 'active' : ''}" style="${esActual ? 'border-color: rgba(0, 255, 136, 0.3); background: rgba(0, 255, 136, 0.05);' : ''}">
                     <div class="info">
                         <div class="name">
-                            ${esActual ? '🟢 ' : ''}${t.name}
+                            ${esActual ? '🟢 ' : ''}${escapeHtml(t.name)}
                             ${esActual ? '<span style="font-size:0.6rem; color:#00FF88; margin-left:0.3rem;">(Actual)</span>' : ''}
                         </div>
                         <div class="details">
@@ -3249,8 +3301,8 @@
                         </div>
                     </div>
                     <div style="display:flex; gap:0.3rem;">
-                        ${!esActual ? `<button class="btn-cargar" data-torneo-id="${t.id}">📂 Cargar</button>` : ''}
-                        <button class="btn-eliminar" data-torneo-id="${t.id}">🗑️</button>
+                        ${!esActual ? `<button class="btn-cargar" data-torneo-id="${safeTournamentId}">📂 Cargar</button>` : ''}
+                        <button class="btn-eliminar" data-torneo-id="${safeTournamentId}">🗑️</button>
                     </div>
                 </div>
             `;
@@ -3274,20 +3326,23 @@
                 const fechaStr = fecha.toLocaleDateString('es-ES', {
                     day: '2-digit', month: 'short', year: 'numeric'
                 });
+                const gistPageUrl = safeExternalUrl(gist.url);
+                const gistRawUrl = safeExternalUrl(gist.rawUrl);
+                if (!gistPageUrl || !gistRawUrl || !gistRawUrl.startsWith('https://gist.githubusercontent.com/')) return;
 
                 html += `
                 <div class="tournament-list-item" style="border-color: rgba(0, 212, 255, 0.1);">
                     <div class="info">
                         <div class="name" style="color: #00D4FF;">
-                            📄 ${gist.name}
+                            📄 ${escapeHtml(gist.name)}
                         </div>
                         <div class="details">
                             <span>📅 ${fechaStr}</span>
-                            <span>🔗 <a href="${gist.url}" target="_blank" style="color:#4A4A6A; text-decoration:underline;">Ver en GitHub</a></span>
+                            <span>🔗 <a href="${escapeHtml(gistPageUrl)}" target="_blank" rel="noopener noreferrer" style="color:#4A4A6A; text-decoration:underline;">Ver en GitHub</a></span>
                             ${gist.isPublic ? '<span style="color:#00FF88;">🔓 Público</span>' : ''}
                         </div>
                     </div>
-                    <button class="btn-cargar" data-gist-url="${gist.rawUrl}" style="border-color: rgba(0, 212, 255, 0.2); color: #00D4FF;">
+                    <button class="btn-cargar" data-gist-url="${escapeHtml(gistRawUrl)}" style="border-color: rgba(0, 212, 255, 0.2); color: #00D4FF;">
                         📂 Cargar
                     </button>
                 </div>
@@ -3421,6 +3476,11 @@
                 renderAll();
             }
 
+            if ((routeTab || requestedNavigationTab) === 'matches' && !tournamentVisible) {
+                window.location.replace('/app/participants/');
+                return;
+            }
+
             if (tournamentVisible) setParticipantsCollapsed(true);
             if (['participants', 'matches', 'table'].includes(requestedNavigationTab)) {
                 activateTab(requestedNavigationTab);
@@ -3471,6 +3531,7 @@
         tournamentWinner = null;
         tournamentFinished = false;
         knockoutRound = 0;
+        resetBracketFormat();
         groupRound = 0;
         preFinalMatch = null;
         preFinalPlayed = false;
@@ -3497,11 +3558,14 @@
             const names = prompt('Ingresa los nombres separados por comas:\n(ej: Ana, Carlos, Marta)');
             if (names) {
                 const nameList = names.split(',').map(n => n.trim()).filter(n => n);
+                const addedPlayers = [];
                 for (const name of nameList) {
                     if (!participantExistsByName(name)) {
-                        addParticipant(name);
+                        const added = addParticipant(name, { persist: false });
+                        if (added) addedPlayers.push(added);
                     }
                 }
+                savePlayersToSupabase(addedPlayers);
                 renderAll();
                 saveToLocalStorage();
                 alert(`✅ ${nameList.length} participantes agregados.`);
@@ -3537,17 +3601,6 @@
     });
 
     // --- Participantes ---
-    tabNavigationButtons.forEach(button => {
-        button.addEventListener('click', function () {
-            if (this.dataset.tab !== 'table' && activeSavedScoreTable) {
-                activeSavedScoreTable = null;
-                if (savedScoreTableSelect) savedScoreTableSelect.value = '';
-                renderTotalScoreTable();
-            }
-            activateTab(this.dataset.tab, true);
-        });
-    });
-
     savedScoreTableSelect?.addEventListener('change', function () {
         loadSavedScoreTableById(this.value);
     });
@@ -3559,18 +3612,28 @@
             alert('Escribe un nombre.');
             return;
         }
-        const savedNames = await Promise.all(typedNames.map(getSavedPlayerName));
+        if (!supabaseConfig && supabaseInitialization) await supabaseInitialization;
+        const savedNames = await Promise.all(typedNames.map(name => supabaseConfig
+            ? savedPlayerService.resolveNameOrOriginal(name, error => console.warn('No se pudo normalizar el nombre con Supabase:', error))
+            : Promise.resolve(name.trim())
+        ));
         const seenNames = new Set();
         let addedCount = 0;
+        const addedPlayers = [];
         savedNames.forEach(name => {
             const normalized = name.trim().toLocaleLowerCase();
             if (!normalized || seenNames.has(normalized) || participantExistsByName(name)) return;
             seenNames.add(normalized);
-            if (addParticipant(name)) addedCount++;
+            const added = addParticipant(name, { persist: false });
+            if (added) {
+                addedCount++;
+                addedPlayers.push(added);
+            }
         });
+        savePlayersToSupabase(addedPlayers);
 
         newParticipantInput.value = '';
-        hidePlayerSuggestions();
+        participantAutocomplete.hide();
         renderAll();
         saveToLocalStorage();
         if (addedCount === 0) {
@@ -3582,50 +3645,6 @@
         }
     });
 
-    newParticipantInput.addEventListener('input', function () {
-        clearTimeout(playerSuggestionTimer);
-        const query = this.value.slice(this.value.lastIndexOf(',') + 1).trim();
-        const requestId = ++playerSuggestionRequestId;
-        if (query.length < 2) {
-            hidePlayerSuggestions();
-            return;
-        }
-        playerSuggestionTimer = setTimeout(() => searchSavedPlayers(query, requestId), 220);
-    });
-
-    newParticipantInput.addEventListener('keydown', function (event) {
-        const options = playerSuggestionsEl?.querySelectorAll('[role="option"]') || [];
-        if (event.key === 'ArrowDown' && options.length) {
-            event.preventDefault();
-            setActivePlayerSuggestion(activePlayerSuggestionIndex + 1);
-        } else if (event.key === 'ArrowUp' && options.length) {
-            event.preventDefault();
-            setActivePlayerSuggestion(activePlayerSuggestionIndex < 0 ? options.length - 1 : activePlayerSuggestionIndex - 1);
-        } else if (event.key === 'Enter') {
-            if (activePlayerSuggestionIndex >= 0 && options[activePlayerSuggestionIndex]) {
-                event.preventDefault();
-                selectPlayerSuggestion(options[activePlayerSuggestionIndex].dataset.playerName);
-            } else {
-                addBtn.click();
-            }
-        } else if (event.key === 'Escape') {
-            hidePlayerSuggestions();
-        }
-    });
-
-    playerSuggestionsEl?.addEventListener('pointerdown', event => {
-        if (event.target.closest('[role="option"]')) event.preventDefault();
-    });
-
-    playerSuggestionsEl?.addEventListener('click', event => {
-        const option = event.target.closest('[role="option"]');
-        if (option) selectPlayerSuggestion(option.dataset.playerName);
-    });
-
-    newParticipantInput.addEventListener('blur', () => {
-        setTimeout(hidePlayerSuggestions, 140);
-    });
-
     document.getElementById('clearAllParticipantsBtn')?.addEventListener('click', function (e) {
         e.preventDefault();
         clearAllParticipants();
@@ -3635,7 +3654,10 @@
     document.getElementById('startTournamentBtn')?.addEventListener('click', () => startTournament());
     totalScoreTableEl?.addEventListener('click', event => {
         const trigger = event.target.closest('.score-player-history');
-        if (trigger) showPlayerHistory(trigger.dataset.playerId);
+        if (trigger) {
+            event.preventDefault();
+            showPlayerHistory(trigger.dataset.playerId, !activeSavedScoreTable);
+        }
     });
     const playerHistoryModal = document.getElementById('playerHistoryModal');
     document.getElementById('closePlayerHistoryModal')?.addEventListener('click', () => playerHistoryModal?.classList.remove('active'));
@@ -3722,7 +3744,7 @@
 
     document.getElementById('mobileKnockoutBtn')?.addEventListener('click', () => {
         if (tournamentFormat === 'swiss') finishSwissTournament();
-        else startKnockout();
+        else requestKnockoutStart();
     });
     document.getElementById('finishSwissTournamentBtn')?.addEventListener('click', finishSwissTournament);
 
@@ -3786,7 +3808,7 @@
     });
 
     // --- Eliminatorias ---
-    startKnockoutBtn.addEventListener('click', function () {
+    function requestKnockoutStart() {
         if (tournamentFormat === 'swiss') {
             finishSwissTournament();
             return;
@@ -3810,7 +3832,27 @@
             return;
         }
 
-        startKnockout();
+        const upperLowerButton = document.getElementById('startUpperLowerKnockoutBtn');
+        if (upperLowerButton) {
+            upperLowerButton.disabled = participants.length < 4;
+            upperLowerButton.title = participants.length < 4 ? 'Se necesitan al menos 4 participantes.' : '';
+        }
+        document.getElementById('knockoutFormatModal')?.classList.add('active');
+    }
+
+    startKnockoutBtn.addEventListener('click', requestKnockoutStart);
+    const knockoutFormatModal = document.getElementById('knockoutFormatModal');
+    document.getElementById('closeKnockoutFormatModal')?.addEventListener('click', () => knockoutFormatModal?.classList.remove('active'));
+    knockoutFormatModal?.addEventListener('click', event => {
+        if (event.target === knockoutFormatModal) knockoutFormatModal.classList.remove('active');
+    });
+    document.getElementById('startSingleKnockoutBtn')?.addEventListener('click', () => {
+        knockoutFormatModal?.classList.remove('active');
+        startKnockout('single');
+    });
+    document.getElementById('startUpperLowerKnockoutBtn')?.addEventListener('click', () => {
+        knockoutFormatModal?.classList.remove('active');
+        startKnockout('upper-lower');
     });
 
     document.getElementById('nextKnockoutRoundBtn').addEventListener('click', function () {
@@ -3824,11 +3866,11 @@
             return;
         }
 
-        if (preFinalMatch && !preFinalPlayed) {
+        if (eliminationMode !== 'upper-lower' && preFinalMatch && !preFinalPlayed) {
             alert('⚠️ Primero debes jugar la PRE-FINAL (3er y 4to lugar).\nUsa los botones en el panel de eliminatorias.');
             return;
         }
-        if (finalMatch && !finalPlayed) {
+        if (eliminationMode !== 'upper-lower' && finalMatch && !finalPlayed) {
             alert('⚠️ Primero debes jugar la FINAL.\nUsa los botones en el panel de eliminatorias.');
             return;
         }
@@ -3897,6 +3939,15 @@
             currentPhase,
             tournamentWinner,
             knockoutRound,
+            lowerBracketRound,
+            eliminationMode,
+            upperByePlayers,
+            lowerByePlayers,
+            upperWaitingPlayers,
+            lowerWaitingPlayers,
+            activeEliminationBracket,
+            upperFinalists,
+            lowerFinalists,
             groupRound,
             accumulatedPoints,
             customQualifiedCount,
@@ -3925,7 +3976,7 @@
         fileInput.click();
     });
 
-    fileInput.addEventListener('change', function (e) {
+    fileInput.addEventListener('change', function () {
         if (this.files && this.files[0]) {
             const reader = new FileReader();
             reader.onload = async function (e) {
@@ -3952,6 +4003,15 @@
                     currentPhase = data.currentPhase || 1;
                     tournamentWinner = data.tournamentWinner || null;
                     knockoutRound = data.knockoutRound || 0;
+                    lowerBracketRound = data.lowerBracketRound || 0;
+                    eliminationMode = data.eliminationMode || 'single';
+                    upperByePlayers = data.upperByePlayers || [];
+                    lowerByePlayers = data.lowerByePlayers || [];
+                    upperWaitingPlayers = data.upperWaitingPlayers || [];
+                    lowerWaitingPlayers = data.lowerWaitingPlayers || [];
+                    activeEliminationBracket = data.activeEliminationBracket || 'upper';
+                    upperFinalists = data.upperFinalists || { winner: null, runnerUp: null };
+                    lowerFinalists = data.lowerFinalists || { winner: null, runnerUp: null };
                     groupRound = data.groupRound || 0;
                     accumulatedPoints = data.accumulatedPoints || {};
                     customQualifiedCount = data.customQualifiedCount || 8;
@@ -4030,6 +4090,15 @@
             currentPhase = jsonData.currentPhase || 1;
             groupRound = jsonData.groupRound || 0;
             knockoutRound = jsonData.knockoutRound || 0;
+            lowerBracketRound = jsonData.lowerBracketRound || 0;
+            eliminationMode = jsonData.eliminationMode || 'single';
+            upperByePlayers = jsonData.upperByePlayers || [];
+            lowerByePlayers = jsonData.lowerByePlayers || [];
+            upperWaitingPlayers = jsonData.upperWaitingPlayers || [];
+            lowerWaitingPlayers = jsonData.lowerWaitingPlayers || [];
+            activeEliminationBracket = jsonData.activeEliminationBracket || 'upper';
+            upperFinalists = jsonData.upperFinalists || { winner: null, runnerUp: null };
+            lowerFinalists = jsonData.lowerFinalists || { winner: null, runnerUp: null };
             tournamentFinished = jsonData.tournamentFinished || false;
             tournamentFormat = jsonData.tournamentFormat || 'random';
             swissByes = jsonData.swissByes || [];
@@ -4048,7 +4117,7 @@
 
             // Asegurar que los participantes tengan IDs
             ensureParticipantsObjects();
-            participants.forEach(savePlayerToSupabase);
+            savePlayersToSupabase(participants);
 
             // Asegurar que cada participante tenga puntos
             participants.forEach(p => {
@@ -4152,6 +4221,19 @@
             return;
         }
 
+        let parsedUrl;
+        try {
+            if (url.length > 2048) throw new Error();
+            parsedUrl = new URL(url);
+        } catch {
+            alert('Ingresa una URL HTTPS válida.');
+            return;
+        }
+        if (parsedUrl.protocol !== 'https:') {
+            alert('Por seguridad, solo se pueden cargar torneos desde direcciones HTTPS.');
+            return;
+        }
+
         const loadBtn = document.getElementById('loadFromUrlBtn');
         const originalText = loadBtn.textContent;
         loadBtn.textContent = '⏳ Cargando...';
@@ -4162,7 +4244,7 @@
 
             console.log('📡 Intentando cargar desde:', url);
 
-            const response = await fetch(url, {
+            const response = await fetchWithTimeout(url, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json'

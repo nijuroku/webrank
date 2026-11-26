@@ -5,6 +5,7 @@ import SiteHeader from '../../components/SiteHeader.astro';
 import '../../styles/viewer.css';
 import '../../styles/navigation.css';
 import '../../styles/loading.css';
+import '../../styles/tailwind.css';
 ---
 
 <AppLayout page="view" title="Torneo en vivo · LaMafia BEYBLADEX" description="Consulta en vivo las rondas y la tabla de un torneo LaMafia BEYBLADEX." themeColor="#10111c">
@@ -22,10 +23,10 @@ import '../../styles/loading.css';
 </SiteHeader>
 
     <main class="viewer-main">
-        <div class="live-status" aria-live="polite">
+        <div class="live-status flex min-h-[34px] items-center gap-[0.55rem] text-[0.78rem]" aria-live="polite">
             <span class="live-dot" id="liveDot"></span>
             <span id="connectionStatus">Conectando al torneo…</span>
-            <span class="updated-at" id="updatedAt"></span>
+            <span class="updated-at ml-auto text-right" id="updatedAt"></span>
         </div>
 
         <section class="message-card viewer-loading-state" id="loadingState" aria-label="Cargando torneo" aria-live="polite">
@@ -92,6 +93,6 @@ import '../../styles/loading.css';
     <footer>LaMafia BEYBLADEX · Torneo compartido en vivo</footer>
     <BottomNavigation slot="navigation" page="view" active="matches" />
     <script>
-        import '../../scripts/viewer.js';
+        import '../../scripts/viewer.ts';
     </script>
 </AppLayout>

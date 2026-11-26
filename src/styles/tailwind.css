@@ -1,0 +1,5 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@source "../pages/view/index.astro";
+@source "../pages/admin/index.astro";

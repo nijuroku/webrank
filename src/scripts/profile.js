@@ -1,8 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout';
+import { getBestTournamentProfile, getPlayerMatches, getProfileCareerStats, getTournamentPlayer, resolvePlayerIdentity } from '../lib/profile-history';
+import { buildDirectoryPlayers, searchProfileDirectory } from '../lib/profile-directory';
+import {
+    loadFinishedTournamentPlayerNames,
+    loadFinishedTournaments,
+    loadPlayerAliases,
+    loadRegisteredPlayerNames,
+    loadSupabaseConfig
+} from '../lib/profile-data';
 
 const configEndpoint = '/api/supabase-config';
-const tournamentsEndpoint = '/rest/v1/finished_tournaments';
-const aliasesEndpoint = '/rest/v1/player_aliases';
 const loadingState = document.getElementById('loadingState');
 const errorState = document.getElementById('errorState');
 const profileCard = document.getElementById('profileCard');
@@ -20,6 +28,12 @@ const accountRoutePanel = document.getElementById('accountRoutePanel');
 const accountRouteMessage = document.getElementById('accountRouteMessage');
 const accountRouteActions = document.getElementById('accountRouteActions');
 const accountRouteOwnProfileButton = document.getElementById('accountRouteOwnProfileButton');
+const profileDirectory = document.getElementById('profileDirectory');
+const profileDirectorySearch = document.getElementById('profileDirectorySearch');
+const profileDirectoryLoading = document.getElementById('profileDirectoryLoading');
+const profileDirectoryGrid = document.getElementById('profileDirectoryGrid');
+const profileDirectoryStatus = document.getElementById('profileDirectoryStatus');
+const profileDirectoryCount = document.getElementById('profileDirectoryCount');
 const profileBanner = document.getElementById('playerBanner');
 const profileDialog = document.getElementById('profileDialog');
 const authPanel = document.getElementById('authPanel');
@@ -39,6 +53,7 @@ let currentProfileName = null;
 let currentPublicProfile = null;
 let currentProfileRequest = null;
 let currentProfileOwner = null;
+let directoryPlayers = [];
 
 function normalizeName(value) {
     return String(value || '').trim().normalize('NFKC').toLocaleLowerCase();
@@ -93,14 +108,6 @@ function applyPlayerProfileAssets(profile) {
         profileBanner.removeAttribute('src');
         profileBanner.hidden = true;
     }
-}
-
-async function getSupabaseConfig() {
-    const response = await fetch(configEndpoint, { cache: 'no-store' });
-    if (!response.ok) throw new Error('No se pudo cargar la conexión a la base de datos.');
-    const config = await response.json();
-    if (!config.url || !config.anonKey) throw new Error('La base de datos todavía no está configurada.');
-    return { url: config.url.replace(/\/$/, ''), anonKey: config.anonKey };
 }
 
 function applyTheme(theme) {
@@ -213,10 +220,6 @@ async function refreshAccountContext() {
     document.getElementById('goToOwnProfileButton').hidden = !hasOwnProfile;
     accountRouteActions.hidden = Boolean(currentUser);
     accountRouteOwnProfileButton.hidden = !hasOwnProfile;
-    if (accountRouteMode && hasOwnProfile) {
-        window.location.replace(`/p/${encodeURIComponent(currentProfileOwner.player_name)}`);
-        return;
-    }
 
     if (currentProfileOwner) {
         const ownsThisProfile = currentProfileOwner.player_key === currentProfileKey;
@@ -408,69 +411,50 @@ document.getElementById('signOutButton')?.addEventListener('click', async () => 
     setAuthNotice('Sesión cerrada.', 'success');
 });
 
-async function loadFinishedTournaments(config) {
-    const allRows = [];
-    const columns = 'id,name,finished_at,participants,standings,matches,tournament_format,swiss_byes,winner,podium';
-    const pageSize = 1000;
-    for (let offset = 0; ; offset += pageSize) {
-        const params = new URLSearchParams({ select: columns, order: 'finished_at.desc' });
-        const response = await fetch(`${config.url}${tournamentsEndpoint}?${params}`, {
-            headers: {
-                apikey: config.anonKey,
-                Authorization: `Bearer ${config.anonKey}`,
-                Range: `${offset}-${offset + pageSize - 1}`
-            }
-        });
-        if (!response.ok) throw new Error('No se pudieron cargar los torneos guardados.');
-        const rows = await response.json();
-        allRows.push(...(Array.isArray(rows) ? rows : []));
-        if (!Array.isArray(rows) || rows.length < pageSize) break;
-    }
-    return allRows;
+function renderDirectoryResults() {
+    if (!profileDirectoryGrid) return;
+    const query = profileDirectorySearch?.value || '';
+    const filteredPlayers = searchProfileDirectory(directoryPlayers, query);
+    profileDirectoryGrid.replaceChildren();
+    filteredPlayers.forEach(player => {
+        const card = makeElement('a', 'profile-directory-card');
+        card.href = `/p/${encodeURIComponent(player.canonicalName)}`;
+        card.setAttribute('aria-label', `Ver perfil de ${player.canonicalName}`);
+        const avatar = makeElement('span', 'profile-directory-avatar', Array.from(player.canonicalName)[0]?.toLocaleUpperCase() || '?');
+        avatar.setAttribute('aria-hidden', 'true');
+        const copy = makeElement('span', 'profile-directory-copy');
+        copy.append(makeElement('strong', '', player.canonicalName), makeElement('small', '', 'Ver perfil de jugador'));
+        const arrow = makeElement('span', 'profile-directory-arrow', '›');
+        arrow.setAttribute('aria-hidden', 'true');
+        card.append(avatar, copy, arrow);
+        profileDirectoryGrid.appendChild(card);
+    });
+    profileDirectoryGrid.hidden = false;
+    profileDirectoryCount.textContent = `${filteredPlayers.length} ${filteredPlayers.length === 1 ? 'perfil' : 'perfiles'}`;
+    profileDirectoryStatus.textContent = filteredPlayers.length
+        ? ''
+        : query ? 'No encontramos perfiles con ese nombre o alias.' : 'Todavía no hay perfiles registrados.';
 }
 
-async function loadRegisteredPlayerNames(config) {
-    const params = new URLSearchParams({ select: 'name', order: 'name.asc', limit: '1000' });
-    try {
-        const response = await fetch(`${config.url}/rest/v1/players?${params}`, {
-            headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` }
-        });
-        if (!response.ok) return [];
-        const rows = await response.json();
-        return Array.isArray(rows) ? rows.map(row => row.name).filter(Boolean) : [];
-    } catch {
-        return [];
-    }
+async function loadProfileDirectory(config) {
+    const [playerRows, aliases, tournamentPlayerNames] = await Promise.all([
+        loadRegisteredPlayerNames(config, undefined, true),
+        loadPlayerAliases(config),
+        loadFinishedTournamentPlayerNames(config)
+    ]);
+    directoryPlayers = buildDirectoryPlayers(
+        [...playerRows, ...tournamentPlayerNames],
+        aliases
+    );
+    profileDirectoryLoading.hidden = true;
+    renderDirectoryResults();
 }
 
-async function loadPlayerAliases(config) {
-    const params = new URLSearchParams({
-        select: 'alias_key,alias_name,canonical_key,canonical_name',
-        order: 'alias_key.asc'
-    });
-    const response = await fetch(`${config.url}${aliasesEndpoint}?${params}`, {
-        headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` }
-    });
-    if (!response.ok) throw new Error('No se pudieron cargar los alias de jugadores.');
-    const rows = await response.json();
-    return Array.isArray(rows) ? rows : [];
-}
-
-function resolvePlayerIdentity(requestedName, aliases) {
-    const requestedKey = normalizeName(requestedName);
-    const alias = aliases.find(row => normalizeName(row.alias_key) === requestedKey || normalizeName(row.alias_name) === requestedKey);
-    const canonicalKey = alias ? normalizeName(alias.canonical_key) : requestedKey;
-    const canonicalName = alias?.canonical_name || requestedName;
-    const nameKeys = new Set([requestedKey, canonicalKey]);
-    aliases.forEach(row => {
-        if (normalizeName(row.canonical_key) === canonicalKey) nameKeys.add(normalizeName(row.alias_key));
-    });
-    const aliasNames = aliases
-        .filter(row => normalizeName(row.canonical_key) === canonicalKey)
-        .filter(row => normalizeName(row.alias_key) !== canonicalKey)
-        .sort((a, b) => String(a.alias_name || '').localeCompare(String(b.alias_name || ''), 'es', { sensitivity: 'base' }))
-        .map(row => row.alias_name);
-    return { canonicalKey, canonicalName, nameKeys, aliasNames: [...new Set(aliasNames)] };
+function showProfileDirectoryError() {
+    profileDirectoryLoading.hidden = true;
+    profileDirectoryGrid.hidden = true;
+    profileDirectoryCount.textContent = '';
+    profileDirectoryStatus.textContent = 'No pudimos cargar los perfiles. Actualiza la página para volver a intentarlo.';
 }
 
 function renderPlayerAliases(aliasNames) {
@@ -480,59 +464,6 @@ function renderPlayerAliases(aliasNames) {
         return;
     }
     aliasNames.forEach(alias => playerAliasList.appendChild(makeElement('span', 'profile-alias-chip', alias)));
-}
-
-function getTournamentPlayer(tournament, nameKeys, canonicalKey) {
-    const participants = Array.isArray(tournament.participants) ? tournament.participants : [];
-    const standings = Array.isArray(tournament.standings) ? tournament.standings : [];
-    const matchedParticipants = participants.filter(player => nameKeys.has(normalizeName(player.name)));
-    const matchedStandings = standings.filter(player => nameKeys.has(normalizeName(player.name)));
-    const participant = matchedParticipants[0] || matchedStandings[0];
-    if (!participant) return null;
-    const participantIds = new Set(matchedParticipants.map(player => String(player.id || '')).filter(Boolean));
-    const standingRows = matchedStandings;
-    const preferredStanding = standingRows.find(player => normalizeName(player.name) === canonicalKey) || standingRows[0] || null;
-    const standing = preferredStanding ? {
-        ...preferredStanding,
-        points: standingRows.reduce((total, row) => total + (Number(row.points) || 0), 0)
-    } : null;
-    const position = standingRows.length
-        ? Math.min(...standingRows.map(row => standings.indexOf(row)).filter(index => index >= 0)) + 1
-        : 0;
-    const playerIds = new Set([...participantIds, ...(participant.id ? [String(participant.id)] : [])]);
-    return { participant, standing, standings, playerIds, position };
-}
-
-function getPlayerMatches(tournament, playerInfo, nameKeys) {
-    const matches = Array.isArray(tournament.matches) ? tournament.matches : [];
-    const { playerIds } = playerInfo;
-    const isPlayer = (id, name) => (id && playerIds.has(String(id))) || nameKeys.has(normalizeName(name));
-    return matches
-        .filter(match => {
-            const isA = isPlayer(match.playerAId, match.playerA);
-            const isB = isPlayer(match.playerBId, match.playerB);
-            return isA || isB;
-        })
-        .map(match => {
-            const isA = isPlayer(match.playerAId, match.playerA);
-            const opponent = isA ? match.playerB : match.playerA;
-            const scoreFor = Number(isA ? match.scoreA : match.scoreB) || 0;
-            const scoreAgainst = Number(isA ? match.scoreB : match.scoreA) || 0;
-            const played = Boolean(match.drawResult || match.jugado || scoreFor !== 0 || scoreAgainst !== 0);
-            const isDraw = Boolean(match.drawResult || (played && scoreFor === scoreAgainst));
-            const result = !played ? 'Pendiente' : isDraw ? 'Empate' : scoreFor > scoreAgainst ? 'Victoria' : 'Derrota';
-            const roundLabel = match.view_label || (match.stage === 'final' ? 'Final' : match.stage === 'pre-final'
-                ? 'Pre-final' : Number(match.round) > 0 ? `Ronda ${match.round}`
-                    : Number(match.bracketRound) > 0 ? `Eliminatorias · Ronda ${match.bracketRound}` : 'Eliminatorias');
-            return {
-                order: Number(match.view_order) || Number(match.round) || Number(match.bracketRound) || 0,
-                roundLabel,
-                opponent: opponent || '—',
-                score: played ? `${scoreFor}–${scoreAgainst}` : 'Por jugar',
-                result
-            };
-        })
-        .sort((a, b) => a.order - b.order);
 }
 
 function renderMatch(match) {
@@ -551,8 +482,12 @@ function renderTournament(tournament, nameKeys, canonicalKey, canonicalName) {
     const playerInfo = getTournamentPlayer(tournament, nameKeys, canonicalKey);
     if (!playerInfo) return null;
 
-    const { participant, standing, position } = playerInfo;
-    const playerMatches = getPlayerMatches(tournament, playerInfo, nameKeys);
+    const { standing, position } = playerInfo;
+    const playerMatches = getPlayerMatches(
+        Array.isArray(tournament.matches) ? tournament.matches : [],
+        playerInfo.playerIds,
+        nameKeys
+    );
     const wins = playerMatches.filter(match => match.result === 'Victoria').length;
     const draws = playerMatches.filter(match => match.result === 'Empate').length;
     const losses = playerMatches.filter(match => match.result === 'Derrota').length;
@@ -641,19 +576,14 @@ function showResultMatches(result, profiles) {
 }
 
 function renderBestTournament(profiles) {
-    if (!profiles.length) {
+    const best = getBestTournamentProfile(profiles);
+    if (!best) {
         bestTournamentCard.replaceChildren(
             makeElement('span', 'best-tournament-icon', '🏆'),
             makeElement('div', 'best-tournament-copy', 'Todavía no hay torneos finalizados.')
         );
         return;
     }
-    const ranked = profiles.slice().sort((a, b) => {
-        const aRank = a.position || Number.MAX_SAFE_INTEGER;
-        const bRank = b.position || Number.MAX_SAFE_INTEGER;
-        return aRank - bRank || b.points - a.points || Date.parse(b.tournamentDate || '') - Date.parse(a.tournamentDate || '');
-    });
-    const best = ranked[0];
     bestTournamentCard.replaceChildren();
     const icon = makeElement('span', 'best-tournament-icon', '🏆');
     icon.setAttribute('aria-hidden', 'true');
@@ -679,9 +609,10 @@ async function initializeProfile() {
 
     if (targetName) playerNameHeading.textContent = requestedName;
     try {
-        const config = await getSupabaseConfig();
+        const config = await loadSupabaseConfig(configEndpoint);
         supabase = createClient(config.url, config.anonKey, {
-            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+            global: { fetch: (input, init) => fetchWithTimeout(input, init, 15_000) }
         });
         const { data: sessionData } = await supabase.auth.getSession();
         currentUser = sessionData.session?.user || null;
@@ -695,11 +626,18 @@ async function initializeProfile() {
         });
         if (accountRouteMode) {
             accountRoutePanel.hidden = false;
+            profileDirectory.hidden = false;
             loadingState.hidden = true;
             profileCard.hidden = true;
             resultFilterPanel.hidden = true;
             tournamentList.hidden = true;
-            await refreshAccountContext();
+            await Promise.all([
+                loadProfileDirectory(config).catch(error => {
+                    console.error('No se pudo cargar el directorio de perfiles:', error);
+                    showProfileDirectoryError();
+                }),
+                refreshAccountContext().catch(error => setAuthNotice(error.message || 'No se pudo cargar tu cuenta.', 'error'))
+            ]);
             return;
         }
         const [tournaments, aliases, registeredPlayers] = await Promise.all([
@@ -731,11 +669,7 @@ async function initializeProfile() {
             return;
         }
 
-        const summary = profiles.reduce((total, profile) => ({
-            wins: total.wins + profile.wins,
-            losses: total.losses + profile.losses,
-            draws: total.draws + profile.draws
-        }), { wins: 0, losses: 0, draws: 0 });
+        const summary = getProfileCareerStats(profiles);
         playerSummary.replaceChildren(
             renderStatButton('Victorias', summary.wins, 'Victoria', 'wins'),
             renderStatButton('Derrotas', summary.losses, 'Derrota', 'losses'),
@@ -772,6 +706,12 @@ document.getElementById('closeResultFilter')?.addEventListener('click', () => {
 document.getElementById('backButton')?.addEventListener('click', () => {
     if (window.history.length > 1) window.history.back();
     else window.location.assign('/');
+});
+
+let directorySearchTimer = 0;
+profileDirectorySearch?.addEventListener('input', () => {
+    window.clearTimeout(directorySearchTimer);
+    directorySearchTimer = window.setTimeout(renderDirectoryResults, 140);
 });
 
 initializeProfile();

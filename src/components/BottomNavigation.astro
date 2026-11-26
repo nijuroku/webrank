@@ -3,35 +3,33 @@ const { page = 'landing', active = 'home' } = Astro.props;
 const isTournament = page === 'tournament';
 const items = [
     { key: 'home', label: 'Inicio', icon: '🏠', href: '/' },
-    { key: 'participants', label: 'Participantes', icon: '👥', href: '/app/?tab=participants' },
-    { key: 'matches', label: 'VS', icon: '⚔️', href: '/app/?tab=matches' },
-    { key: 'table', label: 'Tabla', icon: '📊', href: '/app/?tab=table' },
+    { key: 'participants', label: 'Participantes', icon: '👥', href: '/app/participants/' },
+    { key: 'matches', label: 'VS', icon: '⚔️', href: '/app/vs/' },
+    { key: 'table', label: 'Tabla', icon: '📊', href: '/app/table/' },
     { key: 'profile', label: 'Perfil', icon: '👤', href: '/p/' }
 ];
 
-if (page === 'view') {
-    items.find(item => item.key === 'matches').href = '#matchesSection';
-    items.find(item => item.key === 'table').href = '#standingsSection';
-}
+const navigationItems = page === 'view'
+    ? items.map(item => item.key === 'matches'
+        ? { ...item, href: '#matchesSection' }
+        : item.key === 'table'
+            ? { ...item, href: '#standingsSection' }
+            : item)
+    : items;
 ---
 
-<nav class={isTournament ? 'tab-navigation' : 'persistent-navigation'} aria-label="Navegación principal">
-    {items.map((item) => {
+<nav class="persistent-navigation" aria-label="Navegación principal">
+    {navigationItems.map((item) => {
         const selected = active === item.key;
-        const className = isTournament
-            ? `tab-navigation-btn${selected ? ' active' : ''}${item.key === 'profile' ? ' profile-navigation-btn' : ''}`
+        const className = isTournament && !['home', 'profile'].includes(item.key)
+            ? `persistent-navigation-tab${selected ? ' active' : ''}`
             : selected ? 'active' : '';
         const current = selected ? (page === 'view' ? 'location' : 'page') : undefined;
 
-        return isTournament && !['home', 'profile'].includes(item.key) ? (
-            <button class={className} data-tab={item.key} type="button" title={item.label} aria-selected={selected}>
+        return (
+            <a class={className} href={item.href} title={item.label} aria-current={current} data-tab={isTournament && !['home', 'profile'].includes(item.key) ? item.key : undefined}>
                 <span class="tab-icon" aria-hidden="true">{item.icon}</span>
-                <span class="tab-label">{item.label}</span>
-            </button>
-        ) : (
-            <a class={className} href={item.href} title={item.label} aria-current={current}>
-                <span class="tab-icon" aria-hidden="true">{item.icon}</span>
-                <span class={isTournament ? 'tab-label' : undefined}>{item.label}</span>
+                <span>{item.label}</span>
             </a>
         );
     })}

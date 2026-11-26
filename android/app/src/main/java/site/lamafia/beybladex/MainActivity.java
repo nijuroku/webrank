@@ -39,12 +39,14 @@ import java.util.Locale;
 import java.util.Set;
 
 public class MainActivity extends Activity {
-    private static final String START_URL = "https://www.lamafia.site/";
+    private static final String START_URL = "https://lamafia-git-versionb-njrk.vercel.app/";
     private static final String VERCEL_BACKUP_URL = "https://lamafia-kappa.vercel.app/";
+    private static final String PRIMARY_HOST = "lamafia-git-versionb-njrk.vercel.app";
     private static final int FILE_CHOOSER_REQUEST = 2041;
     private static final Set<String> APP_HOSTS = new HashSet<>(Arrays.asList(
             "www.lamafia.site",
             "lamafia.site",
+            "lamafia-git-versionb-njrk.vercel.app",
             "lamafia-kappa.vercel.app"
     ));
 
@@ -131,7 +133,7 @@ public class MainActivity extends Activity {
     private boolean isPrimaryDomain(Uri uri) {
         if (uri == null || uri.getHost() == null) return false;
         String host = uri.getHost().toLowerCase(Locale.ROOT);
-        return "www.lamafia.site".equals(host) || "lamafia.site".equals(host);
+        return PRIMARY_HOST.equals(host);
     }
 
     private void useVercelBackup() {
