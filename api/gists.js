@@ -15,7 +15,12 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     
     try {
-        const username = req.query.user || 'nijuroku';
+        const requestedUser = Array.isArray(req.query.user) ? req.query.user[0] : req.query.user;
+        const username = requestedUser || 'nijuroku';
+        if (typeof username !== 'string' || !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(username)) {
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(400).json({ success: false, error: 'Nombre de usuario de GitHub inválido.', gists: [] });
+        }
         
         console.log(`📡 Buscando Gists de ${username}...`);
         

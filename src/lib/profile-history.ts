@@ -24,6 +24,8 @@ export interface TournamentMatchRecord {
     view_label?: string | null;
     view_order?: number | string | null;
     stage?: string | null;
+    label?: string | null;
+    bracket?: 'upper' | 'lower' | null;
     round?: number | string | null;
     bracketRound?: number | string | null;
 }
@@ -154,8 +156,10 @@ export function getPlayerMatches(
             const played = Boolean(match.drawResult || match.jugado || scoreFor !== 0 || scoreAgainst !== 0);
             const isDraw = Boolean(match.drawResult || (played && scoreFor === scoreAgainst));
             const result: MatchResult = !played ? 'Pendiente' : isDraw ? 'Empate' : scoreFor > scoreAgainst ? 'Victoria' : 'Derrota';
-            const roundLabel = match.view_label || (match.stage === 'final' ? 'Final' : match.stage === 'pre-final'
-                ? 'Pre-final' : Number(match.round) > 0 ? `Ronda ${match.round}`
+            const roundLabel = match.view_label || match.label || (match.stage === 'final' ? 'Final' : match.stage === 'pre-final'
+                ? 'Pre-final' : match.bracket && Number(match.bracketRound) > 0
+                    ? `${match.bracket === 'upper' ? 'Upper A' : 'Lower B'} · Ronda ${match.bracketRound}`
+                    : Number(match.round) > 0 ? `Ronda ${match.round}`
                     : Number(match.bracketRound) > 0 ? `Eliminatorias · Ronda ${match.bracketRound}` : 'Eliminatorias');
 
             const order = Number(match.view_order) || Number(match.round)

@@ -322,6 +322,8 @@ const { activeTab = 'participants' } = Astro.props;
             style="font-size:0.75rem; color:#4A4A6A; margin-top: 1.5rem; text-align: right; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1rem;">
             <a href="https://www.instagram.com/la_mafia_beyblade/" target="_blank"
                 style="color:#4A4A6A; text-decoration:none;">Instagram</a>
+            <a id="adminDashboardLink" href="/admin/" hidden
+                style="color:#4A4A6A; text-decoration:none; margin-left:0.85rem;">Administración</a>
         </div>
     </div>
 
@@ -398,6 +400,21 @@ const { activeTab = 'participants' } = Astro.props;
                 <p class="tournament-format-question">¿Qué tipo de formato quieres usar?</p>
                 <button class="btn btn-success" id="startRandomTournamentBtn" type="button">🎲 Rondas aleatorias</button>
                 <button class="btn btn-outline" id="startSwissTournamentBtn" type="button">🏆 Rondas suizas</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay tournament-format-overlay" id="knockoutFormatModal" role="dialog" aria-modal="true" aria-labelledby="knockoutFormatTitle">
+        <div class="modal tournament-format-modal">
+            <div class="modal-header">
+                <h3 id="knockoutFormatTitle">⚔️ Formato de eliminatorias</h3>
+                <button class="modal-close" id="closeKnockoutFormatModal" type="button" aria-label="Cerrar">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="tournament-format-question">Elige cómo se definirán las eliminatorias.</p>
+                <button class="btn btn-success" id="startSingleKnockoutBtn" type="button">🏆 Eliminatoria clásica</button>
+                <button class="btn btn-outline" id="startUpperLowerKnockoutBtn" type="button">🔀 Upper / Lower · finales cruzadas</button>
+                <p class="info-note-small">En Upper/Lower, primero se juega cada fase de A. Después se organiza B con los jugadores que bajan de A. Al quedar definidos ambos cuadros, se juegan las finales cruzadas sin más segundas oportunidades.</p>
             </div>
         </div>
     </div>
